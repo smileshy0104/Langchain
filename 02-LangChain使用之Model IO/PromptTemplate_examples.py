@@ -18,8 +18,8 @@ from langchain_core.prompts import (
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser, CommaSeparatedListOutputParser
 
-# 加载环境变量
-dotenv.load_dotenv()
+# 加载环境变量 - 从项目根目录加载.env文件
+dotenv.load_dotenv(dotenv_path="../.env")
 
 # 检查API密钥
 api_key = os.getenv("ZHIPUAI_API_KEY")

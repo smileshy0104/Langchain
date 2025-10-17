@@ -8,22 +8,20 @@ import os
 import dotenv
 import json
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Any
+from typing import List
 from langchain_community.chat_models import ChatZhipuAI
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import (
     StrOutputParser,
     JsonOutputParser,
     XMLOutputParser,
     PydanticOutputParser,
-    CommaSeparatedListOutputParser,
-    SimpleJsonOutputParser
+    CommaSeparatedListOutputParser
 )
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.messages import HumanMessage, SystemMessage
 
-# 加载环境变量
-dotenv.load_dotenv()
+# 加载环境变量 - 从项目根目录加载.env文件
+dotenv.load_dotenv(dotenv_path="../.env")
 
 # 检查API密钥
 api_key = os.getenv("ZHIPUAI_API_KEY")
@@ -265,7 +263,7 @@ def json_output_parser_advanced():
 def pydantic_output_parser_example():
     """PydanticOutputParser 示例"""
     print("=" * 60)
-    print"🏗️ PydanticOutputParser 示例")
+    print("🏗️ PydanticOutputParser 示例")
     print("=" * 60)
 
     # 定义Pydantic模型

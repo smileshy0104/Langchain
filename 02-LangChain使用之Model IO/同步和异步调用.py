@@ -6,7 +6,7 @@ from typing import List, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_community.chat_models import ChatZhipuAI
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(dotenv_path="../.env")
 
 # 检查API密钥
 api_key = os.getenv("ZHIPUAI_API_KEY")
