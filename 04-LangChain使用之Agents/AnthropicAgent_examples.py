@@ -529,10 +529,10 @@ def main() -> None:
         # compare_models()
         # run_weather_demo()
         # run_calculator_demo()
-        run_time_demo()
+        # run_time_demo()
         # run_news_demo()
         # run_translate_demo()
-        # run_multi_tool_demo()
+        run_multi_tool_demo()
         # run_conversation_demo()
 
         print("\n" + "=" * 70)
