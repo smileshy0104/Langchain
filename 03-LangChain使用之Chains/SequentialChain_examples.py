@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-GLM-4.6 + LangChain SequentialChain 示例 (现代语法)
-演示使用现代 Runnable 语法进行链式调用，已弃用 LLMChain
-使用 prompt | model | output_parser 的管道语法
+GLM-4.6 + LangChain v1.0 Runnable 链式调用示例
+演示使用 LangChain v1.0 的 Runnable 和管道语法进行链式调用
+已弃用 LLMChain 和 SequentialChain，使用 prompt | model | output_parser 语法
 """
 
 import os
 import dotenv
 from typing import Dict, Any
 from langchain_community.chat_models import ChatZhipuAI
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.chains import SequentialChain
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 
 # 加载环境变量 - 从项目根目录加载.env文件
@@ -32,10 +31,13 @@ def get_glm_model(temperature: float = 0.7):
         api_key=api_key
     )
 
+
+# ========== 使用 Runnable 的链式调用示例 ==========
+
 def simple_sequential_chain_example():
-    """SimpleSequentialChain 简单示例 - 使用现代语法"""
+    """Simple Sequential Chain 简单示例 - 使用现代语法"""
     print("=" * 60)
-    print("🔗 SimpleSequentialChain 简单示例 (现代语法)")
+    print("🔗 Simple Sequential Chain 简单示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
@@ -55,11 +57,10 @@ def simple_sequential_chain_example():
         "基于以下故事：{story}\n请为这个故事写一个简单的寓意总结。"
     ) | model | StrOutputParser()
 
-    # 由于SimpleSequentialChain仍需要传统链，我们使用RunnablePassthrough来实现类似功能
-    # 或者直接使用管道语法
+    # 使用现代语法创建顺序执行的链
     print("🚀 使用现代管道语法:")
 
-    # 完整的管道
+    # 完整的管道 - 顺序执行
     full_chain = (
         {
             "story_theme": story_prompt,
@@ -82,10 +83,11 @@ def simple_sequential_chain_example():
     print(f"📝 故事内容: {result['story'][:200]}...")
     print(f"💡 故事寓意: {result['moral']}")
 
+
 def sequential_chain_example():
-    """SequentialChain 复杂示例 - 使用现代语法"""
+    """Sequential Chain 复杂示例 - 使用现代语法"""
     print("\n" + "=" * 60)
-    print("🔗 SequentialChain 复杂示例 (现代语法)")
+    print("🔗 Sequential Chain 复杂示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
@@ -159,10 +161,11 @@ def sequential_chain_example():
     print(f"🏷️ 标题和摘要: {result['title_and_summary']}")
     print(f"🔑 关键词: {result['keywords']}")
 
+
 def practical_content_creation_chain():
     """实用内容创建链 - 博客文章生成器 (现代语法)"""
     print("\n" + "=" * 60)
-    print("📝 实用内容创建链 - 博客文章生成器 (现代语法)")
+    print("📝 实用内容创建链 - 博客文章生成器 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
@@ -241,10 +244,11 @@ def practical_content_creation_chain():
     print(f"📝 优化后内容: {result['optimized_content'][:300]}...")
     print(f"📱 社交媒体文案: {result['social_posts']}")
 
+
 def translation_chain_example():
     """翻译链示例 - 现代语法的实际应用"""
     print("\n" + "=" * 60)
-    print("🌐 翻译链示例 (现代语法)")
+    print("🌐 翻译链示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
@@ -302,29 +306,77 @@ def translation_chain_example():
     print(f"🔄 译文: {result['translated_text'][:200]}...")
     print(f"📊 翻译分析: {result['translation_summary']}")
 
+
+def parallel_processing_example():
+    """并行处理示例 - 使用 RunnableParallel"""
+    print("\n" + "=" * 60)
+    print("⚡ 并行处理示例 - RunnableParallel (v1.0)")
+    print("=" * 60)
+
+    model = get_glm_model()
+
+    # 三个独立的分析任务
+    sentiment_chain = (
+        PromptTemplate.from_template(
+            "分析以下文本的情感倾向：{text}\n请从积极、中性、消极中选择一个。"
+        ) | model | StrOutputParser()
+    )
+
+    summary_chain = (
+        PromptTemplate.from_template(
+            "请总结以下文本的核心观点：{text}\n"
+        ) | model | StrOutputParser()
+    )
+
+    keywords_chain = (
+        PromptTemplate.from_template(
+            "从以下文本中提取3个关键词：{text}\n"
+        ) | model | StrOutputParser()
+    )
+
+    # 使用 RunnableParallel 并行处理
+    parallel_chain = RunnableParallel(
+        sentiment=sentiment_chain,
+        summary=summary_chain,
+        keywords=keywords_chain
+    )
+
+    test_text = "人工智能技术的发展为我们的生活带来了巨大的变化。它不仅提高了工作效率，还创造了新的可能性。"
+
+    print("🚀 开始并行处理...")
+    result = parallel_chain.invoke({"text": test_text})
+
+    print(f"\n🎉 并行处理结果:")
+    print(f"😊 情感分析: {result['sentiment']}")
+    print(f"📝 文本摘要: {result['summary']}")
+    print(f"🔑 关键词: {result['keywords']}")
+
+
 def chain_comparison():
     """链类型比较和最佳实践 - 现代语法 vs 传统语法"""
     print("\n" + "=" * 60)
-    print("⚖️ 链类型比较和最佳实践 (现代语法 vs 传统语法)")
+    print("⚖️ 链类型比较和最佳实践 (v1.0)")
     print("=" * 60)
 
     print("""
-📊 传统 LLMChain vs 现代 Runnable 语法:
+📊 传统 LLMChain/SequentialChain vs 现代 Runnable 语法:
 
-🔗 传统 LLMChain 语法 (已弃用):
+🔗 传统 LLMChain 语法 (已移除):
 ❌ 缺点:
    - LLMChain 在 LangChain 0.1.17 中已弃用
-   - 将在 1.0 版本中移除
+   - 在 LangChain 1.0 中已完全移除
+   - SequentialChain 也被移除
    - 配置复杂，需要明确指定输出键
    - 不够灵活
 
-✅ 现代 Runnable 语法 (推荐):
+✅ 现代 Runnable 语法 (v1.0 推荐):
 ✅ 优点:
    - 使用管道操作符 | 进行链式组合
    - 更简洁直观的语法
    - 使用 RunnablePassthrough 和 RunnableParallel 提供灵活性
    - 更好的类型支持和错误处理
    - 符合函数式编程理念
+   - 支持并行处理
 
 🎯 迁移建议:
 1. 替换 LLMChain → prompt | model | output_parser
@@ -334,17 +386,34 @@ def chain_comparison():
 
 🔧 代码示例对比:
 
-传统语法:
+传统语法 (已移除):
+   from langchain.chains import LLMChain
    chain = LLMChain(llm=model, prompt=prompt, output_key="result")
 
-现代语法:
+现代语法 (v1.0):
    chain = prompt | model | StrOutputParser()
+   result = chain.invoke({"input": "..."})
+
+顺序执行:
+   chain = (
+       prompt1 | model1 | output_parser1
+       | RunnablePassthrough.assign(
+           next_step=lambda x: prompt2 | model2 | output_parser2
+       )
+   )
+
+并行处理:
+   parallel_chain = RunnableParallel(
+       task1=prompt1 | model1 | output_parser1,
+       task2=prompt2 | model2 | output_parser2
+   )
     """)
+
 
 def error_handling_example():
     """错误处理示例 - 现代语法"""
     print("\n" + "=" * 60)
-    print("⚠️ 错误处理示例 (现代语法)")
+    print("⚠️ 错误处理示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
@@ -369,10 +438,20 @@ def error_handling_example():
         print(f"❌ 链执行出错: {e}")
         print("💡 建议：检查输入参数和提示词模板")
 
+
 def main():
     """主函数：运行所有示例"""
-    print("🚀 GLM-4.6 + LangChain SequentialChain 详细使用示例")
+    print("🚀 GLM-4.6 + LangChain v1.0 Runnable 链式调用详细示例")
     print("=" * 80)
+    print("""
+✨ LangChain v1.0 主要变化:
+1. 移除了 LLMChain 和 SequentialChain
+2. 全面采用 Runnable 架构
+3. 使用管道操作符 | 进行链式调用
+4. 支持并行处理 (RunnableParallel)
+5. 更简洁、更灵活的语法
+    """)
+    print()
 
     try:
         # 运行各种示例
@@ -380,18 +459,22 @@ def main():
         sequential_chain_example()
         practical_content_creation_chain()
         translation_chain_example()
+        parallel_processing_example()
         chain_comparison()
         error_handling_example()
 
         print("\n🎉 所有示例运行完成！")
         print("\n📚 更多信息请参考：")
-        print("- LangChain官方文档: https://python.langchain.com/")
-        print("- 链式调用指南: https://python.langchain.com/docs/modules/chains/")
+        print("- LangChain v1.0 文档: https://python.langchain.com/")
+        print("- Runnable API: https://python.langchain.com/docs/concepts/runnables/")
 
     except KeyboardInterrupt:
         print("\n⏹️ 用户中断了程序")
     except Exception as e:
         print(f"\n❌ 程序运行出错：{e}")
+        import traceback
+        traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

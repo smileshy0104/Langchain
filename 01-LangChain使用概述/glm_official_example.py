@@ -10,7 +10,6 @@ from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from langchain.chains import LLMChain
 
 # 加载环境变量
 load_dotenv()

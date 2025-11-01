@@ -1,26 +1,17 @@
 #!/usr/bin/env python3
 """
-GLM-4.6 + LangChain ConversationMemory 示例 (现代语法)
-演示各种对话记忆类型的使用方法和最佳实践
-包括 ConversationBufferWindowMemory、ConversationTokenBufferMemory、
-ConversationSummaryMemory、ConversationSummaryBufferMemory
+GLM-4.6 + LangChain v1.0 对话记忆示例
+演示使用LangChain v1.0新API进行对话记忆管理
+使用Runnable和messages手动管理对话历史
 """
 
 import os
 import dotenv
-from typing import Dict, Any
+from typing import List, Dict, Any
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from langchain.memory import (
-    ConversationBufferWindowMemory,
-    ConversationTokenBufferMemory,
-    ConversationSummaryMemory,
-    ConversationSummaryBufferMemory
-)
-from langchain.chains import LLMChain
 
 # 加载环境变量 - 从项目根目录加载.env文件
 dotenv.load_dotenv(dotenv_path="../.env")
@@ -40,44 +31,162 @@ def get_glm_model(temperature: float = 0.7):
         api_key=api_key
     )
 
+
+# ========== 记忆管理工具类 ==========
+class ConversationBufferWindowMemory:
+    """窗口记忆 - 保持固定轮数的对话历史"""
+
+    def __init__(self, k: int = 3):
+        self.k = k  # 保留的对话轮数
+        self.messages: List[Dict] = []  # 存储对话消息
+
+    def add_message(self, role: str, content: str):
+        """添加消息到记忆"""
+        self.messages.append({"role": role, "content": content})
+
+        # 如果超过k轮，删除最早的消息（保留system消息）
+        if len(self.messages) > self.k * 2:  # *2因为每次对话包含user和assistant
+            # 找到第一个非system消息并删除
+            non_system_count = sum(1 for msg in self.messages if msg["role"] != "system")
+            if non_system_count > self.k * 2:
+                # 删除第二个消息开始（索引1，保留system）
+                self.messages.pop(1)
+
+    def get_formatted_messages(self, system_prompt: str = "") -> List[Dict]:
+        """获取格式化后的消息列表"""
+        result = []
+
+        # 添加系统提示
+        if system_prompt:
+            result.append({"role": "system", "content": system_prompt})
+        elif self.messages and self.messages[0]["role"] != "system":
+            # 如果没有system消息但有其他消息，添加默认system消息
+            result.append({"role": "system", "content": "你是一个友好的AI助手。"})
+
+        # 添加对话历史（限制在k轮）
+        recent_messages = self.messages[-self.k * 2:] if len(self.messages) > self.k * 2 else self.messages
+        result.extend(recent_messages)
+
+        return result
+
+    def clear(self):
+        """清空记忆"""
+        self.messages = []
+
+
+class ConversationTokenBufferMemory:
+    """Token限制记忆 - 基于token数量限制对话历史"""
+
+    def __init__(self, max_token_limit: int = 200):
+        self.max_token_limit = max_token_limit
+        self.messages: List[Dict] = []
+
+    def _estimate_tokens(self, text: str) -> int:
+        """粗略估算token数量（中文约4字符=1token）"""
+        return len(text) // 4
+
+    def add_message(self, role: str, content: str):
+        """添加消息并检查token限制"""
+        self.messages.append({"role": role, "content": content})
+
+        # 检查总token数量
+        total_tokens = sum(self._estimate_tokens(msg["content"]) for msg in self.messages)
+
+        # 如果超出限制，删除最早的消息
+        while total_tokens > self.max_token_limit and len(self.messages) > 1:
+            # 保留system消息
+            if self.messages[0]["role"] == "system":
+                self.messages.pop(1)
+            else:
+                self.messages.pop(0)
+
+            total_tokens = sum(self._estimate_tokens(msg["content"]) for msg in self.messages)
+
+    def get_formatted_messages(self) -> List[Dict]:
+        """获取格式化后的消息列表"""
+        return self.messages.copy()
+
+    def clear(self):
+        """清空记忆"""
+        self.messages = []
+
+
+class ConversationSummaryMemory:
+    """摘要记忆 - 自动总结对话历史"""
+
+    def __init__(self, llm):
+        self.llm = llm
+        self.summary = ""  # 存储对话摘要
+        self.recent_messages: List[Dict] = []  # 存储最近几轮对话
+
+    def add_message(self, role: str, content: str):
+        """添加消息并更新摘要"""
+        self.recent_messages.append({"role": role, "content": content})
+
+        # 只保留最近2轮对话（节省token）
+        if len(self.recent_messages) > 4:  # 2轮对话 = 4条消息
+            self.recent_messages.pop(0)
+
+        # 更新摘要
+        self._update_summary()
+
+    def _update_summary(self):
+        """使用LLM生成对话摘要"""
+        if len(self.recent_messages) < 4:  # 至少2轮对话才生成摘要
+            return
+
+        summary_prompt = f"""
+请将以下对话总结成简短的中文摘要（不超过100字），保留关键信息：
+
+{chr(10).join([f"{'用户' if msg['role']=='user' else '助手'}: {msg['content']}" for msg in self.recent_messages])}
+
+摘要：
+"""
+        try:
+            response = self.llm.invoke([HumanMessage(content=summary_prompt)])
+            self.summary = response.content
+        except Exception:
+            pass  # 摘要生成失败则跳过
+
+    def get_formatted_messages(self) -> List[Dict]:
+        """获取格式化后的消息列表"""
+        messages = []
+
+        # 添加系统消息
+        if self.summary:
+            messages.append({
+                "role": "system",
+                "content": f"对话摘要：{self.summary}"
+            })
+        else:
+            messages.append({
+                "role": "system",
+                "content": "你是一个专业的AI助手。"
+            })
+
+        messages.extend(self.recent_messages)
+        return messages
+
+    def clear(self):
+        """清空记忆"""
+        self.summary = ""
+        self.recent_messages = []
+
+
+# ========== 示例函数 ==========
+
 def conversation_buffer_window_memory_example():
-    """ConversationBufferWindowMemory 示例 - 保持固定对话轮数"""
+    """窗口记忆示例 - 保持固定对话轮数"""
     print("=" * 60)
-    print("🪟 ConversationBufferWindowMemory 示例")
+    print("🪟 ConversationBufferWindowMemory 示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
 
     # 创建窗口记忆 - 只保留最近3轮对话
-    memory = ConversationBufferWindowMemory(
-        k=3,  # 保留最近3轮对话
-        return_messages=True,
-        memory_key="chat_history"
-    )
+    memory = ConversationBufferWindowMemory(k=3)
 
-    # 创建提示词模板
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个友好的AI助手，能够记住最近的对话内容。"),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}")
-    ])
-
-    # 由于memory需要传统链，我们创建一个包装函数
-    def run_with_memory(user_input: str) -> str:
-        # 格式化消息
-        messages = prompt.format_messages(
-            input=user_input,
-            chat_history=memory.chat_memory.messages
-        )
-
-        # 调用模型
-        response = model.invoke(messages)
-
-        # 保存对话到记忆
-        memory.chat_memory.add_user_message(user_input)
-        memory.chat_memory.add_ai_message(response.content)
-
-        return response.content
+    system_prompt = "你是一个友好的AI助手，能够记住最近的对话内容。"
 
     # 模拟对话
     conversations = [
@@ -93,52 +202,32 @@ def conversation_buffer_window_memory_example():
     for i, user_input in enumerate(conversations, 1):
         print(f"\n👤 用户 [{i}]: {user_input}")
 
-        response = run_with_memory(user_input)
-        print(f"🤖 AI: {response}")
+        # 获取格式化消息
+        messages = memory.get_formatted_messages(system_prompt)
+        messages.append({"role": "user", "content": user_input})
 
-        # 显示当前记忆中的消息数量
-        print(f"📝 记忆中消息数: {len(memory.chat_memory.messages)}")
+        # 调用模型
+        response = model.invoke(messages)
+        print(f"🤖 AI: {response.content}")
 
-    print(f"\n🎯 记忆中的最后{memory.k}轮对话:")
-    for msg in memory.chat_memory.messages:
-        msg_type = "用户" if isinstance(msg, HumanMessage) else "AI"
-        print(f"  {msg_type}: {msg.content[:50]}...")
+        # 更新记忆
+        memory.add_message("user", user_input)
+        memory.add_message("assistant", response.content)
+
+        # 显示当前记忆状态
+        print(f"📝 记忆中消息数: {len(memory.messages)}")
+
 
 def conversation_token_buffer_memory_example():
-    """ConversationTokenBufferMemory 示例 - 基于token数量限制"""
+    """Token限制记忆示例 - 基于token数量限制"""
     print("\n" + "=" * 60)
-    print("🪙 ConversationTokenBufferMemory 示例")
+    print("🪙 ConversationTokenBufferMemory 示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
 
     # 创建token限制记忆 - 最多200个token
-    memory = ConversationTokenBufferMemory(
-        llm=model,
-        max_token_limit=200,  # 最多200个token
-        return_messages=True,
-        memory_key="chat_history"
-    )
-
-    # 创建提示词模板
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个技术专家助手，对话记忆基于token数量限制。"),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}")
-    ])
-
-    def run_with_memory(user_input: str) -> str:
-        messages = prompt.format_messages(
-            input=user_input,
-            chat_history=memory.chat_memory.messages
-        )
-
-        response = model.invoke(messages)
-
-        memory.chat_memory.add_user_message(user_input)
-        memory.chat_memory.add_ai_message(response.content)
-
-        return response.content
+    memory = ConversationTokenBufferMemory(max_token_limit=200)
 
     # 模拟较长的对话
     conversations = [
@@ -151,293 +240,142 @@ def conversation_token_buffer_memory_example():
 
     print("🚀 开始对话测试...")
     for i, user_input in enumerate(conversations, 1):
-        print(f"\n👤 用户 [{i}]: {user_input}")
+        print(f"\n👤 用户 [{i}]: {user_input[:30]}...")
 
-        response = run_with_memory(user_input)
-        print(f"🤖 AI: {response[:100]}...")
+        # 获取格式化消息
+        messages = memory.get_formatted_messages()
+        messages.append({"role": "user", "content": user_input})
+
+        # 调用模型
+        response = model.invoke(messages)
+        print(f"🤖 AI: {response.content[:50]}...")
+
+        # 更新记忆（会自动处理token限制）
+        memory.add_message("user", user_input)
+        memory.add_message("assistant", response.content)
 
         # 估算token数量
-        total_chars = sum(len(msg.content) for msg in memory.chat_memory.messages)
-        estimated_tokens = total_chars // 4  # 粗略估算
-        print(f"📊 记忆中字符数: {total_chars}, 估算token数: {estimated_tokens}")
+        total_chars = sum(len(msg["content"]) for msg in memory.messages)
+        print(f"📊 记忆中字符数: {total_chars}, 估算token数: {total_chars // 4}")
+
 
 def conversation_summary_memory_example():
-    """ConversationSummaryMemory 示例 - 对话摘要记忆"""
+    """摘要记忆示例 - 对话摘要记忆"""
     print("\n" + "=" * 60)
-    print("📋 ConversationSummaryMemory 示例")
+    print("📋 ConversationSummaryMemory 示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
 
     # 创建摘要记忆
-    memory = ConversationSummaryMemory(
-        llm=model,
-        return_messages=True,
-        memory_key="chat_history"
-    )
+    memory = ConversationSummaryMemory(llm=model)
 
-    # 创建提示词模板
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个专业的学习助手，能够记住并总结对话历史。"),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}")
-    ])
-
-    def run_with_memory(user_input: str) -> str:
-        # 添加当前消息到记忆
-        memory.save_context(
-            {"input": user_input},
-            {"output": "我理解了您的问题，正在为您解答..."}
-        )
-
-        messages = prompt.format_messages(
-            input=user_input,
-            chat_history=[SystemMessage(content=memory.buffer)]
-        )
-
-        response = model.invoke(messages)
-
-        # 更新输出到记忆
-        memory.chat_memory.add_ai_message(response.content)
-
-        return response.content
-
-    # 模拟学习相关的对话
+    # 模拟多轮对话
     conversations = [
-        "我想学习Python编程，应该从哪里开始？",
-        "Python有哪些主要的应用领域？",
-        "学习Python需要什么基础知识？",
-        "你能推荐一些Python学习资源吗？",
-        "我应该如何制定学习计划？",
-        "请总结一下我们的对话内容"  # 测试摘要
+        "我想学习Python编程",
+        "我没有任何编程经验，应该从哪里开始？",
+        "请推荐一些入门书籍和在线资源",
+        "我应该先学Python 2还是Python 3？",
+        "根据之前的对话，我应该怎么开始？"
     ]
 
     print("🚀 开始对话测试...")
     for i, user_input in enumerate(conversations, 1):
         print(f"\n👤 用户 [{i}]: {user_input}")
 
-        response = run_with_memory(user_input)
-        print(f"🤖 AI: {response[:100]}...")
+        # 获取格式化消息（包含摘要）
+        messages = memory.get_formatted_messages()
+        messages.append({"role": "user", "content": user_input})
 
-        print(f"📝 当前摘要长度: {len(memory.buffer)} 字符")
+        # 调用模型
+        response = model.invoke(messages)
+        print(f"🤖 AI: {response.content}")
 
-    print(f"\n🎯 完整对话摘要:")
-    print(f"{memory.buffer}")
+        # 更新记忆和摘要
+        memory.add_message("user", user_input)
+        memory.add_message("assistant", response.content)
+
+        # 显示摘要
+        if memory.summary:
+            print(f"📝 当前摘要: {memory.summary}")
+
 
 def conversation_summary_buffer_memory_example():
-    """ConversationSummaryBufferMemory 示例 - 混合摘要和缓冲记忆"""
+    """摘要缓冲记忆示例 - 组合摘要和缓冲记忆"""
     print("\n" + "=" * 60)
-    print("🔄 ConversationSummaryBufferMemory 示例")
+    print("📊 ConversationSummaryBufferMemory 示例 (v1.0)")
     print("=" * 60)
 
     model = get_glm_model()
 
-    # 创建混合记忆 - 摘要 + 最近2条消息
-    memory = ConversationSummaryBufferMemory(
-        llm=model,
-        max_token_limit=300,  # 最大token限制
-        return_messages=True,
-        memory_key="chat_history"
-    )
+    # 创建组合记忆
+    summary_memory = ConversationSummaryMemory(llm=model)
+    buffer_memory = ConversationBufferWindowMemory(k=2)
 
-    # 创建提示词模板
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个项目管理助手，使用混合记忆策略管理对话历史。"),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}")
-    ])
-
-    def run_with_memory(user_input: str) -> str:
-        messages = prompt.format_messages(
-            input=user_input,
-            chat_history=memory.buffer + memory.chat_memory.messages
-        )
-
-        response = model.invoke(messages)
-
-        memory.save_context(
-            {"input": user_input},
-            {"output": response.content}
-        )
-
-        return response.content
-
-    # 模拟项目管理对话
+    # 模拟长时间对话
     conversations = [
-        "我需要管理一个软件开发项目，有什么建议？",
-        "如何制定项目计划和时间线？",
-        "团队协作工具推荐哪些？",
-        "如何进行有效的进度跟踪？",
-        "项目风险管理需要注意什么？",
-        "我之前问的第一个问题是什么？"  # 测试记忆
+        "我想了解人工智能的发展历史",
+        "1950年代有哪些重要事件？",
+        "图灵测试是什么？",
+        "为什么1956年被称为AI的诞生年？",
+        "专家系统在1980年代有什么突破？",
+        "深度学习革命是从什么时候开始的？",
+        "根据我们讨论的历史，AI的未来趋势是什么？",
+        "我第一个问题是关于什么的？"  # 测试记忆
     ]
 
-    print("🚀 开始对话测试...")
+    print("🚀 开始长时间对话测试...")
     for i, user_input in enumerate(conversations, 1):
-        print(f"\n👤 用户 [{i}]: {user_input}")
+        print(f"\n👤 用户 [{i}]: {user_input[:30]}...")
 
-        response = run_with_memory(user_input)
-        print(f"🤖 AI: {response[:100]}...")
+        # 获取摘要作为系统提示
+        messages = summary_memory.get_formatted_messages()
+        # 添加最近的缓冲消息
+        recent_messages = buffer_memory.get_formatted_messages()
+        # 合并消息（避免重复system消息）
+        if recent_messages and recent_messages[0]["role"] != "system":
+            messages.extend(recent_messages)
+        elif recent_messages:
+            messages.extend(recent_messages[1:])  # 跳过重复的system消息
 
-        # 显示记忆状态
-        summary_len = len(memory.buffer) if memory.buffer else 0
-        recent_msgs = len(memory.chat_memory.messages)
-        print(f"📊 摘要长度: {summary_len}, 最近消息数: {recent_msgs}")
+        messages.append({"role": "user", "content": user_input})
 
-    print(f"\n🎯 记忆状态:")
-    print(f"📋 摘要: {memory.buffer[:200]}...")
-    print(f"💬 最近消息:")
-    for msg in memory.chat_memory.messages[-2:]:  # 显示最后2条消息
-        msg_type = "用户" if isinstance(msg, HumanMessage) else "AI"
-        print(f"  {msg_type}: {msg.content[:50]}...")
+        # 调用模型
+        response = model.invoke(messages)
+        print(f"🤖 AI: {response.content[:50]}...")
 
-def memory_comparison():
-    """记忆类型比较"""
-    print("\n" + "=" * 60)
-    print("⚖️ 对话记忆类型比较")
-    print("=" * 60)
+        # 更新两种记忆
+        summary_memory.add_message("user", user_input)
+        summary_memory.add_message("assistant", response.content)
+        buffer_memory.add_message("user", user_input)
+        buffer_memory.add_message("assistant", response.content)
 
-    print("""
-📊 四种对话记忆类型对比:
+        # 显示摘要
+        if summary_memory.summary:
+            print(f"📝 摘要: {summary_memory.summary[:50]}...")
 
-🪟 ConversationBufferWindowMemory:
-✅ 优点:
-   - 保持固定数量的对话轮数
-   - 简单直观的滑动窗口机制
-   - 适合短期对话场景
 
-❌ 缺点:
-   - 可能丢失重要的早期对话
-   - 不考虑内容重要性
-
-🪙 ConversationTokenBufferMemory:
-✅ 优点:
-   - 基于token数量精确控制
-   - 考虑消息长度差异
-   - 适合有严格token限制的场景
-
-❌ 缺点:
-   - 可能截断重要信息
-   - token计算可能有误差
-
-📋 ConversationSummaryMemory:
-✅ 优点:
-   - 保持对话的完整摘要
-   - 节省存储空间
-   - 适合长期对话
-
-❌ 缺点:
-   - 可能丢失细节信息
-   - 摘要质量依赖模型能力
-
-🔄 ConversationSummaryBufferMemory:
-✅ 优点:
-   - 平衡摘要和详细记录
-   - 保持最近的完整对话
-   - 适合复杂的长期对话
-
-❌ 缺点:
-   - 配置相对复杂
-   - 需要调优参数
-
-🎯 使用建议:
-1. 短期对话 → ConversationBufferWindowMemory
-2. 严格的token限制 → ConversationTokenBufferMemory
-3. 长期对话且需要摘要 → ConversationSummaryMemory
-4. 需要平衡的场景 → ConversationSummaryBufferMemory
-    """)
-
-def modern_syntax_memory_example():
-    """现代语法记忆示例 - 使用 RunnablePassthrough"""
-    print("\n" + "=" * 60)
-    print("🚀 现代语法记忆示例")
-    print("=" * 60)
-
-    model = get_glm_model()
-
-    # 创建简单的窗口记忆
-    memory = ConversationBufferWindowMemory(
-        k=2,
-        return_messages=True,
-        memory_key="chat_history"
-    )
-
-    # 现代语法的处理链
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个使用现代语法的AI助手。"),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}")
-    ])
-
-    chain = prompt | model | StrOutputParser()
-
-    # 创建包装函数来集成记忆
-    def create_memory_chain():
-        def run_chain(inputs: Dict[str, Any]) -> str:
-            # 获取历史消息
-            chat_history = memory.chat_memory.messages
-
-            # 准备输入
-            chain_inputs = {
-                "input": inputs["input"],
-                "chat_history": chat_history
-            }
-
-            # 运行链
-            response = chain.invoke(chain_inputs)
-
-            # 保存到记忆
-            memory.save_context(
-                {"input": inputs["input"]},
-                {"output": response}
-            )
-
-            return response
-
-        return run_chain
-
-    # 创建带记忆的链
-    memory_chain = create_memory_chain()
-
-    # 测试对话
-    print("🚀 使用现代语法测试对话记忆...")
-
-    test_inputs = [
-        {"input": "你好，我想学习LangChain"},
-        {"input": "LangChain有哪些主要功能？"},
-        {"input": "什么是Runnable？"},
-        {"input": "我刚才第一个问题是什么？"}
-    ]
-
-    for i, inputs in enumerate(test_inputs, 1):
-        print(f"\n👤 用户 [{i}]: {inputs['input']}")
-        response = memory_chain(inputs)
-        print(f"🤖 AI: {response[:100]}...")
-        print(f"📝 记忆中消息数: {len(memory.chat_memory.messages)}")
-
-def main():
-    """主函数：运行所有示例"""
-    print("🚀 GLM-4.6 + LangChain ConversationMemory 详细使用示例")
-    print("=" * 80)
-
-    try:
-        # 运行各种示例
-        conversation_buffer_window_memory_example()
-        conversation_token_buffer_memory_example()
-        conversation_summary_memory_example()
-        conversation_summary_buffer_memory_example()
-        memory_comparison()
-        modern_syntax_memory_example()
-
-        print("\n🎉 所有示例运行完成！")
-        print("\n📚 更多信息请参考：")
-        print("- LangChain官方文档: https://python.langchain.com/")
-        print("- 记忆组件指南: https://python.langchain.com/docs/modules/memory/")
-
-    except KeyboardInterrupt:
-        print("\n⏹️ 用户中断了程序")
-    except Exception as e:
-        print(f"\n❌ 程序运行出错：{e}")
+# ========== 主函数 ==========
 
 if __name__ == "__main__":
-    main()
+    print("""
+    🎉 LangChain v1.0 对话记忆示例
+    ============
+
+    新特性：
+    1. 使用Runnable和messages API
+    2. 手动管理对话历史
+    3. 支持窗口记忆、Token限制记忆和摘要记忆
+
+    """)
+    print()
+
+    # 运行所有示例
+    conversation_buffer_window_memory_example()
+    conversation_token_buffer_memory_example()
+    conversation_summary_memory_example()
+    conversation_summary_buffer_memory_example()
+
+    print("\n" + "=" * 60)
+    print("✅ 所有示例运行完成！")
+    print("=" * 60)

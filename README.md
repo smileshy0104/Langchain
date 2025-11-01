@@ -34,7 +34,7 @@
 ### 安装依赖
 
 ```bash
-pip install langchain langchain-community python-dotenv
+pip install langchain langchain-community langchain-anthropic anthropic python-dotenv
 ```
 
 ### 环境变量配置
@@ -47,6 +47,16 @@ ZHIPUAI_API_KEY=your-zhipu-api-key-here
 ```
 
 > 💡 **获取API密钥**：访问 [智谱AI开放平台](https://open.bigmodel.cn/) 注册并获取API密钥
+
+3. （可选）体验 Anthropic Claude Agent 示例时，额外添加：
+
+```env
+ANTHROPIC_API_KEY=your-anthropic-api-key-here
+# 可选：指定默认模型
+# ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+```
+
+> 💡 **获取Anthropic密钥**：访问 [Anthropic 控制台](https://console.anthropic.com/) 创建 API Key
 
 ## 🏃‍♂️ 快速开始
 
@@ -220,6 +230,39 @@ response = chat.invoke(code_prompt)
 - 包含错误处理
 - 详细注释说明
 - 适合编程学习
+
+### 8. Anthropic Agent 示例 (`AnthropicAgent_examples`)
+
+通过 Anthropic Claude 模型与 LangChain Agent 框架完成工具调用：
+
+```bash
+python 04-LangChain使用之Agents/AnthropicAgent_examples.py
+```
+
+脚本导出的核心代码片段与官方示例保持一致：
+
+```python
+import sys
+
+sys.path.append("04-LangChain使用之Agents")
+from AnthropicAgent_examples import create_agent, get_weather
+
+agent = create_agent(
+    model="claude-3-5-sonnet-20241022",
+    tools=[get_weather],
+    system_prompt="You are a helpful assistant.",
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+)
+print(result["output"])
+```
+
+**特点**：
+- Claude 工具调用能力：使用 `create_tool_calling_agent` 构建可调工具的 Agent
+- 消息输入兼容：支持 `{"role": "...", "content": "..."}` 格式的消息列表
+- 示例工具封装：包含 `get_weather` 示例函数，可按需扩展为真实接口
 
 ## 📖 API参考
 
