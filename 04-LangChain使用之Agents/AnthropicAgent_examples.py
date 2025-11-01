@@ -231,7 +231,7 @@ def create_glm_agent(
         model=llm,
         tools=normalized_tools,
         system_prompt=system_prompt,
-        debug=True,  # 启用调试模式以便查看执行过程
+        debug=False,  # 启用调试模式以便查看执行过程
     )
 
     return agent
@@ -527,9 +527,9 @@ def main() -> None:
         # 运行各种演示
         # run_basic_demo()
         # compare_models()
-        run_weather_demo()
+        # run_weather_demo()
         # run_calculator_demo()
-        # run_time_demo()
+        run_time_demo()
         # run_news_demo()
         # run_translate_demo()
         # run_multi_tool_demo()
