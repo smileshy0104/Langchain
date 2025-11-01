@@ -290,11 +290,11 @@ def run_weather_demo() -> None:
     messages = [
         {
             "role": "user",
-            "content": "请帮我查一下北京的天气怎么样？"
+            "content": "请帮我查一下厦门的天气怎么样？"
         }
     ]
 
-    print("\n💬 用户：查询北京天气")
+    print("\n💬 用户：查询厦门天气")
     print("\n🔍 Agent 正在调用工具...")
     print()
 
@@ -525,15 +525,15 @@ def main() -> None:
 
     try:
         # 运行各种演示
-        run_basic_demo()
-        compare_models()
+        # run_basic_demo()
+        # compare_models()
         run_weather_demo()
-        run_calculator_demo()
-        run_time_demo()
-        run_news_demo()
-        run_translate_demo()
-        run_multi_tool_demo()
-        run_conversation_demo()
+        # run_calculator_demo()
+        # run_time_demo()
+        # run_news_demo()
+        # run_translate_demo()
+        # run_multi_tool_demo()
+        # run_conversation_demo()
 
         print("\n" + "=" * 70)
         print("🎉 所有演示运行完成！")
