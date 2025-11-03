@@ -158,52 +158,41 @@ class ExpertiseBasedMiddleware(AgentMiddleware):
     - beginner: 使用简单模型 + 基础工具
     - intermediate: 使用标准模型 + 常规工具
     - expert: 使用高级模型 + 专业工具
+
+    注意：此示例演示中间件概念，在实际使用中需要根据具体需求调整
     """
+
+    def __init__(self, user_level: str = "beginner"):
+        self.user_level = user_level
 
     def wrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse]
     ) -> ModelResponse:
-        # 获取用户专业程度
-        user_level = request.runtime.context.expertise
-
         # 根据专业程度选择不同的模型和工具
-        if user_level == "expert":
+        if self.user_level == "expert":
             # 专家：使用更强大的模型和工具
-            model = ChatZhipuAI(
-                model="glm-4.6",
-                temperature=0.2,
-                api_key=os.getenv("ZHIPUAI_API_KEY"),
-                max_tokens=4000
-            )
+            request.model.temperature = 0.2
+            request.model.max_tokens = 4000
             tools = [advanced_search, advanced_analysis, get_weather]
             print(f"🎓 使用专家模式：高级模型 + 专业工具")
 
-        elif user_level == "intermediate":
+        elif self.user_level == "intermediate":
             # 中级：使用标准配置
-            model = ChatZhipuAI(
-                model="glm-4.6",
-                temperature=0.5,
-                api_key=os.getenv("ZHIPUAI_API_KEY"),
-                max_tokens=2000
-            )
+            request.model.temperature = 0.5
+            request.model.max_tokens = 2000
             tools = [simple_search, basic_calculator, get_weather]
             print(f"📚 使用中级模式：标准模型 + 常规工具")
 
         else:
             # 初学者：使用简化配置
-            model = ChatZhipuAI(
-                model="glm-4.6",
-                temperature=0.7,
-                api_key=os.getenv("ZHIPUAI_API_KEY"),
-                max_tokens=1000
-            )
+            request.model.temperature = 0.7
+            request.model.max_tokens = 1000
             tools = [simple_search, get_weather]
             print(f"🌱 使用初学者模式：简化模型 + 基础工具")
 
         # 更新请求
-        request.model = model
         request.tools = tools
 
         return handler(request)
@@ -218,25 +207,23 @@ class CostOptimizationMiddleware(AgentMiddleware):
     - 智能降级策略
     """
 
-    def __init__(self):
+    def __init__(self, budget_tier: str = "standard"):
         self.total_tokens = 0
         self.request_count = 0
+        self.budget_tier = budget_tier
 
     def wrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse]
     ) -> ModelResponse:
-        # 获取用户预算等级
-        budget_tier = request.runtime.context.budget_tier
-
-        if budget_tier == "free":
+        if self.budget_tier == "free":
             # 免费用户：严格限制
             if request.model.max_tokens and request.model.max_tokens > 1000:
                 print(f"💰 免费用户：限制max_tokens=1000")
                 request.model.max_tokens = 1000
 
-        elif budget_tier == "standard":
+        elif self.budget_tier == "standard":
             # 标准用户：适度限制
             if request.model.max_tokens and request.model.max_tokens > 2000:
                 print(f"💰 标准用户：限制max_tokens=2000")
@@ -364,13 +351,14 @@ class MultilingualMiddleware(AgentMiddleware):
     - 自动翻译辅助
     """
 
+    def __init__(self, language: str = "zh"):
+        self.language = language
+
     def wrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse]
-    ) -> ModelRequest:
-        user_language = request.runtime.context.language
-
+    ) -> ModelResponse:
         # 根据语言调整系统提示词
         system_prompts = {
             "zh": "你是一个有用的中文AI助手。",
@@ -387,7 +375,7 @@ class MultilingualMiddleware(AgentMiddleware):
                 break
 
         # 添加语言特定的指导
-        language_guide = system_prompts.get(user_language, system_prompts["en"])
+        language_guide = system_prompts.get(self.language, system_prompts["zh"])
         if current_prompt != language_guide:
             # 更新系统消息
             for i, msg in enumerate(request.messages):
@@ -398,9 +386,9 @@ class MultilingualMiddleware(AgentMiddleware):
                 # 如果没有系统消息，添加一个
                 request.messages.insert(0, SystemMessage(content=language_guide))
 
-        print(f"🌐 使用语言：{user_language} - {language_guide}")
+        print(f"🌐 使用语言：{self.language} - {language_guide}")
 
-        return request
+        return handler(request)
 
 
 # ========== 演示函数 ==========
@@ -413,13 +401,16 @@ def demo_expertise_based():
 
     # 创建不同专业程度的用户上下文
     users = [
-        UserContext(user_id="user1", expertise="beginner"),
-        UserContext(user_id="user2", expertise="intermediate"),
-        UserContext(user_id="user3", expertise="expert"),
+        {"user_id": "user1", "expertise": "beginner"},
+        {"user_id": "user2", "expertise": "intermediate"},
+        {"user_id": "user3", "expertise": "expert"},
     ]
 
-    for user in users:
-        print(f"\n👤 用户：{user.user_id} (专业程度：{user.expertise})")
+    for user_info in users:
+        print(f"\n👤 用户：{user_info['user_id']} (专业程度：{user_info['expertise']})")
+
+        # 创建中间件实例，传入用户级别
+        middleware = ExpertiseBasedMiddleware(user_level=user_info['expertise'])
 
         agent = create_agent(
             model=ChatZhipuAI(
@@ -428,19 +419,19 @@ def demo_expertise_based():
                 api_key=os.getenv("ZHIPUAI_API_KEY")
             ),
             tools=[simple_search, advanced_search, basic_calculator, advanced_analysis],
-            middleware=[ExpertiseBasedMiddleware()],
-            context_schema=type("UserContext", (), user.__dict__),  # 动态创建schema
+            middleware=[middleware],
         )
 
         # 模拟请求
         try:
             result = agent.invoke({
                 "messages": [HumanMessage(content="请搜索 'AI发展'")],
-                "context": user.__dict__
             })
             print(f"✅ 成功处理请求")
         except Exception as e:
             print(f"❌ 处理失败：{e}")
+            import traceback
+            traceback.print_exc()
 
 
 def demo_cost_optimization():
@@ -453,9 +444,10 @@ def demo_cost_optimization():
     budgets = ["free", "standard", "premium"]
 
     for budget in budgets:
-        user = UserContext(user_id=f"user_{budget}", budget_tier=budget)
+        user_info = {"user_id": f"user_{budget}", "budget_tier": budget}
 
-        middleware = CostOptimizationMiddleware()
+        # 创建中间件实例，传入预算等级
+        middleware = CostOptimizationMiddleware(budget_tier=budget)
 
         agent = create_agent(
             model=ChatZhipuAI(
@@ -466,17 +458,17 @@ def demo_cost_optimization():
             ),
             tools=[simple_search, basic_calculator],
             middleware=[middleware],
-            context_schema=type("UserContext", (), user.__dict__),
         )
 
         try:
             result = agent.invoke({
                 "messages": [HumanMessage(content="计算 100 + 200")],
-                "context": user.__dict__
             })
             print(f"✅ {budget} 用户请求处理完成")
         except Exception as e:
             print(f"❌ {budget} 用户请求失败：{e}")
+            import traceback
+            traceback.print_exc()
 
 
 def demo_performance_monitoring():
@@ -485,7 +477,7 @@ def demo_performance_monitoring():
     print("📊 性能监控演示")
     print("=" * 70)
 
-    user = UserContext(user_id="test_user")
+    user_info = {"user_id": "test_user"}
     middleware = PerformanceMonitoringMiddleware()
 
     agent = create_agent(
@@ -496,7 +488,6 @@ def demo_performance_monitoring():
         ),
         tools=[simple_search, basic_calculator],
         middleware=[middleware],
-        context_schema=type("UserContext", (), user.__dict__),
     )
 
     # 发送多个请求
@@ -505,11 +496,12 @@ def demo_performance_monitoring():
         try:
             result = agent.invoke({
                 "messages": [HumanMessage(content=f"查询天气 (请求 #{i+1})")],
-                "context": user.__dict__
             })
             print(f"✅ 请求完成")
         except Exception as e:
             print(f"❌ 请求失败：{e}")
+            import traceback
+            traceback.print_exc()
 
     # 显示性能报告
     print("\n📈 性能报告:")
@@ -527,7 +519,7 @@ def demo_time_based_routing():
     current_hour = time.localtime().tm_hour
     print(f"🕐 当前时间：{current_hour}:00")
 
-    user = UserContext(user_id="time_user")
+    user_info = {"user_id": "time_user"}
     middleware = TimeBasedRoutingMiddleware()
 
     agent = create_agent(
@@ -539,17 +531,17 @@ def demo_time_based_routing():
         ),
         tools=[simple_search],
         middleware=[middleware],
-        context_schema=type("UserContext", (), user.__dict__),
     )
 
     try:
         result = agent.invoke({
             "messages": [HumanMessage(content="你好")],
-            "context": user.__dict__
         })
         print(f"✅ 请求处理完成")
     except Exception as e:
         print(f"❌ 请求失败：{e}")
+        import traceback
+        traceback.print_exc()
 
 
 def demo_multilingual():
@@ -561,8 +553,9 @@ def demo_multilingual():
     languages = ["zh", "en", "ja"]
 
     for lang in languages:
-        user = UserContext(user_id=f"user_{lang}", language=lang)
-        middleware = MultilingualMiddleware()
+        user_info = {"user_id": f"user_{lang}", "language": lang}
+        # 创建中间件实例，传入语言偏好
+        middleware = MultilingualMiddleware(language=lang)
 
         agent = create_agent(
             model=ChatZhipuAI(
@@ -572,17 +565,17 @@ def demo_multilingual():
             ),
             tools=[simple_search],
             middleware=[middleware],
-            context_schema=type("UserContext", (), user.__dict__),
         )
 
         try:
             result = agent.invoke({
                 "messages": [HumanMessage(content="你好")],
-                "context": user.__dict__
             })
             print(f"✅ {lang} 语言请求处理完成")
         except Exception as e:
             print(f"❌ {lang} 语言请求失败：{e}")
+            import traceback
+            traceback.print_exc()
 
 
 def explain_custom_middleware():
