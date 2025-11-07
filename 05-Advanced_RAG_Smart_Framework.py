@@ -59,8 +59,15 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware, ModelRequest
 from langchain.agents.middleware.types import ModelResponse
 
-# 加载环境变量
-dotenv.load_dotenv(dotenv_path="../.env")
+# 加载环境变量（优先当前目录，其次父目录，最后默认搜索）
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+for _candidate in (
+    os.path.join(_PROJECT_ROOT, ".env"),
+    os.path.join(_PROJECT_ROOT, "../.env"),
+    None,
+):
+    if dotenv.load_dotenv(dotenv_path=_candidate, override=False):
+        break
 
 
 # ========== 配置类 ==========
@@ -448,11 +455,17 @@ class RAGSmartFramework:
         ]
 
         # 创建模型
+        zhipu_api_key = os.getenv("ZHIPUAI_API_KEY")
+        if not zhipu_api_key or zhipu_api_key.startswith("your-"):
+            raise EnvironmentError(
+                "未检测到有效的 ZHIPUAI_API_KEY，请在项目根目录的 .env 中配置后重试。"
+            )
+
         self.llm = ChatZhipuAI(
             model=self.config.model_name,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
-            api_key=os.getenv("ZHIPUAI_API_KEY"),
+            api_key=zhipu_api_key,
         )
 
         # 创建 Agent
@@ -602,6 +615,7 @@ class RAGSmartFramework:
 
 # ========== 演示函数 ==========
 
+# 基本 RAG 演示
 def demo_basic_rag():
     """演示基本 RAG 功能"""
     print("=" * 70)
@@ -712,7 +726,7 @@ def demo_performance_monitoring():
         for key, value in metrics.items():
             print(f"  • {key}: {value}")
 
-
+# 解释 RAG 架构
 def explain_rag_architecture():
     """解释 RAG 架构"""
     print("\n" + "=" * 70)
@@ -772,19 +786,19 @@ def main():
 
     try:
         # 1. 架构说明
-        explain_rag_architecture()
+        # explain_rag_architecture()
 
-        # 2. 基本演示
+        # # 2. 基本演示
         demo_basic_rag()
 
-        # 3. 混合搜索
-        demo_hybrid_search()
+        # # 3. 混合搜索
+        # demo_hybrid_search()
 
-        # 4. 多源数据
-        demo_multi_source()
+        # # 4. 多源数据
+        # demo_multi_source()
 
-        # 5. 性能监控
-        demo_performance_monitoring()
+        # # 5. 性能监控
+        # demo_performance_monitoring()
 
         print("\n" + "=" * 70)
         print("🎉 所有 RAG 演示完成！")
