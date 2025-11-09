@@ -1,6 +1,6 @@
 
 from langchain.chat_models import init_chat_model
-from langchain_community.chat_models import ChatAnthropic,ChatZhipuAI
+from langchain_community.chat_models import ChatAnthropic,ChatZhipuAI,ChatOpenAI
 
 model = ChatAnthropic(
     model="claude-3-5-sonnet-20241022",
@@ -13,6 +13,13 @@ model = ChatZhipuAI(
     model="glm-4.6",
     temperature=0.3,
     api_key="your-api-key",
+)
+
+model = ChatOpenAI(
+    model="gpt-4o",
+    temperature=0.5,
+    max_tokens=1000,
+    time_out=60,
 )
 
 # Anthropic Claude

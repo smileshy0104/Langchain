@@ -154,9 +154,13 @@ google_model = init_chat_model(
 每个提供商都有自己的类，可以直接导入使用。
 
 #### Anthropic Claude
+```bash
+pip install -U "langchain[anthropic]"
+```
 
 ```python
 from langchain_community.chat_models import ChatAnthropic
+# from langchain_anthropic import ChatAnthropic
 
 model = ChatAnthropic(
     model="claude-3-5-sonnet-20241022",
@@ -167,9 +171,13 @@ model = ChatAnthropic(
 ```
 
 #### OpenAI GPT
+```bash
+pip install -U "langchain[openai]"
+```
 
 ```python
-from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
+# from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
     model="gpt-4o",
@@ -179,6 +187,9 @@ model = ChatOpenAI(
 ```
 
 #### Google Gemini
+```bash
+pip install -U "langchain[google-genai]"
+```
 
 ```python
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -190,6 +201,9 @@ model = ChatGoogleGenerativeAI(
 ```
 
 #### Azure OpenAI
+```bash
+pip install -U "langchain[openai]"
+```
 
 ```python
 from langchain_openai import AzureChatOpenAI
@@ -202,6 +216,9 @@ model = AzureChatOpenAI(
 ```
 
 #### AWS Bedrock
+```bash
+pip install -U "langchain[aws]"
+```
 
 ```python
 from langchain_aws import ChatBedrock
