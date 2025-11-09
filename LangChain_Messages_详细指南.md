@@ -578,7 +578,7 @@ if hasattr(response, 'usage_metadata'):
     print(f"总 tokens: {usage.get('total_tokens')}")
 ```
 
-### Tool Calls 属性
+### Tool Calls 属性（重要）
 
 AIMessage 可以包含工具调用信息：
 
@@ -1008,7 +1008,7 @@ msg = HumanMessage(content_blocks=[
 ### 6. 使用 content_blocks 获得类型安全
 
 ```python
-# ✅ 好的做法 - 类型安全
+# ✅ 好的做法 - 类型安全（使用content_blocks安全）
 msg = HumanMessage(content_blocks=[
     {"type": "text", "text": "你好"},
     {"type": "image", "url": "https://example.com/img.jpg"}
@@ -1027,7 +1027,7 @@ msg = HumanMessage(content=[
 # ✅ 好的做法
 tool_msg = ToolMessage(
     content="结果",
-    tool_call_id="call_123",  # 必需
+    tool_call_id="call_123",  # 必需required
     name="tool_name"
 )
 
@@ -1086,7 +1086,7 @@ class ChatState(BaseModel):
 ---
 
 **文档版本**: 1.0  
-**最后更新**: 2025年1月  
+**最后更新**: 2025年11月  
 **基于**: LangChain v0.3+, Python 3.9+
 
 本文档涵盖了 LangChain Messages 的核心概念、所有消息类型、多模态支持和最佳实践，包含 80+ 实用代码示例。
