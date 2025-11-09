@@ -29,10 +29,10 @@
 
 现代 LLM 提供商都使用聊天模型接口，接受消息列表作为输入。LangChain 的 `ChatModel` 接受 `Message` 对象列表作为输入，这些消息有多种形式：
 
-- **HumanMessage**: 用户输入
-- **AIMessage**: LLM 响应  
-- **SystemMessage**: 系统指令
-- **ToolMessage**: 工具执行结果
+- **HumanMessage**: 用户输入————代表用户输入以及与模型的交互
+- **AIMessage**: LLM 响应————代表模型生成的内容，包括文本内容、工具调用和元数据
+- **SystemMessage**: 系统指令————指定模型角色和行为
+- **ToolMessage**: 工具执行结果————模型执行工具调用的返回结果
 - **FunctionMessage**: 函数调用结果（已废弃，推荐使用 ToolMessage）
 
 ### Messages 的核心特征
@@ -101,9 +101,13 @@ ai_msg = AIMessage(content="我很乐意帮助你！")
 ```
 
 **AIMessage 的特殊属性**:
-- `tool_calls`: 工具调用列表
-- `usage_metadata`: Token 使用信息
-- `response_metadata`: 提供商特定的元数据
+- `text`: 模型生成的文本内容 string
+- `content`: 消息原本的内容 string | dict[]
+- `content_blocks`: 消息的标准化内容块 ContentBlock[]
+- `tool_calls`: 工具调用列表 dict[] | None
+- `id`: 消息的唯一标识符 string
+- `usage_metadata`: 消息的使用元数据，其中包含 Token 使用信息 dict | None
+- `response_metadata`: 消息的响应元数据 ResponseMetadata | None
 
 **使用场景**:
 - 模型生成的回答
