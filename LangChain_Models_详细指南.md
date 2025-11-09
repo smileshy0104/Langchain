@@ -253,7 +253,7 @@ model = ChatAnthropic(
 
 ---
 
-## 支持的模型提供商
+## 支持的模型提供商(之前的版本)
 
 ### Anthropic Claude
 
@@ -381,6 +381,9 @@ from langchain_anthropic import ChatAnthropic
 model = ChatAnthropic(
     model="claude-3-5-sonnet-20241022",
     
+    # API 密钥: 从环境变量读取
+    api_key="your-api-key",
+
     # 温度 (0-1): 控制输出随机性
     # 0 = 确定性输出, 1 = 高度随机
     temperature=0.7,
@@ -489,7 +492,9 @@ response = model.invoke(messages, config=config)
 ### 基本工具调用
 
 ```python
+# 引入模型和工具
 from langchain_anthropic import ChatAnthropic
+# from langchain.tools import tool
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
 
@@ -562,6 +567,7 @@ if response.tool_calls:
         tool_result = search_database.invoke(tool_args)
         
         # 4. 将工具结果添加到消息历史
+        # tool_call_id 是工具调用的唯一标识符,工具返回的每个 ToolMessage 都包含一个 tool_call_id ，该 tool_call_id 与原始工具调用相匹配
         messages.append(response)
         messages.append(ToolMessage(
             content=tool_result,
