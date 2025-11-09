@@ -1,6 +1,7 @@
 
 from langchain.chat_models import init_chat_model
 from langchain_community.chat_models import ChatAnthropic,ChatZhipuAI,ChatOpenAI
+from langchain_core.messages import RemoveMessage
 
 model = ChatAnthropic(
     model="claude-3-5-sonnet-20241022",

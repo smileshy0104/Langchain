@@ -167,6 +167,12 @@ tool_msg = ToolMessage(
 )
 ```
 
+**ToolMessage 的特殊属性**:
+- `content`: 工具调用的字符串化输出 string  required
+- `tool_call_id`: 此消息所响应的工具调用 ID（此 ID 必须与 AIMessage 中的工具调用 ID 匹配） string  required
+- `name`: 被调用的工具的名称 string  required
+- `artifact`: 未发送给模型但可通过编程方式访问的其他数据 dict | None
+
 **使用场景**:
 - 返回工具执行结果
 - 报告工具执行错误
@@ -210,7 +216,7 @@ from langchain_core.messages import HumanMessage
 # 1. 字符串内容
 msg1 = HumanMessage(content="你好，世界！")
 
-# 2. 提供商原生格式 (OpenAI)
+# 2. TODO “提供商” 原生格式 (OpenAI)
 msg2 = HumanMessage(content=[
     {"type": "text", "text": "描述这张图片"},
     {
@@ -219,7 +225,7 @@ msg2 = HumanMessage(content=[
     }
 ])
 
-# 3. LangChain 标准内容块
+# 3. LangChain 标准内容块（一种跨提供商通用的“标准表示形式”。）
 msg3 = HumanMessage(content_blocks=[
     {"type": "text", "text": "描述这张图片"},
     {"type": "image", "url": "https://example.com/image.jpg"}
@@ -229,7 +235,7 @@ msg3 = HumanMessage(content_blocks=[
 ### content vs content_blocks
 
 - **content**: 松散类型，支持字符串和任意对象列表
-- **content_blocks**: 类型安全的接口，使用 LangChain 标准内容块
+- **content_blocks（标准形式）**: 类型安全的接口，使用 LangChain 标准内容块
 
 ```python
 from langchain_core.messages import HumanMessage
@@ -246,7 +252,7 @@ print(msg.content)  # 自动包含内容块数据
 
 ---
 
-## 多模态内容
+## 多模态内容（Multimodal  多模态）
 
 ### 图像内容
 
