@@ -944,6 +944,8 @@ def stream_with_progress():
 ### 基本结构化输出
 
 ```python
+# TODO Validation验证 ：Pydantic 模型提供自动验证，而 TypedDict 和 JSON Schema 则需要手动验证。
+
 from langchain_anthropic import ChatAnthropic
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
@@ -958,7 +960,7 @@ class Person(BaseModel):
 
 # 配置模型使用结构化输出
 model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
-structured_model = model.with_structured_output(Person)
+structured_model = model.with_structured_output(Person) # 结构化输出
 
 # 调用模型
 response = structured_model.invoke([
@@ -1049,9 +1051,10 @@ for product in response.products:
     print(f"{product.name}: ¥{product.price} ({product.category})")
 ```
 
-### 使用 Pydantic 验证器
+### 使用 Pydantic 验证器（Validation 验证器）
 
 ```python
+# TODO Pydantic 模型提供自动验证，而 TypedDict 和 JSON Schema 则需要手动验证。
 from pydantic import BaseModel, Field, validator
 
 class OrderInfo(BaseModel):
