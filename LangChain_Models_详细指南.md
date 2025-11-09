@@ -643,6 +643,298 @@ for tool_call in response.tool_calls:
     print(f"调用工具: {tool_call['name']} with {tool_call['args']}")
 ```
 
+**禁用并行工具调用**
+
+某些模型（包括 OpenAI 和 Anthropic）允许禁用并行工具调用功能：
+
+```python
+# 禁用并行工具调用，强制模型一次只调用一个工具
+model_sequential = model.bind_tools(
+    [get_weather, get_time],
+    parallel_tool_calls=False
+)
+```
+
+### 流式工具调用 (Streaming Tool Calls)
+
+在流式响应中，工具调用通过 `ToolCallChunk` 逐步构建。这允许你在工具调用生成过程中实时查看进度，而不是等待完整响应。
+
+#### 基本流式工具调用
+
+```python
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+
+@tool
+def get_weather(location: str) -> str:
+    """获取指定位置的天气信息。"""
+    return f"{location}的天气是晴朗，温度 22°C"
+
+@tool
+def get_time(timezone: str) -> str:
+    """获取指定时区的时间。"""
+    return f"{timezone}的时间是 14:30"
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model_with_tools = model.bind_tools([get_weather, get_time])
+
+# 流式调用 - 工具调用片段会逐步到达
+for chunk in model_with_tools.stream(
+    "北京和东京的天气怎么样?"
+):
+    # 工具调用块逐步到达
+    for tool_chunk in chunk.tool_call_chunks:
+        if name := tool_chunk.get("name"):
+            print(f"工具: {name}")
+        if id_ := tool_chunk.get("id"):
+            print(f"ID: {id_}")
+        if args := tool_chunk.get("args"):
+            print(f"参数: {args}")
+
+# 输出示例:
+# 工具: get_weather
+# ID: call_SvMlU1TVIZugrFLckFE2ceRE
+# 参数: {"lo
+# 参数: catio
+# 参数: n": "北
+# 参数: 京"}
+# 工具: get_weather
+# ID: call_QMZdy6qInx13oWKE7KhuhOLR
+# 参数: {"lo
+# 参数: catio
+# 参数: n": "东
+# 参数: 京"}
+```
+
+#### 累积块以构建完整工具调用
+
+流式响应中的工具调用片段可以累积起来，以便获取完整的工具调用信息：
+
+```python
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+
+@tool
+def search_database(query: str) -> str:
+    """在数据库中搜索信息。"""
+    return f"找到 5 条关于 '{query}' 的记录"
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model_with_tools = model.bind_tools([search_database])
+
+# 累积块以构建完整的工具调用
+gathered = None
+for chunk in model_with_tools.stream("搜索关于 Python 的信息"):
+    gathered = chunk if gathered is None else gathered + chunk
+    print(gathered.tool_calls)
+
+# 输出逐步构建的完整工具调用:
+# []
+# []
+# [{'name': 'search_database', 'args': {}, 'id': 'call_xxx'}]
+# [{'name': 'search_database', 'args': {'qu': ''}, 'id': 'call_xxx'}]
+# [{'name': 'search_database', 'args': {'query': 'Py'}, 'id': 'call_xxx'}]
+# [{'name': 'search_database', 'args': {'query': 'Python'}, 'id': 'call_xxx'}]
+```
+
+#### 流式工具调用的实际应用
+
+```python
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, ToolMessage
+
+@tool
+def analyze_data(data_type: str, metric: str) -> dict:
+    """分析特定类型的数据指标。"""
+    return {
+        "data_type": data_type,
+        "metric": metric,
+        "result": f"分析完成: {data_type} 的 {metric}"
+    }
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model_with_tools = model.bind_tools([analyze_data])
+
+# 实时显示工具调用的构建过程
+messages = [HumanMessage(content="分析销售数据的增长率")]
+gathered_chunk = None
+
+print("🔄 开始流式工具调用...")
+for chunk in model_with_tools.stream(messages):
+    # 累积块
+    gathered_chunk = chunk if gathered_chunk is None else gathered_chunk + chunk
+
+    # 实时显示进度
+    if chunk.tool_call_chunks:
+        for tool_chunk in chunk.tool_call_chunks:
+            if args := tool_chunk.get("args"):
+                print(f"📡 接收参数片段: {args}")
+
+# 显示完整的工具调用
+if gathered_chunk and gathered_chunk.tool_calls:
+    print("\n✅ 完整工具调用:")
+    for tool_call in gathered_chunk.tool_calls:
+        print(f"  工具名称: {tool_call['name']}")
+        print(f"  完整参数: {tool_call['args']}")
+        print(f"  调用 ID: {tool_call['id']}")
+```
+
+#### 流式多个并行工具调用
+
+当模型决定并行调用多个工具时，流式响应会包含多个工具的片段：
+
+```python
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+
+@tool
+def get_stock_price(symbol: str) -> str:
+    """获取股票价格。"""
+    return f"{symbol} 当前价格: $150.00"
+
+@tool
+def get_company_info(symbol: str) -> str:
+    """获取公司信息。"""
+    return f"{symbol} 公司信息: 科技公司"
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model_with_tools = model.bind_tools([get_stock_price, get_company_info])
+
+# 跟踪多个工具调用的构建过程
+tool_calls_progress = {}
+
+for chunk in model_with_tools.stream(
+    "告诉我 AAPL 的股价和公司信息"
+):
+    for tool_chunk in chunk.tool_call_chunks:
+        # 使用 index 跟踪不同的工具调用
+        index = tool_chunk.get("index", 0)
+
+        if index not in tool_calls_progress:
+            tool_calls_progress[index] = {
+                "name": "",
+                "args": "",
+                "id": ""
+            }
+
+        # 累积每个工具调用的信息
+        if name := tool_chunk.get("name"):
+            tool_calls_progress[index]["name"] = name
+        if id_ := tool_chunk.get("id"):
+            tool_calls_progress[index]["id"] = id_
+        if args := tool_chunk.get("args"):
+            tool_calls_progress[index]["args"] += args
+
+        print(f"🔧 工具 #{index}: {tool_calls_progress[index]}")
+```
+
+#### ToolCallChunk 数据结构
+
+流式工具调用中的 `ToolCallChunk` 包含以下字段：
+
+```python
+# ToolCallChunk 结构
+{
+    "type": "tool_call_chunk",      # 始终为 "tool_call_chunk"
+    "name": "tool_name",            # 被调用的工具名称（可能为空）
+    "args": '{"partial": "json"}',  # 部分工具参数（可能是不完整的 JSON）
+    "id": "call_xxx",               # 工具调用标识符
+    "index": 0                      # 此块在流中的位置
+}
+```
+
+#### 使用 astream_events 进行高级流式处理
+
+对于更复杂的流式场景，可以使用 `astream_events()` 来获取语义事件：
+
+```python
+import asyncio
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+
+@tool
+def complex_calculation(formula: str) -> float:
+    """执行复杂计算。"""
+    return eval(formula)
+
+async def stream_tool_calls_with_events():
+    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model_with_tools = model.bind_tools([complex_calculation])
+
+    async for event in model_with_tools.astream_events(
+        "计算 (25 * 4) + (100 / 2)",
+        version="v1"
+    ):
+        if event["event"] == "on_chat_model_start":
+            print(f"🚀 模型开始: {event['data']['input']}")
+
+        elif event["event"] == "on_chat_model_stream":
+            chunk = event['data']['chunk']
+            if hasattr(chunk, 'tool_call_chunks') and chunk.tool_call_chunks:
+                for tool_chunk in chunk.tool_call_chunks:
+                    print(f"🔨 工具块: {tool_chunk}")
+
+        elif event["event"] == "on_chat_model_end":
+            output = event['data']['output']
+            if hasattr(output, 'tool_calls') and output.tool_calls:
+                print(f"✅ 完整工具调用: {output.tool_calls}")
+
+# 运行异步函数
+# asyncio.run(stream_tool_calls_with_events())
+```
+
+#### 流式工具调用的最佳实践
+
+1. **进度指示器**: 使用流式工具调用为用户提供实时反馈
+2. **错误处理**: 监控不完整的 JSON 参数，处理解析错误
+3. **累积策略**: 决定何时累积块以获得完整信息
+4. **性能优化**: 对于大型参数，流式处理可以提高响应速度
+5. **用户体验**: 在 UI 中显示"正在调用工具..."的加载状态
+
+```python
+# 完整示例：带进度指示的流式工具调用
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+import json
+
+@tool
+def fetch_large_dataset(category: str, filters: dict) -> str:
+    """获取大型数据集。"""
+    return f"获取 {category} 数据，应用过滤器: {filters}"
+
+def stream_with_progress():
+    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model_with_tools = model.bind_tools([fetch_large_dataset])
+
+    gathered = None
+    current_tool_name = None
+
+    for chunk in model_with_tools.stream(
+        "获取2024年第一季度的销售数据，过滤条件：地区为华东，金额大于10000"
+    ):
+        gathered = chunk if gathered is None else gathered + chunk
+
+        # 检测工具名称
+        if chunk.tool_call_chunks:
+            for tool_chunk in chunk.tool_call_chunks:
+                if name := tool_chunk.get("name"):
+                    current_tool_name = name
+                    print(f"\n🔧 准备调用工具: {name}")
+
+                if args := tool_chunk.get("args"):
+                    print(".", end="", flush=True)  # 进度点
+
+    # 执行工具调用
+    if gathered and gathered.tool_calls:
+        print("\n\n📋 执行工具调用:")
+        for tool_call in gathered.tool_calls:
+            print(f"  ✓ {tool_call['name']}")
+            print(f"  ✓ 参数: {json.dumps(tool_call['args'], ensure_ascii=False, indent=2)}")
+
+# stream_with_progress()
+```
+
 ---
 
 ## 结构化输出
