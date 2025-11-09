@@ -61,7 +61,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # 初始化 Chat Model
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # 使用消息列表调用
 messages = [
@@ -123,7 +123,7 @@ from langchain.chat_models import init_chat_model
 
 # Anthropic Claude
 model = init_chat_model(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     model_provider="anthropic",
     temperature=0.7
 )
@@ -163,7 +163,7 @@ from langchain_community.chat_models import ChatAnthropic
 # from langchain_anthropic import ChatAnthropic
 
 model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     api_key="your-api-key",  # 或从环境变量读取
     temperature=0.7,
     max_tokens=1024
@@ -240,7 +240,7 @@ os.environ["ANTHROPIC_API_KEY"] = "your-api-key"
 
 # api_key 会自动从环境变量读取
 model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022"
+    model="claude-sonnet-4-5-20250929"
 )
 ```
 
@@ -260,14 +260,14 @@ model = ChatAnthropic(
 ```python
 from langchain_anthropic import ChatAnthropic
 
-# Claude 3.5 Sonnet (推荐用于 Agents)
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+# Claude 4.5 Sonnet (推荐用于 Agents)
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
-# Claude 3 Opus (最强大)
-model = ChatAnthropic(model="claude-3-opus-20240229")
+# Claude 4.1 Opus (最强大)
+model = ChatAnthropic(model="claude-opus-4-1-20250929")
 
-# Claude 3 Haiku (最快速)
-model = ChatAnthropic(model="claude-3-haiku-20240307")
+# Claude 4.5 Haiku (最快速)
+model = ChatAnthropic(model="claude-haiku-4-5-20250929")
 ```
 
 **特点**:
@@ -379,7 +379,7 @@ model = ChatBedrock(
 from langchain_anthropic import ChatAnthropic
 
 model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     
     # API 密钥: 从环境变量读取
     api_key="your-api-key",
@@ -419,21 +419,21 @@ Temperature 控制输出的随机性和创造性:
 # temperature = 0: 确定性输出
 # 适用场景: 数据提取、分类、结构化输出、代码生成
 deterministic_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     temperature=0
 )
 
 # temperature = 0.3-0.5: 平衡
 # 适用场景: 客服对话、问答系统、技术文档
 balanced_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     temperature=0.4
 )
 
 # temperature = 0.7-1.0: 高创造性
 # 适用场景: 创意写作、头脑风暴、故事生成
 creative_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     temperature=0.9
 )
 ```
@@ -443,19 +443,19 @@ creative_model = ChatAnthropic(
 ```python
 # 短回答 (节省成本)
 short_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     max_tokens=100
 )
 
 # 标准响应
 standard_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     max_tokens=1024
 )
 
 # 长内容生成
 long_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     max_tokens=4096
 )
 ```
@@ -466,7 +466,7 @@ long_model = ChatAnthropic(
 from langchain_anthropic import ChatAnthropic
 
 model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     timeout=120,  # 120 秒超时
     max_retries=5,  # 最多重试 5 次
     default_request_timeout=60
@@ -519,7 +519,7 @@ def calculate(expression: str) -> float:
     return eval(expression)
 
 # 初始化模型并绑定工具
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 model_with_tools = model.bind_tools([get_weather, calculate])
 
 # 调用模型
@@ -548,7 +548,7 @@ def search_database(query: str) -> str:
     return f"找到 5 条关于 '{query}' 的记录"
 
 # 初始化
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 model_with_tools = model.bind_tools([search_database])
 
 # 1. 用户问题
@@ -590,7 +590,7 @@ def format_response(data: dict) -> str:
     """格式化响应数据。"""
     return str(data)
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # 强制使用特定工具
 model_forced = model.bind_tools(
@@ -630,7 +630,7 @@ def get_time(timezone: str) -> str:
     """获取时间信息。"""
     return f"{timezone}: 14:30"
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 model_with_tools = model.bind_tools([get_weather, get_time])
 
 # 模型可能同时调用多个工具
@@ -675,7 +675,7 @@ def get_time(timezone: str) -> str:
     """获取指定时区的时间。"""
     return f"{timezone}的时间是 14:30"
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 model_with_tools = model.bind_tools([get_weather, get_time])
 
 # 流式调用 - 工具调用片段会逐步到达
@@ -719,7 +719,7 @@ def search_database(query: str) -> str:
     """在数据库中搜索信息。"""
     return f"找到 5 条关于 '{query}' 的记录"
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 model_with_tools = model.bind_tools([search_database])
 
 # 累积块以构建完整的工具调用
@@ -753,7 +753,7 @@ def analyze_data(data_type: str, metric: str) -> dict:
         "result": f"分析完成: {data_type} 的 {metric}"
     }
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 model_with_tools = model.bind_tools([analyze_data])
 
 # 实时显示工具调用的构建过程
@@ -798,7 +798,7 @@ def get_company_info(symbol: str) -> str:
     """获取公司信息。"""
     return f"{symbol} 公司信息: 科技公司"
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 model_with_tools = model.bind_tools([get_stock_price, get_company_info])
 
 # 跟踪多个工具调用的构建过程
@@ -859,7 +859,7 @@ def complex_calculation(formula: str) -> float:
     return eval(formula)
 
 async def stream_tool_calls_with_events():
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
     model_with_tools = model.bind_tools([complex_calculation])
 
     async for event in model_with_tools.astream_events(
@@ -904,7 +904,7 @@ def fetch_large_dataset(category: str, filters: dict) -> str:
     return f"获取 {category} 数据，应用过滤器: {filters}"
 
 def stream_with_progress():
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
     model_with_tools = model.bind_tools([fetch_large_dataset])
 
     gathered = None
@@ -959,7 +959,7 @@ class Person(BaseModel):
     occupation: str = Field(description="职业")
 
 # 配置模型使用结构化输出
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 structured_model = model.with_structured_output(Person) # 结构化输出
 
 # 调用模型
@@ -1002,7 +1002,7 @@ class Employee(BaseModel):
     company: Company = Field(description="所在公司")
     skills: List[str] = Field(description="技能列表")
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 structured_model = model.with_structured_output(Employee)
 
 response = structured_model.invoke([
@@ -1035,7 +1035,7 @@ class ProductList(BaseModel):
     """产品列表。"""
     products: List[Product] = Field(description="产品列表")
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 structured_model = model.with_structured_output(ProductList)
 
 response = structured_model.invoke([
@@ -1078,7 +1078,7 @@ class OrderInfo(BaseModel):
             raise ValueError('订单号必须以 ORD- 开头')
         return v
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 structured_model = model.with_structured_output(OrderInfo)
 
 response = structured_model.invoke([
@@ -1099,7 +1099,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
 model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     streaming=True
 )
 
@@ -1111,13 +1111,13 @@ for chunk in model.stream([HumanMessage(content="写一首关于春天的诗")])
 ### 异步流式处理
 
 ```python
-import asyncio
+import asyncio # 引入 asyncio，异步处理
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
 async def async_stream_example():
     model = ChatAnthropic(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-5-20250929",
         streaming=True
     )
     
@@ -1146,7 +1146,7 @@ def search(query: str) -> str:
     return f"关于 {query} 的搜索结果"
 
 async def stream_events_example():
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
     model_with_tools = model.bind_tools([search])
     
     async for event in model_with_tools.astream_events(
@@ -1178,7 +1178,7 @@ asyncio.run(stream_events_example())
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 total_tokens = 0
 content = ""
@@ -1210,7 +1210,7 @@ import base64
 with open("image.jpg", "rb") as f:
     image_data = base64.b64encode(f.read()).decode()
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # 发送图像给模型
 response = model.invoke([
@@ -1237,7 +1237,7 @@ def encode_image(image_path: str) -> str:
     with open(image_path, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # 同时处理多张图片
 response = model.invoke([
@@ -1263,7 +1263,7 @@ print(response.content)
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # 直接使用图像 URL
 response = model.invoke([
@@ -1289,7 +1289,7 @@ print(response.content)
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 response = model.invoke([
     HumanMessage(content="解释机器学习")
@@ -1309,11 +1309,11 @@ if hasattr(response, 'usage_metadata'):
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
-# Claude 3.5 Sonnet 价格 (示例)
+# Claude 4.5 Sonnet 价格 (示例)
 INPUT_PRICE_PER_1M = 3.0  # $3 per 1M input tokens
 OUTPUT_PRICE_PER_1M = 15.0  # $15 per 1M output tokens
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 response = model.invoke([
     HumanMessage(content="写一篇关于人工智能的文章")
@@ -1340,7 +1340,7 @@ if hasattr(response, 'usage_metadata'):
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 response = model.invoke([
     HumanMessage(content="你好")
@@ -1364,7 +1364,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 import anthropic
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 try:
     response = model.invoke([
@@ -1391,7 +1391,7 @@ except Exception as e:
 from langchain_anthropic import ChatAnthropic
 
 model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     max_retries=5,  # 最多重试 5 次
     timeout=120,  # 超时时间
 )
@@ -1422,7 +1422,7 @@ import anthropic
     ))
 )
 def call_model_with_retry(messages):
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
     return model.invoke(messages)
 
 # 使用
@@ -1443,13 +1443,13 @@ except Exception as e:
 
 ```python
 # 简单任务 → 快速模型
-simple_model = ChatAnthropic(model="claude-3-haiku-20240307")
+simple_model = ChatAnthropic(model="claude-haiku-4-5-20250929")
 
 # 复杂推理 → 强大模型
-complex_model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+complex_model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # 关键任务 → 最强模型
-critical_model = ChatAnthropic(model="claude-3-opus-20240229")
+critical_model = ChatAnthropic(model="claude-opus-4-1-20250929")
 ```
 
 ### 2. 优化 Temperature
@@ -1457,13 +1457,13 @@ critical_model = ChatAnthropic(model="claude-3-opus-20240229")
 ```python
 # 事实性任务: temperature = 0
 factual_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     temperature=0
 )
 
 # 创造性任务: temperature = 0.7-1.0
 creative_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-5-20250929",
     temperature=0.9
 )
 ```
@@ -1486,7 +1486,7 @@ system_prompt = """你是一个专业的客户服务助手。
 - 不要做出公司无法兑现的承诺
 """
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 response = model.invoke([
     SystemMessage(content=system_prompt),
     HumanMessage(content="我的订单什么时候到?")
@@ -1523,7 +1523,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def monitored_model_call(messages):
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
     start_time = time.time()
     
     try:
@@ -1559,7 +1559,7 @@ prompt = ChatPromptTemplate.from_messages([
 ])
 
 # 创建链
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 chain = prompt | model | StrOutputParser()
 
 # 调用链
@@ -1578,7 +1578,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
 # 主模型
-primary_model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+primary_model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # 备用模型
 fallback_model = ChatOpenAI(model="gpt-4o")
@@ -1598,7 +1598,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
 async def batch_process():
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
     
     # 准备多个请求
     questions = [
@@ -1626,9 +1626,9 @@ results = asyncio.run(batch_process())
 
 | 模型 | 提供商 | 上下文窗口 | 最佳用途 | 相对成本 |
 |------|--------|-----------|----------|---------|
-| Claude 3.5 Sonnet | Anthropic | 200K | Agent、工具调用、复杂推理 | 中等 |
-| Claude 3 Opus | Anthropic | 200K | 最复杂任务、最高质量输出 | 高 |
-| Claude 3 Haiku | Anthropic | 200K | 快速响应、简单任务 | 低 |
+| Claude 4.5 Sonnet | Anthropic | 200K | Agent、工具调用、复杂推理 | 中等 |
+| Claude 4.1 Opus | Anthropic | 200K | 最复杂任务、最高质量输出 | 高 |
+| Claude 4.5 Haiku | Anthropic | 200K | 快速响应、简单任务 | 低 |
 | GPT-4o | OpenAI | 128K | 多模态、通用任务 | 中等 |
 | GPT-4 Turbo | OpenAI | 128K | 复杂推理、长上下文 | 高 |
 | GPT-3.5 Turbo | OpenAI | 16K | 简单任务、经济型 | 低 |
@@ -1683,7 +1683,7 @@ A: 大多数情况下可靠，但应添加 Pydantic 验证和错误处理作为�
 ---
 
 **文档版本**: 1.0  
-**最后更新**: 2025年1月  
+**最后更新**: 2025年11月  
 **基于**: LangChain v0.3+, Python 3.9+
 
 本文档涵盖了 LangChain Models 的核心概念、使用方法和最佳实践，包含 100+ 实用代码示例。
