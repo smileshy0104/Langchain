@@ -20,7 +20,7 @@
 ```
 时间轴：
 1950s-1980s: 符号主义时代（专家系统）
-1980s-2010s: 连接主义时代（神经网络、强化学习）
+1980s-2010s: 联结主义时代（神经网络、强化学习）
 2010s-2022: 深度学习时代（AlphaGo、自动驾驶）
 2022-至今: LLM驱动时代（ChatGPT、AutoGPT）
 ```
@@ -140,7 +140,7 @@ THEN 避免使用青霉素类药物
 
 ---
 
-## 第二幕：连接主义时代（1980s-2010s）
+## 第二幕：联结主义时代（1980s-2010s）
 
 ### 核心理念："智能 = 神经网络 + 学习"
 
@@ -158,7 +158,7 @@ THEN 避免使用青霉素类药物
 
 **问题：** 神经网络怎么"学习"？
 
-**答案：** 通过调整连接权重，最小化预测误差
+**答案：** 通过调整“联结权重“，最小化预测误差
 
 **类比：**
 ```
@@ -166,7 +166,7 @@ THEN 避免使用青霉素类药物
 符号主义：写规则"四条腿+尖耳朵+胡须 = 猫"
            → 遇到斯芬克斯猫（无毛）就崩溃
 
-连接主义：给小孩看1000张猫图片，让他自己总结规律
+联结主义：给小孩看1000张猫图片，让他自己总结规律
            → 能识别各种品种的猫，甚至卡通猫
 ```
 
@@ -258,7 +258,7 @@ def td_gammon():
 
 ---
 
-### 连接主义的优势与问题
+### 联结主义的优势与问题
 
 **优势：**
 - ✅ **自动学习**：不需要手工编写规则
@@ -748,8 +748,8 @@ Engineer Agent（第二轮）:
 **解决方案：** 提供标准化组件
 
 ```python
-from langchain.agents import initialize_agent
-from langchain.tools import Tool
+from langchain.agents import create_agent
+from langchain.tools import tool
 
 # 定义工具
 tools = [
@@ -757,12 +757,23 @@ tools = [
     Tool(name="Calculator", func=calculator),
 ]
 
-# 初始化智能体（一行代码）
-agent = initialize_agent(
-    tools=tools,
-    llm=ChatOpenAI(model="gpt-4"),
-    agent_type="zero-shot-react-description"
+api_key = _require_env_var("ZHIPUAI_API_KEY")
+
+llm = ChatZhipuAI(
+    model="glm-4.6",
+    temperature=0.3,
+    api_key=api_key,
 )
+
+# 初始化智能体（一行代码）
+# 使用新的 create_agent API
+agent = create_agent(
+    model=llm,
+    tools=tools,
+    system_prompt=system_prompt,
+    debug=False,  # 启用调试模式以便查看执行过程
+)
+
 
 # 运行
 agent.run("What's the population of Tokyo in 2024?")
@@ -869,7 +880,7 @@ Agent自己决定调用delete_all_files()
 
 ## 四个时代的对比总结
 
-| 维度 | 符号主义 | 连接主义 | 深度学习 | LLM驱动 |
+| 维度 | 符号主义 | 联结主义 | 深度学习 | LLM驱动 |
 |------|---------|---------|---------|---------|
 | **时间** | 1950s-1980s | 1980s-2010s | 2010s-2022 | 2022-至今 |
 | **核心技术** | 规则+逻辑推理 | 神经网络+强化学习 | 深度神经网络 | 大语言模型+Prompting |
@@ -963,7 +974,7 @@ Day 365: Agent学会了用户的所有习惯，成为"最懂你的助手"
 ### 1. 没有银弹，只有权衡
 
 - 符号主义：精确但僵化
-- 连接主义：灵活但黑盒
+- 联结主义：灵活但黑盒
 - LLM：通用但不稳定
 
 **未来的智能体会是混合架构**
