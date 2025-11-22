@@ -19,7 +19,7 @@ Plan-and-Solve = 规划 (Plan) + 执行 (Solve)
 - 🎯 结构化解决问题
 - ⏱️ 可预测的执行流程
 
-基于智谱AI GLM-4 模型实现，使用 LCEL 链
+基于智谱AI glm-4.6.6 模型实现，使用 LCEL 链
 """
 
 from __future__ import annotations
@@ -59,9 +59,8 @@ class Planner:
         # 定义输出解析器
         self.parser = JsonOutputParser(pydantic_object=Plan)
 
-        # 定义提示词模板
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """你是一个顶级的AI规划专家。你的任务是将用户提出的复杂问题分解成一个由多个简单步骤组成的行动计划。
+        # 定义提示词模板（使用简单格式，兼容 glm-4.6）
+        self.prompt = ChatPromptTemplate.from_template("""你是一个顶级的AI规划专家。你的任务是将用户提出的复杂问题分解成一个由多个简单步骤组成的行动计划。
 
 请确保计划中的每个步骤都是:
 1. 独立的、可执行的子任务
@@ -70,9 +69,9 @@ class Planner:
 
 {format_instructions}
 
-输出严格的 JSON 格式，不要包含额外的解释。"""),
-            ("human", "问题: {question}")
-        ])
+问题: {question}
+
+输出严格的 JSON 格式，不要包含额外的解释。""")
 
         # 创建 LCEL 链（自动串联所有步骤）
         self.chain = (
@@ -142,9 +141,8 @@ class Executor:
         self.llm = llm
         self.debug = debug
 
-        # 定义提示词模板
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """你是一位顶级的AI执行专家。你的任务是严格按照给定的计划，一步步地解决问题。
+        # 定义提示词模板（使用简单格式，兼容 glm-4.6）
+        self.prompt = ChatPromptTemplate.from_template("""你是一位顶级的AI执行专家。你的任务是严格按照给定的计划，一步步地解决问题。
 
 你将收到:
 - 原始问题
@@ -167,7 +165,6 @@ class Executor:
 {current_step}
 
 请仅输出针对"当前步骤"的回答:""")
-        ])
 
         # 创建 LCEL 链
         self.chain = self.prompt | self.llm | StrOutputParser()
@@ -227,7 +224,7 @@ class PlanAndSolveAgent:
 
     def __init__(
         self,
-        model: str = "glm-4",
+        model: str = "glm-4.6.6",
         temperature: float = 0.3,
         debug: bool = False
     ):
@@ -235,7 +232,7 @@ class PlanAndSolveAgent:
         初始化 Plan-and-Solve Agent
 
         Args:
-            model: 模型名称，默认 "glm-4"
+            model: 模型名称，默认 "glm-4.6.6"
             temperature: 温度参数
                 - 0.0-0.3: 更确定性，适合逻辑推理
                 - 0.5-0.7: 平衡创造性和准确性
@@ -385,7 +382,7 @@ def example_planning_task():
 
 def main():
     """主函数：运行示例"""
-    print("🚀 Plan-and-Solve Agent 示例 - LangChain v1.0 + GLM-4")
+    print("🚀 Plan-and-Solve Agent 示例 - LangChain v1.0 + glm-4.6.6")
     print("="*80)
 
     # 检查 API 密钥

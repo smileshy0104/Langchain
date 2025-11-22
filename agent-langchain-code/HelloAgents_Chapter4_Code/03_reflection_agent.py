@@ -20,7 +20,7 @@ Reflection = 生成 (Generate) + 评审 (Reflect) + 优化 (Refine)
 - 🔄 迭代优化
 - 📈 持续改进
 
-基于智谱AI GLM-4 模型实现，使用 LCEL 链
+基于智谱AI glm-4.6 模型实现，使用 LCEL 链
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class ReflectionAgent:
 
     def __init__(
         self,
-        model: str = "glm-4",
+        model: str = "glm-4.6",
         temperature: float = 0.2,
         max_iterations: int = 3,
         debug: bool = False
@@ -51,7 +51,7 @@ class ReflectionAgent:
         初始化 Reflection Agent
 
         Args:
-            model: 模型名称，默认 "glm-4"
+            model: 模型名称，默认 "glm-4.6"
             temperature: 温度参数
                 - 0.0-0.3: 更确定性，适合代码生成
                 - 0.5-0.7: 平衡创造性和准确性，适合文章写作
@@ -339,7 +339,7 @@ def example_text_generation():
 
 def main():
     """主函数：运行示例"""
-    print("🚀 Reflection Agent 示例 - LangChain v1.0 + GLM-4")
+    print("🚀 Reflection Agent 示例 - LangChain v1.0 + glm-4.6")
     print("="*80)
 
     # 检查 API 密钥

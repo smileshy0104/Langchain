@@ -131,9 +131,9 @@ if __name__ == "__main__":
     # 测试智谱AI
     try:
         print("1️⃣ 测试智谱AI GLM-4...")
-        llm = get_llm(provider="zhipuai", model="GLM-4.6", temperature=0.3)
+        llm = get_llm(provider="zhipuai", model="glm-4.6", temperature=0.3)
         print(f"   ✅ 成功: {llm.__class__.__name__}")
-        print(f"   模型: {llm.model}")
+        print(f"   模型: {llm.model_name}")  # ChatZhipuAI 使用 model_name 属性
         print(f"   温度: {llm.temperature}")
     except Exception as e:
         print(f"   ❌ 失败: {e}")

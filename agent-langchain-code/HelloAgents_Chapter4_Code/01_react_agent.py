@@ -15,7 +15,7 @@ ReAct = Reasoning (推理) + Acting (行动)
 ✅ 需要使用外部工具（计算器、搜索引擎等）
 ✅ 问题需要多步推理和工具组合
 
-基于智谱AI GLM-4 模型实现
+基于智谱AI glm-4.6 模型实现
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class ReActAgent:
 
     def __init__(
         self,
-        model: str = "glm-4",
+        model: str = "glm-4.6",
         tools: list | None = None,
         temperature: float = 0.3,
         debug: bool = False
@@ -50,7 +50,7 @@ class ReActAgent:
         初始化 ReAct Agent
 
         Args:
-            model: 模型名称，默认 "glm-4"
+            model: 模型名称，默认 "glm-4.6"
             tools: 工具列表，如果为 None 则使用默认工具
             temperature: 温度参数（0.0-1.0）
                 - 0.0-0.3: 更确定性，适合事实查询
@@ -198,6 +198,7 @@ def example_weather():
     question = "请帮我查一下厦门今天的天气怎么样？"
     answer = agent.run(question)
 
+    print(f"\n最终答案: {answer}")
 
 def example_calculator():
     """示例3: 数学计算"""
@@ -233,6 +234,7 @@ def example_multi_tools():
 
     answer = agent.run(question)
 
+    print(f"\n最终答案: {answer}")
 
 def example_conversation():
     """示例5: 多轮对话"""
@@ -282,10 +284,11 @@ def example_search():
         print(f"\n--- 搜索问题 ---")
         answer = agent.run(q)
 
+        print(f"\n最终答案: {answer}")
 
 def main():
     """主函数：运行示例"""
-    print("🚀 ReAct Agent 示例 - LangChain v1.0 + GLM-4")
+    print("🚀 ReAct Agent 示例 - LangChain v1.0 + glm-4.6")
     print("="*80)
 
     # 检查 API 密钥
@@ -298,11 +301,11 @@ def main():
 
     try:
         # 运行示例（可以根据需要选择）
-        example_basic()
+        # example_basic()
         # example_weather()
         # example_calculator()
         # example_multi_tools()
-        # example_conversation()
+        example_conversation()
         # example_search()
 
         print("\n" + "="*70)
