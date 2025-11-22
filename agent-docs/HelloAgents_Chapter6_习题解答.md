@@ -39,8 +39,9 @@
 ✅ 自然语言交流
 ✅ 角色基于 System Message 定义
 ✅ 协作流程"涌现"于对话
-
+```
 代码示例:
+```python
 from autogen import AssistantAgent, UserProxyAgent, GroupChat
 
 # 定义角色
@@ -92,7 +93,8 @@ group_chat = GroupChat(
 ✅ 每个节点是独立函数
 ✅ 边 (Edge) 控制流转
 ✅ 支持循环和条件跳转
-
+```
+```python
 代码示例:
 from langgraph.graph import StateGraph
 
@@ -147,7 +149,7 @@ workflow.add_conditional_edges(
 
 **AutoGen - 弱控制,强涌现**
 
-```
+```python
 控制粒度: 粗粒度
 
 开发者控制:
@@ -176,7 +178,7 @@ group_chat = GroupChat(
 
 **LangGraph - 强控制,弱涌现**
 
-```
+```python
 控制粒度: 细粒度
 
 开发者控制:
@@ -214,7 +216,6 @@ workflow.add_conditional_edges("generate", should_continue)
 
 **实际案例对比**:
 
-```
 任务: "生成一份产品PRD文档"
 
 AutoGen实现:
@@ -244,7 +245,6 @@ LangGraph实现:
 
 优点: 时间可控,流程清晰
 缺点: 缺少"惊喜",创造性受限
-```
 
 ---
 
@@ -314,7 +314,6 @@ LangGraph实现:
 
 **混合使用建议**:
 
-```
 场景: 智能研发助手
 
 阶段1: 需求分析 (使用AutoGen)
@@ -328,7 +327,6 @@ LangGraph实现:
 - 输出: 可交付代码
 
 优势: 创意阶段用AutoGen,执行阶段用LangGraph
-```
 
 ---
 
@@ -338,7 +336,6 @@ LangGraph实现:
 
 **核心思想**:
 
-```
 "整体大于部分之和"
 
 定义:
@@ -349,7 +346,6 @@ LangGraph实现:
 - 蚁群: 单个蚂蚁很简单,但蚁群能建造复杂巢穴
 - 大脑: 单个神经元很简单,但大脑产生意识
 - 市场: 个体买卖决策,涌现出市场价格
-```
 
 **在智能体中的体现**:
 
