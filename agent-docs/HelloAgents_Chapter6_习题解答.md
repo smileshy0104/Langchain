@@ -438,6 +438,7 @@ PM: "需要一个排序函数"
 
 ```
 "预先定义每一步"
+- 每个步骤都清晰可见
 
 定义:
 开发者明确规划系统的行为路径,
@@ -1087,8 +1088,7 @@ qa_engineer = AssistantAgent(
    - 严重级别: P0/P1/P2
    - 复现步骤: ...
    - 建议修复: ...
-```
-""",
+```python
     llm_config={
         "model": "gpt-4",
         "functions": [
@@ -1120,10 +1120,11 @@ qa_engineer = AssistantAgent(
             }
         ]
     }
-)
+```
 
 # 2. 更新其他智能体的System Message
 
+```python
 pm = AssistantAgent(
     name="ProductManager",
     system_message="""你是资深产品经理。
@@ -1295,7 +1296,6 @@ user_proxy.initiate_chat(
 
 #### 🎬 运行效果示例
 
-```
 [流程控制] 初始由PM发起
 PM: """
 需求明确:
@@ -1307,6 +1307,7 @@ PM: """
 
 [流程控制] Engineer首次提交,转给CodeReviewer审查
 Engineer: """
+
 代码如下:
 ```python
 def register_user(email, password):
@@ -1518,7 +1519,6 @@ Reviewer: "方案B更优"
 │ ├─ 限制单次输出长度             │
 │ └─ 引导沉默智能体发言           │
 └─────────────────────────────────┘
-```
 
 ---
 
@@ -3439,7 +3439,6 @@ class ArbitratedRolePlaying:
 - 低于此分数需要继续完善
 
 输出格式:
-```json
 {{
     "completeness_score": 分数,
     "quality_score": 分数,
@@ -3449,7 +3448,6 @@ class ArbitratedRolePlaying:
     "can_terminate": true/false,
     "suggestions": "改进建议"
 }}
-```
 """
         return ChatAgent(
             system_message=reviewer_sys_msg,
@@ -3567,7 +3565,6 @@ async def writing_with_arbitration():
 
 **运行效果**:
 
-```
 检测到分歧:
 - 作家: 认为已完成
 - 心理学家: 认为需要补充
@@ -3588,7 +3585,6 @@ async def writing_with_arbitration():
 ============================================================
 
 🔄 根据评审意见,协作继续...
-```
 
 ---
 
@@ -5425,7 +5421,6 @@ def quality_review_node(state: PaperWritingState) -> dict:
     "suggestions": [<改进建议>]
 }}
 """
-
     response = llm.invoke([HumanMessage(content=prompt)])
 
     import json
