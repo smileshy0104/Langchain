@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import os
 
 # 设置 API Key
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
 
 
 # ==================== 1. 基础结构化输出 ====================
@@ -39,7 +39,7 @@ def basic_structured_output():
     print("基础结构化输出示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -82,7 +82,7 @@ def product_review_analysis():
     print("产品评论分析示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.3)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
 
     agent = create_agent(
         model=model,
@@ -129,7 +129,7 @@ def contact_extraction():
     print("联系人信息提取示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.1)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.1)
 
     agent = create_agent(
         model=model,
@@ -174,7 +174,7 @@ def event_extraction():
     print("事件提取示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.2)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.2)
 
     agent = create_agent(
         model=model,
@@ -237,7 +237,7 @@ def union_type_example():
     print("Union 类型示例 - 多种输出格式")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.3)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
 
     agent = create_agent(
         model=model,
@@ -290,7 +290,7 @@ def dataclass_schema_example():
     print("Dataclass Schema 示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.3)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
 
     agent = create_agent(
         model=model,
@@ -348,7 +348,7 @@ def nested_schema_example():
     print("嵌套结构 Schema 示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.2)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.2)
 
     agent = create_agent(
         model=model,
@@ -382,12 +382,12 @@ def nested_schema_example():
 if __name__ == "__main__":
     try:
         basic_structured_output()
-        product_review_analysis()
-        contact_extraction()
-        event_extraction()
-        union_type_example()
-        dataclass_schema_example()
-        nested_schema_example()
+        # product_review_analysis()
+        # contact_extraction()
+        # event_extraction()
+        # union_type_example()
+        # dataclass_schema_example()
+        # nested_schema_example()
     except Exception as e:
         print(f"\n错误: {str(e)}")
         print("请确保已设置 ZHIPUAI_API_KEY 环境变量")

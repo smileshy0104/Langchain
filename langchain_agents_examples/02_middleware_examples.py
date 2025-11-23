@@ -61,7 +61,18 @@ def risky_operation(param: str) -> str:
 
 @wrap_tool_call
 def handle_tool_errors(request, handler):
-    """统一处理工具执行错误"""
+    """
+    统一处理工具执行错误
+    
+    该装饰器用于捕获工具执行过程中的异常，并返回友好的错误消息给模型。
+    
+    参数:
+        request: 工具调用请求对象，包含tool_call等信息
+        handler: 工具处理函数
+        
+    返回:
+        工具执行结果或ToolMessage错误消息
+    """
     try:
         return handler(request)
     except Exception as e:
@@ -79,7 +90,7 @@ def tool_error_handling_example():
     print("工具错误处理示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -117,12 +128,13 @@ def dynamic_model_selection(request, handler):
 
     # 根据消息数量选择模型
     if message_count > 5:
-        print("✨ 使用高级模型 (glm-4-plus)")
-        model = ChatZhipuAI(model="glm-4-plus", temperature=0.7)
+        print("✨ 使用高级模型 (glm-4.6)")
+        model = ChatZhipuAI(model="glm-4.6", temperature=0.7)
     else:
         print("⚡ 使用快速模型 (glm-4-flash)")
         model = ChatZhipuAI(model="glm-4-flash", temperature=0.5)
 
+    # 使用override方法替换模型
     request = request.override(model=model)
     return handler(request)
 
@@ -181,7 +193,7 @@ def dynamic_prompt_example():
     print("动态提示词示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -213,7 +225,7 @@ def before_model_example():
     print("before_model 钩子示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -254,7 +266,7 @@ def after_model_example():
     print("after_model 钩子示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -294,7 +306,7 @@ def tool_logging_example():
     print("工具执行日志示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -318,7 +330,7 @@ def combined_middleware_example():
     print("组合多个中间件示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -341,12 +353,12 @@ def combined_middleware_example():
 
 if __name__ == "__main__":
     try:
-        tool_error_handling_example()
-        dynamic_model_example()
-        dynamic_prompt_example()
-        before_model_example()
-        after_model_example()
-        tool_logging_example()
+        # tool_error_handling_example()
+        # dynamic_model_example()
+        # dynamic_prompt_example()
+        # before_model_example()
+        # after_model_example()
+        # tool_logging_example()
         combined_middleware_example()
     except Exception as e:
         print(f"\n错误: {str(e)}")

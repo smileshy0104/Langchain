@@ -43,7 +43,7 @@ def basic_memory_example():
     print("基础短期记忆示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
     # 创建检查点器
     checkpointer = MemorySaver()
@@ -91,7 +91,7 @@ def multi_session_example():
     print("多会话管理示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
@@ -138,6 +138,7 @@ def multi_session_example():
 
 # ==================== 4. 自定义状态模式 ====================
 
+# 自定义状态类，继承自 AgentState
 class CustomAgentState(AgentState):
     """扩展的 Agent 状态"""
     user_id: str = ""  # 用户 ID
@@ -150,14 +151,14 @@ def custom_state_example():
     print("自定义状态示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
         model=model,
         tools=[get_user_info],
-        state_schema=CustomAgentState,
-        checkpointer=checkpointer,
+        state_schema=CustomAgentState, # 使用自定义状态
+        checkpointer=checkpointer, # 启用记忆
         system_prompt="你是一个个性化助手,可以记住用户信息和偏好"
     )
 
@@ -180,7 +181,7 @@ def custom_state_example():
 # ==================== 5. 消息修剪 ====================
 
 @before_model
-async def trim_long_conversations(state, runtime):
+def trim_long_conversations(state, runtime):
     """修剪过长的对话历史"""
     max_messages = 10  # 最多保留10条消息
 
@@ -199,14 +200,14 @@ def message_trimming_example():
     print("消息修剪示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
         model=model,
         tools=[],
-        checkpointer=checkpointer,
-        middleware=[trim_long_conversations],
+        checkpointer=checkpointer, # 启用记忆
+        middleware=[trim_long_conversations], # 添加消息修剪中间件
         system_prompt="你是一个助手"
     )
 
@@ -249,15 +250,15 @@ def state_access_example():
     print("状态访问示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
         model=model,
         tools=[],
-        state_schema=AuthState,
-        checkpointer=checkpointer,
-        middleware=[check_authentication],
+        state_schema=AuthState, # 使用带认证状态
+        checkpointer=checkpointer, # 启用记忆
+        middleware=[check_authentication], # 添加状态访问中间件
         system_prompt="你是一个需要认证的助手"
     )
 
@@ -293,13 +294,13 @@ def state_management_example():
     print("状态管理示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
         model=model,
         tools=[],
-        checkpointer=checkpointer,
+        checkpointer=checkpointer, # 启用记忆
         system_prompt="你是一个助手"
     )
 
@@ -323,11 +324,11 @@ def state_management_example():
 
 if __name__ == "__main__":
     try:
-        basic_memory_example()
-        multi_session_example()
-        custom_state_example()
-        message_trimming_example()
-        state_access_example()
+        # basic_memory_example()
+        # multi_session_example()
+        # custom_state_example()
+        # message_trimming_example()
+        # state_access_example()
         state_management_example()
     except Exception as e:
         print(f"\n错误: {str(e)}")

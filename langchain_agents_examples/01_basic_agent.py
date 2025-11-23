@@ -95,7 +95,7 @@ def basic_agent_example():
 
     # 创建 GLM 模型
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         temperature=0.7,
     )
 
@@ -151,7 +151,7 @@ def structured_prompt_agent():
     print("=" * 50)
 
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         temperature=0.5,
     )
 
@@ -185,7 +185,7 @@ def multi_tool_agent():
     print("=" * 50)
 
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         temperature=0.7,
     )
 
@@ -216,8 +216,8 @@ def multi_tool_agent():
 if __name__ == "__main__":
     # 运行所有示例
     try:
-        basic_agent_example()
-        structured_prompt_agent()
+        # basic_agent_example()
+        # structured_prompt_agent()
         multi_tool_agent()
     except Exception as e:
         print(f"\n错误: {str(e)}")
