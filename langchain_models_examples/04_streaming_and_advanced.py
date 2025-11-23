@@ -24,7 +24,7 @@ def token_streaming_example():
     print("=" * 50)
 
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         streaming=True
     )
 
@@ -44,7 +44,7 @@ async def async_streaming_example():
     print("=" * 50)
 
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         streaming=True
     )
 
@@ -71,7 +71,7 @@ def streaming_tool_calls():
     print("流式工具调用示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     model_with_tools = model.bind_tools([get_weather])
 
     print("\n流式接收工具调用...")
@@ -110,7 +110,7 @@ def chain_example():
     ])
 
     # 创建链
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     chain = prompt | model | StrOutputParser()
 
     # 调用链
@@ -130,7 +130,7 @@ async def batch_processing_example():
     print("批处理示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     # 准备多个请求
     questions = [
@@ -163,7 +163,7 @@ def fallback_example():
     print("=" * 50)
 
     # 主模型
-    primary_model = ChatZhipuAI(model="glm-4-plus")
+    primary_model = ChatZhipuAI(model="glm-4.6")
 
     # 备用模型 (假设使用更快的模型作为备用)
     fallback_model = ChatZhipuAI(model="glm-4-flash")
@@ -172,7 +172,7 @@ def fallback_example():
     model_with_fallback = primary_model.with_fallbacks([fallback_model])
 
     print("\n使用带 Fallback 的模型")
-    print("主模型: glm-4-plus")
+    print("主模型: glm-4.6")
     print("备用模型: glm-4-flash")
 
     # 如果主模型失败，会自动使用备用模型
@@ -189,7 +189,7 @@ def retry_configuration():
     print("=" * 50)
 
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         max_retries=5,  # 最多重试 5 次
         timeout=120,  # 超时时间 120 秒
     )
@@ -215,7 +215,7 @@ def token_usage_example():
     print("Token 使用统计示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     response = model.invoke([
         HumanMessage(content="解释机器学习的基本概念")
@@ -247,7 +247,7 @@ def monitored_call():
     print("监控和日志示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     start_time = time.time()
 
@@ -280,7 +280,7 @@ def streaming_with_stats():
     print("流式处理 Token 统计")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     total_tokens = 0
     content = ""

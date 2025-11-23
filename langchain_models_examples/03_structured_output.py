@@ -29,7 +29,7 @@ def basic_structured_output():
     print("基本结构化输出示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     structured_model = model.with_structured_output(Person)
 
     # 调用模型
@@ -77,7 +77,7 @@ def nested_structure_output():
     print("复杂嵌套结构示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     structured_model = model.with_structured_output(Employee)
 
     response = structured_model.invoke([
@@ -114,7 +114,7 @@ def list_output_example():
     print("列表类型输出示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     structured_model = model.with_structured_output(ProductList)
 
     response = structured_model.invoke([
@@ -161,7 +161,7 @@ def validator_example():
     print("验证器示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     structured_model = model.with_structured_output(OrderInfo)
 
     response = structured_model.invoke([
@@ -189,7 +189,7 @@ def data_extraction_example():
     print("数据提取示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0)
     structured_model = model.with_structured_output(ContactInfo)
 
     text = "我是张三，手机号是13812345678，邮箱zhang@company.com，在ABC科技公司工作。"
@@ -222,7 +222,7 @@ def sentiment_analysis_example():
     print("情感分析示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0)
     structured_model = model.with_structured_output(SentimentAnalysis)
 
     texts = [
@@ -261,7 +261,7 @@ def event_extraction_example():
     print("事件提取示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0)
     structured_model = model.with_structured_output(MeetingInfo)
 
     text = """

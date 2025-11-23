@@ -21,7 +21,7 @@ def basic_chat_model_example():
     print("=" * 50)
 
     # 初始化 Chat Model
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     # 使用消息列表调用
     messages = [
@@ -44,7 +44,7 @@ def model_parameters_example():
 
     # 完整参数配置
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
 
         # 温度: 控制输出随机性 (0-1)
         # 0 = 确定性输出, 1 = 高度随机
@@ -81,7 +81,7 @@ def temperature_examples():
     # temperature = 0: 确定性输出
     # 适用场景: 数据提取、分类、结构化输出、代码生成
     deterministic_model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         temperature=0
     )
 
@@ -94,7 +94,7 @@ def temperature_examples():
     # temperature = 0.5: 平衡
     # 适用场景: 客服对话、问答系统、技术文档
     balanced_model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         temperature=0.5
     )
 
@@ -107,7 +107,7 @@ def temperature_examples():
     # temperature = 0.9: 高创造性
     # 适用场景: 创意写作、头脑风暴、故事生成
     creative_model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         temperature=0.9
     )
 
@@ -128,7 +128,7 @@ def max_tokens_examples():
 
     # 短回答 (节省成本)
     short_model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         max_tokens=50
     )
 
@@ -140,7 +140,7 @@ def max_tokens_examples():
 
     # 标准响应
     standard_model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         max_tokens=500
     )
 
@@ -152,7 +152,7 @@ def max_tokens_examples():
 
     # 长内容生成
     long_model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         max_tokens=2000
     )
 
@@ -184,7 +184,7 @@ def system_prompt_example():
 - 不要做出公司无法兑现的承诺
 """
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.7)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.7)
 
     response = model.invoke([
         SystemMessage(content=system_prompt),
@@ -203,7 +203,7 @@ def conversation_history_example():
     print("对话历史管理示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus", temperature=0.7)
+    model = ChatZhipuAI(model="glm-4.6", temperature=0.7)
 
     # 模拟多轮对话
     messages = [
@@ -234,10 +234,10 @@ def model_selection_example():
     print("不同模型选择示例")
     print("=" * 50)
 
-    # GLM-4-Plus: 最强大，适合复杂任务
-    plus_model = ChatZhipuAI(model="glm-4-plus")
+    # glm-4.6: 最强大，适合复杂任务
+    plus_model = ChatZhipuAI(model="glm-4.6")
 
-    print("\n--- GLM-4-Plus (复杂推理) ---")
+    print("\n--- glm-4.6 (复杂推理) ---")
     response = plus_model.invoke([
         HumanMessage(content="分析人工智能对未来教育的影响")
     ])
@@ -262,7 +262,7 @@ def error_handling_example():
     print("=" * 50)
 
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         max_retries=3,  # 最多重试 3 次
         timeout=60,  # 超时时间
     )
@@ -285,7 +285,7 @@ def response_metadata_example():
     print("响应元数据示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     response = model.invoke([
         HumanMessage(content="介绍人工智能")
@@ -313,7 +313,7 @@ def streaming_preview():
     print("=" * 50)
 
     model = ChatZhipuAI(
-        model="glm-4-plus",
+        model="glm-4.6",
         streaming=True
     )
 

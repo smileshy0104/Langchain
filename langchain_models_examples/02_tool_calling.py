@@ -57,7 +57,7 @@ def basic_tool_calling():
     print("基本工具调用示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     model_with_tools = model.bind_tools([get_weather, calculate])
 
     # 调用模型
@@ -83,7 +83,7 @@ def complete_tool_calling_flow():
     print("完整工具调用流程示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     model_with_tools = model.bind_tools([search_database])
 
     # 1. 用户问题
@@ -132,7 +132,7 @@ def parallel_tool_calling():
     print("并行工具调用示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
     model_with_tools = model.bind_tools([get_weather, calculate])
 
     # 模型可能同时调用多个工具
@@ -159,7 +159,7 @@ def sequential_tool_calling():
     print("顺序工具调用示例 (禁用并行)")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     # 禁用并行工具调用，强制模型一次只调用一个工具
     model_sequential = model.bind_tools(
@@ -183,7 +183,7 @@ def forced_tool_calling():
     print("强制工具调用示例")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     # 强制使用特定工具
     model_forced = model.bind_tools(
@@ -209,7 +209,7 @@ def tool_choice_modes():
     print("工具调用决策模式")
     print("=" * 50)
 
-    model = ChatZhipuAI(model="glm-4-plus")
+    model = ChatZhipuAI(model="glm-4.6")
 
     # 模式 1: auto - 自动决定是否调用工具 (默认)
     model_auto = model.bind_tools([get_weather], tool_choice="auto")
