@@ -1027,6 +1027,3 @@ Day 365: Agent学会了用户的所有习惯，成为"最懂你的助手"
 - 《Attention Is All You Need》 - Transformer开山之作
 - DeepMind博客 - 了解最新研究
 
----
-
-如果需要把这份总结扩展成幻灯片或进一步细化某个时代的技术细节，可以在此基础上继续补充！
