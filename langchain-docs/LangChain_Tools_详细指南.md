@@ -102,6 +102,7 @@ from langchain_core.tools import tool
 # from langchain.tools import tool
 
 @tool
+@tool(name="search_database", description="搜索客户数据库以查找匹配查询的记录。") # 自定义工具名称和描述
 def search_database(query: str, limit: int = 10) -> str:
     """搜索客户数据库以查找匹配查询的记录。
 
@@ -193,6 +194,7 @@ def send_email(to: str, subject: str, body: str, cc: list[str] = None) -> str:
 
 ```python
 from langchain_core.tools import tool
+# from langchain.tools import tool
 from pydantic import BaseModel, Field, validator
 
 ## Advanced schema definition 高级架构定义（参数验证模型）
@@ -216,7 +218,7 @@ class DatabaseQueryInput(BaseModel):
         description="跳过的行数"
     )
 
-    @validator("query")
+    @validator("query") # Pydantic 验证器
     def validate_query(cls, v):
         """验证查询安全性"""
         # 禁止危险操作
@@ -232,7 +234,7 @@ class DatabaseQueryInput(BaseModel):
 
         return v
 
-## 工具定义，调用 query_database 工具
+## 工具定义，调用 query_database 工具，参数使用 DatabaseQueryInput 校验模型
 @tool(args_schema=DatabaseQueryInput)
 def query_database(query: str, limit: int = 100, offset: int = 0) -> list:
     """
@@ -253,14 +255,17 @@ def query_database(query: str, limit: int = 100, offset: int = 0) -> list:
 
 ```python
 from langchain_core.tools import BaseTool
+# from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 from typing import Optional, Type
 
+# 自定义搜索工具输入模型
 class SearchInput(BaseModel):
     """搜索工具输入"""
     query: str = Field(description="搜索查询")
     filters: dict = Field(default={}, description="过滤条件")
 
+# 自定义搜索工具类，继承 BaseTool
 class AdvancedSearchTool(BaseTool):
     """高级搜索工具"""
 
@@ -318,7 +323,7 @@ search_tool = AdvancedSearchTool(api_key="your-api-key", max_results=20)
 ```python
 from pydantic import BaseModel, Field, validator
 from typing import Literal
-
+# 邮件输入参数校验
 class EmailInput(BaseModel):
     """邮件输入参数"""
 
@@ -372,6 +377,7 @@ def send_email(to: str, subject: str, body: str, priority: str = "medium") -> st
 ```python
 from pydantic import BaseModel, Field, root_validator
 
+# 转账输入参数校验BaseModel
 class TransferInput(BaseModel):
     """转账输入参数"""
 
@@ -397,6 +403,7 @@ class TransferInput(BaseModel):
 
         return values
 
+# 调用工具 使用参数验证模型args_schema
 @tool(args_schema=TransferInput)
 def transfer_money(from_account: str, to_account: str, amount: float, currency: str = "CNY") -> str:
     """执行转账"""
@@ -426,6 +433,7 @@ class DataProcessInput(BaseModel):
         description="可选配置"
     )
 
+# 调用工具DataProcessInput 使用参数验证模型args_schema
 @tool(args_schema=DataProcessInput)
 def process_data(
     records: List[Dict[str, any]],
@@ -465,6 +473,7 @@ class CreateUserInput(BaseModel):
     role: Literal["admin", "user", "guest"] = "user"
     active: bool = True
 
+# 调用工具CreateUserInput 使用参数验证模型args_schema
 @tool(args_schema=CreateUserInput)
 def create_user(person: Person, role: str = "user", active: bool = True) -> str:
     """在系统中创建新用户"""
@@ -517,6 +526,7 @@ class PublishInput(BaseModel):
     )
     platform: str = Field(description="发布平台")
 
+# 调用工具PublishInput 使用参数验证模型args_schema
 @tool(args_schema=PublishInput)
 def publish_content(
     content: Union[TextContent, ImageContent, VideoContent],
@@ -539,6 +549,7 @@ def publish_content(
 
 ```python
 from langchain_core.tools import tool, ToolException
+# from langchain.tools import tool, ToolException
 
 @tool
 def divide(a: float, b: float) -> float:
@@ -572,7 +583,7 @@ def fetch_user_data(user_id: str) -> dict:
 from langchain.agents.middleware import wrap_tool_call
 from langchain_core.messages import ToolMessage
 
-@wrap_tool_call
+@wrap_tool_call # 使用 wrap_tool_call 装饰器，拦截所有工具调用 
 def handle_tool_errors(request, handler):
     """统一的工具错误处理中间件"""
     try:
@@ -621,7 +632,7 @@ def handle_tool_errors(request, handler):
 agent = create_agent(
     model=model,
     tools=[divide, fetch_user_data],
-    middleware=[handle_tool_errors]
+    middleware=[handle_tool_errors] # 添加中间件，在其中调用handle_tool_errors的工具，捕获错误并返回 ToolMessage
 )
 ```
 
@@ -631,7 +642,7 @@ agent = create_agent(
 from langchain.agents.middleware import wrap_tool_call
 import time
 
-@wrap_tool_call
+@wrap_tool_call # 使用 wrap_tool_call 装饰器，拦截所有工具调用
 def retry_on_failure(request, handler):
     """失败时自动重试的中间件"""
     max_retries = 3
@@ -719,6 +730,7 @@ def critical_operation(param: str) -> str:
 import asyncio
 import aiohttp
 from langchain_core.tools import tool
+# from langchain.tools import tool
 
 @tool
 async def async_web_search(query: str, limit: int = 10) -> str:
@@ -745,6 +757,7 @@ async def async_database_query(query: str) -> list:
 
 ```python
 from langchain_core.tools import BaseTool
+# from langchain.tools import tool
 from pydantic import BaseModel, Field
 from typing import Type
 
@@ -784,6 +797,7 @@ class WeatherTool(BaseTool):
 
 ```python
 import asyncio
+from langchain.tools import tool
 
 @tool
 async def fetch_user_data(user_id: str) -> dict:
@@ -823,6 +837,7 @@ agent = create_agent(
 ```python
 from langgraph.types import StreamWriter
 from langchain_core.tools import tool
+# from langchain.tools import tool
 
 @tool
 async def generate_report(topic: str, config=None) -> str:
@@ -874,7 +889,7 @@ async for chunk in agent.astream(
 
 ```python
 from langchain_core.tools import tool
-
+# from langchain.tools import tool
 @tool
 async def stream_search_results(query: str, config=None) -> str:
     """流式返回搜索结果"""
@@ -897,7 +912,7 @@ async def stream_search_results(query: str, config=None) -> str:
 
     return format_search_results(all_results)
 
-# 在 Agent 中使用
+# 在 Agent 中使用流式事件
 async for event in agent.astream_events(
     {"messages": [{"role": "user", "content": "搜索关于量子计算的信息"}]},
     version="v2"
@@ -1807,7 +1822,7 @@ async def my_tool(param1: str, param2: int, config=None) -> str:
 ---
 
 **文档版本**: 1.0
-**最后更新**: 2025-01-09
+**最后更新**: 2025-11-23
 **基于**: LangChain v1.0 官方文档
 
 如有问题或建议，欢迎反馈！
