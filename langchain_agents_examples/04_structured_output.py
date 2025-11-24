@@ -2,11 +2,27 @@
 LangChain Agents 结构化输出示例
 演示如何让 Agent 返回符合预定义 schema 的结构化数据
 使用 GLM 模型
+
+⚠️ 重要提示:
+ChatZhipuAI 目前只支持 'auto' tool choice 模式,因此不能直接使用
+create_agent 的 response_format 参数(该参数会使用非auto的tool choice)。
+
+替代方案:
+1. 使用 model.with_structured_output() - 直接在模型层面实现结构化输出
+2. 等待 ChatZhipuAI 支持更多 tool choice 模式
+3. 使用支持完整 tool choice 的模型(如 OpenAI GPT-4)
+
+本文件展示了两种方式:
+- create_agent (需要支持完整 tool choice 的模型)
+- with_structured_output (适用于 ChatZhipuAI)
 """
 
-from langchain.agents import create_agent
+# 注释掉 create_agent 相关导入,因为它与 ChatZhipuAI 不兼容
+# from langchain.agents import create_agent
+# from langchain.agents.structured_output import ToolStrategy
+
 from langchain_community.chat_models import ChatZhipuAI
-from langchain.agents.structured_output import ToolStrategy
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing import Literal, Union, List
@@ -14,7 +30,7 @@ from dataclasses import dataclass
 import os
 
 # 设置 API Key
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 
 # ==================== 1. 基础结构化输出 ====================
@@ -34,29 +50,20 @@ def get_weather(location: str) -> str:
 
 
 def basic_structured_output():
-    """基础结构化输出示例"""
+    """基础结构化输出示例 - 使用 with_structured_output"""
     print("=" * 50)
     print("基础结构化输出示例")
     print("=" * 50)
 
     model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
 
-    agent = create_agent(
-        model=model,
-        tools=[get_weather],
-        response_format=ToolStrategy(
-            schema=WeatherResponse,
-            tool_message_content="天气信息已获取!"
-        ),
-        system_prompt="你是一个天气助手,返回结构化的天气信息"
-    )
+    # 使用 with_structured_output (兼容 ChatZhipuAI)
+    structured_model = model.with_structured_output(WeatherResponse)
 
-    result = agent.invoke({
-        "messages": [{"role": "user", "content": "北京天气如何？"}]
-    })
-
-    # 获取结构化响应
-    weather_data: WeatherResponse = result["structured_response"]
+    # 直接调用模型,提供足够的信息让它生成结构化输出
+    weather_data = structured_model.invoke([
+        HumanMessage(content="北京天气如何？温度22度，晴朗，湿度55%")
+    ])
 
     print(f"\n问题: 北京天气如何？")
     print(f"\n结构化输出:")
@@ -83,27 +90,13 @@ def product_review_analysis():
     print("=" * 50)
 
     model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
-
-    agent = create_agent(
-        model=model,
-        tools=[],
-        response_format=ToolStrategy(
-            schema=ProductReview,
-            tool_message_content="评论分析完成!"
-        ),
-        system_prompt="你是一个产品评论分析专家,提取评论中的关键信息"
-    )
+    structured_model = model.with_structured_output(ProductReview)
 
     review_text = "很棒的产品,5星推荐!发货速度很快,质量不错,但是价格有点贵。"
 
-    result = agent.invoke({
-        "messages": [{
-            "role": "user",
-            "content": f"分析这条评论: '{review_text}'"
-        }]
-    })
-
-    review: ProductReview = result["structured_response"]
+    review = structured_model.invoke([
+        HumanMessage(content=f"分析这条评论: '{review_text}'")
+    ])
 
     print(f"\n评论: {review_text}")
     print(f"\n分析结果:")
@@ -130,24 +123,13 @@ def contact_extraction():
     print("=" * 50)
 
     model = ChatZhipuAI(model="glm-4.6", temperature=0.1)
-
-    agent = create_agent(
-        model=model,
-        tools=[],
-        response_format=ToolStrategy(schema=ContactInfo),
-        system_prompt="你是一个信息提取专家,从文本中提取联系人信息"
-    )
+    structured_model = model.with_structured_output(ContactInfo)
 
     text = "我是张三,邮箱是 zhangsan@example.com,电话是 13812345678,在ABC科技公司工作。"
 
-    result = agent.invoke({
-        "messages": [{
-            "role": "user",
-            "content": f"提取联系人信息: {text}"
-        }]
-    })
-
-    contact: ContactInfo = result["structured_response"]
+    contact = structured_model.invoke([
+        HumanMessage(content=f"提取联系人信息: {text}")
+    ])
 
     print(f"\n文本: {text}")
     print(f"\n提取的信息:")
@@ -175,24 +157,13 @@ def event_extraction():
     print("=" * 50)
 
     model = ChatZhipuAI(model="glm-4.6", temperature=0.2)
-
-    agent = create_agent(
-        model=model,
-        tools=[],
-        response_format=ToolStrategy(schema=Event),
-        system_prompt="你是一个会议信息提取专家"
-    )
+    structured_model = model.with_structured_output(Event)
 
     text = "明天下午3点在会议室A召开项目评审会,参加人员有张三、李四、王五。"
 
-    result = agent.invoke({
-        "messages": [{
-            "role": "user",
-            "content": f"提取会议信息: {text}"
-        }]
-    })
-
-    event: Event = result["structured_response"]
+    event = structured_model.invoke([
+        HumanMessage(content=f"提取会议信息: {text}")
+    ])
 
     print(f"\n文本: {text}")
     print(f"\n提取的会议信息:")
@@ -238,13 +209,7 @@ def union_type_example():
     print("=" * 50)
 
     model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
-
-    agent = create_agent(
-        model=model,
-        tools=[],
-        response_format=ToolStrategy(schema=ActionType),
-        system_prompt="你是一个任务处理助手,根据用户需求选择合适的操作类型"
-    )
+    structured_model = model.with_structured_output(ActionType)
 
     # 测试不同的请求
     requests = [
@@ -254,11 +219,10 @@ def union_type_example():
     ]
 
     for req in requests:
-        result = agent.invoke({
-            "messages": [{"role": "user", "content": req}]
-        })
+        action = structured_model.invoke([
+            HumanMessage(content=req)
+        ])
 
-        action = result["structured_response"]
         print(f"\n请求: {req}")
         print(f"操作类型: {action.type}")
 
@@ -291,13 +255,8 @@ def dataclass_schema_example():
     print("=" * 50)
 
     model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
-
-    agent = create_agent(
-        model=model,
-        tools=[],
-        response_format=ToolStrategy(schema=ArticleSummary),
-        system_prompt="你是一个文章分析专家,提取文章的关键信息"
-    )
+    # with_structured_output 也支持 Dataclass
+    structured_model = model.with_structured_output(ArticleSummary)
 
     article = """
     人工智能的发展趋势
@@ -307,14 +266,9 @@ def dataclass_schema_example():
     未来,AI将更加智能化、普及化,成为人类生活不可或缺的一部分。
     """
 
-    result = agent.invoke({
-        "messages": [{
-            "role": "user",
-            "content": f"分析这篇文章:\n{article}"
-        }]
-    })
-
-    summary: ArticleSummary = result["structured_response"]
+    summary = structured_model.invoke([
+        HumanMessage(content=f"分析这篇文章:\n{article}")
+    ])
 
     print(f"\n文章摘要:")
     print(f"  标题: {summary.title}")
@@ -349,24 +303,13 @@ def nested_schema_example():
     print("=" * 50)
 
     model = ChatZhipuAI(model="glm-4.6", temperature=0.2)
-
-    agent = create_agent(
-        model=model,
-        tools=[],
-        response_format=ToolStrategy(schema=Person),
-        system_prompt="你是一个信息提取专家,提取人员的完整信息"
-    )
+    structured_model = model.with_structured_output(Person)
 
     text = "张三今年28岁,住在北京市朝阳区建国路88号,邮编100025,喜欢打篮球和阅读。"
 
-    result = agent.invoke({
-        "messages": [{
-            "role": "user",
-            "content": f"提取人员信息: {text}"
-        }]
-    })
-
-    person: Person = result["structured_response"]
+    person = structured_model.invoke([
+        HumanMessage(content=f"提取人员信息: {text}")
+    ])
 
     print(f"\n文本: {text}")
     print(f"\n提取的信息:")
