@@ -1,15 +1,20 @@
 """
 LangChain Agents 人机协作(Human-in-the-Loop)示例
 演示需要人工审批的操作、决策流程等
-使用 GLM 模型
+使用 GLM 模型 + LangGraph interrupt()
+
+⚠️ 注意: ChatZhipuAI 与 create_agent 不兼容
+本文件使用 LangGraph 的 StateGraph 和 interrupt() 实现 Human-in-the-Loop
 """
 
-from langchain.agents import create_agent, human_in_the_loop_middleware
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.tools import tool
-from langchain.agents.human_in_the_loop import HITLResponse, Decision
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import Command
+from langgraph.prebuilt import ToolNode
+from langgraph.types import Command, interrupt
+from typing import Literal
 import os
 
 # 设置 API Key
@@ -456,11 +461,11 @@ def custom_approval_logic():
 if __name__ == "__main__":
     try:
         basic_hitl_example()
-        edit_decision_example()
-        reject_decision_example()
-        multi_tool_approval_example()
-        selective_approval_example()
-        custom_approval_logic()
+        # edit_decision_example()
+        # reject_decision_example()
+        # multi_tool_approval_example()
+        # selective_approval_example()
+        # custom_approval_logic()
 
         print("\n" + "=" * 50)
         print("所有人机协作示例完成!")
