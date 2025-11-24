@@ -326,15 +326,15 @@ def streaming_preview():
 
 if __name__ == "__main__":
     try:
-        basic_chat_model_example()
-        model_parameters_example()
-        temperature_examples()
-        max_tokens_examples()
-        system_prompt_example()
-        conversation_history_example()
-        model_selection_example()
-        error_handling_example()
-        response_metadata_example()
+        # basic_chat_model_example()
+        # model_parameters_example()
+        # temperature_examples()
+        # max_tokens_examples()
+        # system_prompt_example()
+        # conversation_history_example()
+        # model_selection_example()
+        # error_handling_example()
+        # response_metadata_example()
         streaming_preview()
 
         print("\n" + "=" * 50)

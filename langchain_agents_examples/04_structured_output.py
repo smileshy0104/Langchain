@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import os
 
 # 设置 API Key
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 
 # ==================== 1. 基础结构化输出 ====================
@@ -382,12 +382,12 @@ def nested_schema_example():
 if __name__ == "__main__":
     try:
         basic_structured_output()
-        # product_review_analysis()
-        # contact_extraction()
-        # event_extraction()
-        # union_type_example()
-        # dataclass_schema_example()
-        # nested_schema_example()
+        product_review_analysis()
+        contact_extraction()
+        event_extraction()
+        union_type_example()
+        dataclass_schema_example()
+        nested_schema_example()
     except Exception as e:
         print(f"\n错误: {str(e)}")
         print("请确保已设置 ZHIPUAI_API_KEY 环境变量")

@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
 import os
 
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
 
 
 # ==================== 工具定义 ====================
@@ -228,11 +228,11 @@ def tool_choice_modes():
 
 if __name__ == "__main__":
     try:
-        basic_tool_calling()
-        complete_tool_calling_flow()
-        parallel_tool_calling()
-        sequential_tool_calling()
-        forced_tool_calling()
+        # basic_tool_calling()
+        # complete_tool_calling_flow()
+        # parallel_tool_calling()
+        # sequential_tool_calling()
+        # forced_tool_calling()
         tool_choice_modes()
 
         print("\n" + "=" * 50)
