@@ -6,11 +6,11 @@ LangChain Models - 结构化输出示例
 
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 import os
 
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
 
 
 # ==================== 1. 基本结构化输出 ====================
@@ -139,15 +139,33 @@ class OrderInfo(BaseModel):
     amount: float = Field(description="金额", gt=0)
     status: str = Field(description="状态")
 
-    @validator('status')
+    @field_validator('status')
+    @classmethod
     def validate_status(cls, v):
         """验证状态必须是允许的值之一。"""
         allowed = ['pending', 'paid', 'shipped', 'delivered', 'cancelled']
-        if v.lower() not in allowed:
-            raise ValueError(f'状态必须是: {allowed}之一')
-        return v.lower()
+        # 中文到英文的映射
+        status_map = {
+            '待处理': 'pending',
+            '已支付': 'paid',
+            '已发货': 'shipped',
+            '已送达': 'delivered',
+            '已取消': 'cancelled'
+        }
 
-    @validator('order_id')
+        # 如果是中文状态，转换为英文
+        if v in status_map:
+            return status_map[v]
+
+        # 如果是英文状态，验证并返回小写
+        if v.lower() in allowed:
+            return v.lower()
+
+        raise ValueError(f'状态必须是: {allowed} 或对应的中文状态之一')
+
+
+    @field_validator('order_id')
+    @classmethod
     def validate_order_id(cls, v):
         """验证订单号格式。"""
         if not v.startswith('ORD-'):
@@ -283,12 +301,12 @@ def event_extraction_example():
 
 if __name__ == "__main__":
     try:
-        basic_structured_output()
-        nested_structure_output()
-        list_output_example()
-        validator_example()
-        data_extraction_example()
-        sentiment_analysis_example()
+        # basic_structured_output()
+        # nested_structure_output()
+        # list_output_example()
+        # validator_example()
+        # data_extraction_example()
+        # sentiment_analysis_example()
         event_extraction_example()
 
         print("\n" + "=" * 50)
