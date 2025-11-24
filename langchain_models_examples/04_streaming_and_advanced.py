@@ -143,10 +143,11 @@ async def batch_processing_example():
 
     # 并行处理
     tasks = [
-        model.ainvoke([HumanMessage(content=q)])
-        for q in questions
+        model.ainvoke([HumanMessage(content=q)])  # 为每个问题创建异步调用
+        for q in questions  # 创建多个异步任务
     ]
 
+    # 使用 asyncio.gather 并行等待所有任务完成
     responses = await asyncio.gather(*tasks)
 
     for i, (q, r) in enumerate(zip(questions, responses), 1):
@@ -309,20 +310,20 @@ def main():
     """主函数"""
     try:
         # 同步示例
-        token_streaming_example()
-        streaming_tool_calls()
-        chain_example()
-        fallback_example()
-        retry_configuration()
-        token_usage_example()
+        # token_streaming_example()
+        # streaming_tool_calls()
+        # chain_example()0
+        # fallback_example()
+        # retry_configuration()
+        # token_usage_example()
         monitored_call()
-        streaming_with_stats()
+        # streaming_with_stats()
 
         # 异步示例
         print("\n" + "=" * 50)
         print("运行异步示例...")
         print("=" * 50)
-        asyncio.run(run_async_examples())
+        # asyncio.run(run_async_examples())
 
         print("\n" + "=" * 50)
         print("所有示例完成!")

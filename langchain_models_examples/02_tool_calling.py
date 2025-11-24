@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
 import os
 
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 
 # ==================== 工具定义 ====================
@@ -185,19 +185,18 @@ def forced_tool_calling():
 
     model = ChatZhipuAI(model="glm-4.6")
 
-    # 强制使用特定工具
-    model_forced = model.bind_tools(
-        [calculate],
-        tool_choice="calculate"  # 强制使用 calculate 工具
-    )
+    # 注意: ChatZhipuAI 不支持强制使用特定工具
+    # 只能使用 auto 模式，让模型自动决定
+    model_with_tools = model.bind_tools([calculate])
 
-    response = model_forced.invoke([
+    response = model_with_tools.invoke([
         HumanMessage(content="50 加 50 等于多少?")
     ])
 
     print("\n问题: 50 加 50 等于多少?")
+    print("注意: ChatZhipuAI 不支持强制工具调用，使用 auto 模式")
     if response.tool_calls:
-        print("强制调用工具: calculate")
+        print(f"模型选择调用工具: {response.tool_calls[0]['name']}")
         print(f"参数: {response.tool_calls[0]['args']}")
 
 
@@ -214,16 +213,23 @@ def tool_choice_modes():
     # 模式 1: auto - 自动决定是否调用工具 (默认)
     model_auto = model.bind_tools([get_weather], tool_choice="auto")
 
-    # 模式 2: any - 必须调用某个工具
-    model_any = model.bind_tools([get_weather, calculate], tool_choice="any")
+    # 注意: ChatZhipuAI 目前只支持 "auto" 模式
+    # 模式 2: any - 必须调用某个工具 (ChatZhipuAI 不支持)
+    # model_any = model.bind_tools([get_weather, calculate], tool_choice="any")
 
-    # 模式 3: 指定工具名 - 强制使用特定工具
-    model_specific = model.bind_tools([get_weather], tool_choice="get_weather")
+    # 模式 3: 指定工具名 - 强制使用特定工具 (ChatZhipuAI 不支持)
+    # model_specific = model.bind_tools([get_weather], tool_choice="get_weather")
 
-    print("\n三种工具调用模式:")
-    print("  1. auto - 自动决定 (默认)")
-    print("  2. any - 必须使用某个工具")
-    print("  3. 工具名 - 强制使用特定工具")
+    print("\nChatZhipuAI 支持的工具调用模式:")
+    print("  1. auto - 自动决定 (默认) ✓")
+    print("\n注意: ChatZhipuAI 目前只支持 'auto' 模式")
+    print("  - 'any' (必须使用某个工具) - 不支持")
+    print("  - 指定工具名 (强制使用特定工具) - 不支持")
+
+    # 测试 auto 模式
+    response = model_auto.invoke([HumanMessage(content="北京的天气怎么样?")])
+    if response.tool_calls:
+        print(f"\nauto 模式测试: 模型自动选择调用 {response.tool_calls[0]['name']} 工具")
 
 
 if __name__ == "__main__":

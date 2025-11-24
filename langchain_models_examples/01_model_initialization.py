@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 import os
 
 # 设置 API Key
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_KEY", "your-api-key-here")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 
 # ==================== 1. Chat Models 基本使用 ====================
