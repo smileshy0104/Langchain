@@ -242,6 +242,7 @@ def trim_by_token_count():
 
     def simple_token_counter(messages: List[BaseMessage]) -> int:
         """简单的 token 计数器 (示例用)"""
+        # 使用 split() 函数计算词数，空格分割
         return sum(len(msg.content.split()) for msg in messages)
 
     messages = [
@@ -254,7 +255,7 @@ def trim_by_token_count():
 
     print("\n每条消息的词数:")
     for i, msg in enumerate(messages, 1):
-        word_count = len(msg.content.split())
+        word_count = len(msg.content.split()) # 词数
         print(f"  {i}. {type(msg).__name__}: {word_count} 词")
 
     total_words = simple_token_counter(messages)
@@ -472,17 +473,17 @@ def message_operations_best_practices():
 
 if __name__ == "__main__":
     try:
-        add_messages_basic()
-        add_messages_update()
-        remove_message_example()
-        batch_remove_messages()
-        trim_messages_basic()
-        trim_messages_keep_system()
-        trim_by_token_count()
-        sliding_window_messages()
-        message_summarization()
-        message_deduplication()
-        message_filtering()
+        # add_messages_basic()
+        # add_messages_update()
+        # remove_message_example()
+        # batch_remove_messages()
+        # trim_messages_basic()
+        # trim_messages_keep_system()
+        # trim_by_token_count()
+        # sliding_window_messages()
+        # message_summarization()
+        # message_deduplication()
+        # message_filtering()
         message_operations_best_practices()
 
         print("\n" + "=" * 60)

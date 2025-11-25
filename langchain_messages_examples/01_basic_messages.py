@@ -340,15 +340,15 @@ def message_content_formatting():
 
 if __name__ == "__main__":
     try:
-        basic_human_message()
-        basic_ai_message()
-        system_message_example()
-        multi_turn_conversation()
-        message_properties()
-        message_copy_and_modify()
-        message_serialization()
-        message_list_operations()
-        conditional_message_building()
+        # basic_human_message()
+        # basic_ai_message()
+        # system_message_example()
+        # multi_turn_conversation()
+        # message_properties()
+        # message_copy_and_modify()
+        # message_serialization()
+        # message_list_operations()
+        # conditional_message_building()
         message_content_formatting()
 
         print("\n" + "=" * 60)

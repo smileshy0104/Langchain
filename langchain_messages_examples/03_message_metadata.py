@@ -173,7 +173,7 @@ def response_metadata_example():
     if hasattr(response, 'response_metadata') and response.response_metadata:
         print("\nResponse Metadata:")
         metadata = response.response_metadata
-
+        print(f"  模型: {metadata}")
         # 常见的元数据字段
         for key in ['model_name', 'finish_reason', 'system_fingerprint']:
             if key in metadata:
@@ -214,7 +214,7 @@ def additional_kwargs_example():
     # AI 响应也可能包含 additional_kwargs
     model = ChatZhipuAI(model="glm-4.6")
     response = model.invoke([message])
-
+    print(f"\nAI 回复: {response}")
     print(f"\nAI 回复: {response.content}")
 
     if response.additional_kwargs:
@@ -483,17 +483,17 @@ def metadata_best_practices():
 
 if __name__ == "__main__":
     try:
-        tool_calls_basic()
-        tool_call_complete_flow()
-        usage_metadata_example()
-        response_metadata_example()
-        additional_kwargs_example()
-        message_id_example()
-        message_name_example()
-        tool_message_details()
-        custom_metadata_example()
-        metadata_filtering()
-        metadata_propagation()
+        # tool_calls_basic()
+        # tool_call_complete_flow()
+        # usage_metadata_example()
+        # response_metadata_example()
+        # additional_kwargs_example()
+        # message_id_example()
+        # message_name_example()
+        # tool_message_details()
+        # custom_metadata_example()
+        # metadata_filtering()
+        # metadata_propagation()
         metadata_best_practices()
 
         print("\n" + "=" * 60)
