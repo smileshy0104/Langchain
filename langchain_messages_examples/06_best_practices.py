@@ -546,11 +546,11 @@ def comprehensive_best_practices():
 
 if __name__ == "__main__":
     try:
-        clear_system_prompts()
+        # clear_system_prompts()
         # structured_message_content()
         # proper_message_types()
         # context_management()
-        # error_handling_patterns()
+        error_handling_patterns()
         # performance_optimization()
         # security_and_privacy()
         # maintainability_patterns()
