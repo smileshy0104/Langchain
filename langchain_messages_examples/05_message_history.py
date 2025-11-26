@@ -17,7 +17,7 @@ from typing import List, Dict
 import json
 import os
 
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
 
 
 # ==================== 1. 基础消息历史 ====================
@@ -145,12 +145,14 @@ def history_trimming():
         """有界限的消息历史"""
 
         def __init__(self, max_messages: int = 10):
+            print(f"创建bounded message history, 最多保存 {max_messages} 条消息")
             self.history = InMemoryChatMessageHistory()
             self.max_messages = max_messages
             self.system_message = None
 
         def add_message(self, message: BaseMessage):
             """添加消息并自动修剪"""
+            print(f"添加消息: {message}")
             # 保存系统消息
             if isinstance(message, SystemMessage) and not self.system_message:
                 self.system_message = message
@@ -160,6 +162,7 @@ def history_trimming():
 
         def _trim_if_needed(self):
             """如需要则修剪历史"""
+            print(f"检查历史长度: {len(self.history.messages)} 条")
             messages = self.history.messages
             system_msgs = [self.system_message] if self.system_message else []
             other_msgs = [msg for msg in messages if not isinstance(msg, SystemMessage)]
@@ -306,14 +309,16 @@ def history_summarization():
             """获取消息(含摘要)"""
             return self.history.messages
 
-    # 测试摘要历史
-    sum_history = SummarizingHistory(model, summarize_after=6)
+    # 测试摘要历史，设置20 条消息后生成摘要
+    sum_history = SummarizingHistory(model, summarize_after=20)
 
     print("\n添加对话...")
     for i in range(4):
+        # 添加对话
         sum_history.add_message(HumanMessage(content=f"问题{i+1}"))
         sum_history.add_message(AIMessage(content=f"回答{i+1}"))
-
+    print(f"\n当前消息内容: {sum_history.get_messages()}")
+    print(f"\n当前消息history: {sum_history}")
     if sum_history.summary:
         print(f"\n生成的摘要: {sum_history.summary}")
 
@@ -444,7 +449,7 @@ def history_statistics():
     for i in range(5):
         history.add_user_message(f"这是第 {i+1} 个问题")
         history.add_ai_message(f"这是第 {i+1} 个回答,内容稍微长一些")
-
+    print("\n消息数:", history.messages)
     messages = history.messages
 
     # 统计
@@ -505,16 +510,16 @@ def history_best_practices():
 
 if __name__ == "__main__":
     try:
-        basic_message_history()
-        conversation_with_history()
-        session_management()
-        history_trimming()
-        history_persistence_json()
-        history_summarization()
-        history_search()
-        history_branching()
+        # basic_message_history()
+        # conversation_with_history()
+        # session_management()
+        # history_trimming()
+        # history_persistence_json()
+        # history_summarization()
+        # history_search()
+        # history_branching()
         history_statistics()
-        history_best_practices()
+        # history_best_practices()
 
         print("\n" + "=" * 60)
         print("所有消息历史管理示例完成!")
