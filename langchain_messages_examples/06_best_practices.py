@@ -16,7 +16,7 @@ from langchain_core.chat_history import InMemoryChatMessageHistory
 from typing import List, Optional
 import os
 
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "12ed8068aaac4218bbf334be6cca19d1.zYhTDIEuVqfxo5ZW")
 
 
 # ==================== 1. 清晰的系统提示 ====================
@@ -547,15 +547,15 @@ def comprehensive_best_practices():
 if __name__ == "__main__":
     try:
         clear_system_prompts()
-        structured_message_content()
-        proper_message_types()
-        context_management()
-        error_handling_patterns()
-        performance_optimization()
-        security_and_privacy()
-        maintainability_patterns()
-        testing_friendly_patterns()
-        comprehensive_best_practices()
+        # structured_message_content()
+        # proper_message_types()
+        # context_management()
+        # error_handling_patterns()
+        # performance_optimization()
+        # security_and_privacy()
+        # maintainability_patterns()
+        # testing_friendly_patterns()
+        # comprehensive_best_practices()
 
         print("\n" + "=" * 60)
         print("所有最佳实践示例完成!")
