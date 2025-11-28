@@ -20,15 +20,16 @@ REACT_PROMPT_TEMPLATE = """你是一个具备推理和行动能力的AI助手。
 请严格按照以下格式进行回应，每次只能执行一个步骤:
 
 Thought: 分析当前问题，思考需要什么信息或采取什么行动。
-Action: 选择一个行动，格式必须是以下之一:
-- `{{tool_name}}[{{tool_input}}]` - 调用指定工具
-- `Finish[最终答案]` - 当你有足够信息给出最终答案时
+Action: 选择一个行动。必须严格遵循以下格式之一：
+1. 调用工具: `tool_name[input]` (例如: `search[Python]`, `calculator[1+1]`)
+2. 结束任务: `Finish[最终答案]` (例如: `Finish[Python是一种编程语言]`)
 
 ## 重要提醒
-1. 每次回应必须包含Thought和Action两部分
-2. 工具调用的格式必须严格遵循:工具名[参数]
-3. 只有当你确信有足够信息回答问题时，才使用Finish
-4. 如果工具返回的信息不够，继续使用其他工具或相同工具的不同参数
+1. 每次回应必须只包含一个 Thought 和一个 Action。
+2. 不要一次性输出多个 Action。
+3. 工具调用的格式必须严格遵循 `工具名[参数]`，不要添加额外的引号或描述。
+4. 如果你已经得到了足够的信息来回答用户的问题，请务必使用 `Finish[答案]` 来结束任务。不要重复执行已经成功的步骤。
+5. 如果之前的步骤已经成功获取了信息（Observation），请在 Thought 中分析这些信息，然后决定下一步。
 
 ## 当前任务
 **Question:** {question}
@@ -193,9 +194,18 @@ class ReActAgent(BaseAgent):
             thought = thought_match.group(1).strip()
 
         # 提取 Action
-        action_match = re.search(r'Action:\s*(.+?)(?=\n\n|$)', text, re.DOTALL)
+        # 优化正则: 兼容 `Action: tool[input]` 和 `Action: \n tool[input]` 以及末尾无换行的情况
+        action_match = re.search(r'Action:\s*(.+)', text, re.DOTALL)
         if action_match:
             action = action_match.group(1).strip()
+            # 如果有多行，只取第一行非空内容，防止将 Observation 也包含进去（虽然通常 Observation 在下一轮）
+            # 或者是 action 可能包含多行参数？这里假设 ReAct 标准格式是一行
+            # 但为了健壮性，我们尝试提取第一行看起来像 Action 的内容
+            lines = action.split('\n')
+            for line in lines:
+                if line.strip():
+                    action = line.strip()
+                    break
 
         return thought, action
 
@@ -204,6 +214,7 @@ class ReActAgent(BaseAgent):
         解析 Action 为工具名和输入
 
         格式: tool_name[tool_input]
+        兼容: `tool_name[input]` 或 `tool_name [input]`
 
         Args:
             action: Action 字符串
@@ -211,8 +222,12 @@ class ReActAgent(BaseAgent):
         Returns:
             (tool_name, tool_input) 元组
         """
+        # 移除可能存在的 Markdown 代码块标记
+        action = action.replace('`', '')
+        
         # 匹配格式: tool_name[input]
-        match = re.match(r'(\w+)\[(.+)\]', action)
+        # 使用非贪婪匹配 tool_name，剩余部分为 input
+        match = re.match(r'^\s*([\w_]+)\s*\[(.*)\]\s*$', action, re.DOTALL)
 
         if match:
             tool_name = match.group(1).strip()
