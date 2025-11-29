@@ -455,7 +455,7 @@ class DatabaseMemory(BaseMemory):
 
 ## 3. RAG 检索增强生成
 
-### 3.1 什么是 RAG?
+### 3.1 什么是 RAG（检索增强生成）?
 
 #### 🎯 核心思想
 
