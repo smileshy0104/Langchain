@@ -51,7 +51,7 @@ from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 checkpointer = MemorySaver()
-agent = create_agent(model="gpt-4o", tools=[], checkpointer=checkpointer)
+agent = create_agent(model="gpt-5.0", tools=[], checkpointer=checkpointer)
 
 # 同一线程的多次交互
 config = {"configurable": {"thread_id": "conversation_1"}}
@@ -72,9 +72,9 @@ agent.invoke({"messages": "我叫什么名字?"}, config)
 
 大多数 LLM 都有最大上下文窗口限制：
 
-- **GPT-4o**: 128K tokens
-- **Claude 3.5 Sonnet**: 200K tokens  
-- **Gemini 1.5 Pro**: 2M tokens
+- **gpt-5.0**: 400K tokens
+- **Claude 4.5 Sonnet**: 200K tokens  
+- **Gemini 3.0 Pro**: 1M tokens
 
 长对话可能超出这些限制，导致：
 - ❌ 上下文丢失或错误
@@ -184,7 +184,7 @@ checkpointer = MemorySaver()
 
 # 创建 Agent
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     checkpointer=checkpointer
 )
@@ -316,7 +316,7 @@ def trim_messages(state: AgentState, runtime: Runtime) -> dict | None:
     }
 
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     middleware=[trim_messages],
     checkpointer=InMemorySaver(),
@@ -341,7 +341,7 @@ from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 def call_model(state: MessagesState):
     # 在调用模型前修剪消息
@@ -422,7 +422,7 @@ def delete_old_messages(state: AgentState, runtime: Runtime) -> dict | None:
     return None
 
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     middleware=[delete_old_messages],
     checkpointer=InMemorySaver(),
@@ -527,11 +527,11 @@ from langgraph.checkpoint.memory import InMemorySaver
 checkpointer = InMemorySaver()
 
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-4o-mini",              # 用于总结的模型
+            model="gpt-5.0-mini",              # 用于总结的模型
             max_tokens_before_summary=4000,   # 触发总结的阈值
             messages_to_keep=20,              # 总结后保留的消息数
         )
@@ -554,7 +554,7 @@ result["messages"][-1].pretty_print()
 
 ```python
 SummarizationMiddleware(
-    model="gpt-4o-mini",              # 总结模型
+    model="gpt-5.0-mini",              # 总结模型
     max_tokens_before_summary=4000,   # Token 阈值
     messages_to_keep=20,              # 保留的最近消息数
     token_counter=None,               # 自定义 token 计数器
@@ -707,7 +707,7 @@ class CustomState(AgentState):
     preferences: dict[str, str]
 
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     state_schema=CustomState,
 )
@@ -741,7 +741,7 @@ state_extension_middleware = create_middleware(
 
 checkpointer = MemorySaver()
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     middleware=[state_extension_middleware],
     checkpointer=checkpointer,
@@ -771,7 +771,7 @@ def get_user_preference(
     return preferences.get(preference_name, "未设置")
 
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[get_user_preference],
     middleware=[state_extension_middleware],
     checkpointer=checkpointer,
@@ -842,7 +842,7 @@ from langgraph.checkpoint.memory import MemorySaver
 checkpointer = MemorySaver()
 
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     checkpointer=checkpointer
 )
@@ -883,11 +883,11 @@ for snapshot in history:
 
 ```python
 # 短对话 (< 10 轮) - 不需要特殊处理
-agent = create_agent(model="gpt-4o", tools=[], checkpointer=checkpointer)
+agent = create_agent(model="gpt-5.0", tools=[], checkpointer=checkpointer)
 
 # 中等对话 (10-50 轮) - 使用消息修剪
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     middleware=[trim_messages_middleware],
     checkpointer=checkpointer,
@@ -895,11 +895,11 @@ agent = create_agent(
 
 # 长对话 (> 50 轮) - 使用消息总结
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.0",
     tools=[],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-4o-mini",
+            model="gpt-5.0-mini",
             max_tokens_before_summary=4000,
             messages_to_keep=20,
         )
@@ -934,7 +934,7 @@ def trim_messages(state: AgentState, runtime: Runtime):
 from langchain_core.messages import trim_messages
 from langchain_anthropic import ChatAnthropic
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
 
 # ✅ 使用模型的 token 计数器
 trimmed = trim_messages(
@@ -1022,7 +1022,7 @@ from langchain.agents import create_agent
 @pytest.fixture
 def agent_with_trim():
     return create_agent(
-        model="gpt-4o",
+        model="gpt-5.0",
         tools=[],
         middleware=[trim_middleware],
         checkpointer=MemorySaver(),
@@ -1031,7 +1031,7 @@ def agent_with_trim():
 @pytest.fixture
 def agent_with_summary():
     return create_agent(
-        model="gpt-4o",
+        model="gpt-5.0",
         tools=[],
         middleware=[SummarizationMiddleware(...)],
         checkpointer=MemorySaver(),
@@ -1062,13 +1062,13 @@ def test_long_conversation_summary(agent_with_summary):
 ```python
 # ✅ 好的做法
 SummarizationMiddleware(
-    model="gpt-4o-mini",  # 快速、便宜的模型
+    model="gpt-5.0-mini",  # 快速、便宜的模型
     max_tokens_before_summary=4000,
 )
 
 # ❌ 避免
 SummarizationMiddleware(
-    model="gpt-4o",  # 慢、贵
+    model="gpt-5.0",  # 慢、贵
     max_tokens_before_summary=4000,
 )
 ```
@@ -1164,7 +1164,7 @@ def monitor_token_usage(state: AgentState):
 # 1. 启用基本记忆
 from langgraph.checkpoint.memory import MemorySaver
 checkpointer = MemorySaver()
-agent = create_agent(model="gpt-4o", tools=[], checkpointer=checkpointer)
+agent = create_agent(model="gpt-5.0", tools=[], checkpointer=checkpointer)
 
 # 2. 修剪消息
 from langchain.agents.middleware import before_model
@@ -1175,7 +1175,7 @@ def trim(state, runtime):
 
 # 3. 总结消息
 from langchain.agents.middleware import SummarizationMiddleware
-middleware = [SummarizationMiddleware(model="gpt-4o-mini", max_tokens_before_summary=4000)]
+middleware = [SummarizationMiddleware(model="gpt-5.0-mini", max_tokens_before_summary=4000)]
 
 # 4. 删除消息
 from langchain.messages import RemoveMessage
