@@ -6,18 +6,17 @@
 import os
 import sys
 from typing import List
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.messages import HumanMessage, SystemMessage
+
+# 设置 API Key
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 # 添加项目根目录到 path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.utils import setup_llm
-
-# 加载环境变量
-load_dotenv()
 
 # ==================== 定义结构化输出 Schema ====================
 

@@ -7,10 +7,16 @@ import os
 from typing import List, Dict, Any, Optional
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from dotenv import load_dotenv
 
-# 加载环境变量
-load_dotenv()
+# 尝试从 .env 文件加载环境变量（如果文件存在）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # 如果没有安装 python-dotenv，继续使用系统环境变量
+
+# 设置 API Key
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 
 def setup_llm(
@@ -32,7 +38,7 @@ def setup_llm(
         ChatZhipuAI 实例
     """
     api_key = os.getenv("ZHIPUAI_API_KEY")
-    if not api_key:
+    if not api_key or api_key == "your-api-key-here":
         raise ValueError("未设置 ZHIPUAI_API_KEY 环境变量")
 
     # 兼容 ZHIPUAI_API_KEY 环境变量名称

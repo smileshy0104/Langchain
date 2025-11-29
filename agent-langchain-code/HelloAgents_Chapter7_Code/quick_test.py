@@ -5,10 +5,9 @@
 
 import os
 import sys
-from dotenv import load_dotenv
 
-# 加载环境变量
-load_dotenv()
+# 设置 API Key
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -93,8 +92,6 @@ def test_core_utils():
         {"role": "user", "content": "你好"}
     ])
     print(f"\n✅ format_chat_history 测试通过 (生成 {len(messages)} 条消息)")
-    response = llm.invoke(messages)
-    print(f"  ✅ 测试结果: {response}")
     return all_passed
 
 
@@ -273,11 +270,11 @@ def run_all_tests():
         print("=" * 60)
         return
 
-    results.append(("核心工具", test_core_utils()))
+    # results.append(("核心工具", test_core_utils()))
     # results.append(("工具系统", test_tool_system()))
-    # results.append(("SimpleAgent", test_simple_agent()))
-    # results.append(("SimpleAgent (工具)", test_simple_agent_with_tools()))
-    # results.append(("ReActAgent", test_react_agent()))
+    results.append(("SimpleAgent", test_simple_agent()))
+    results.append(("SimpleAgent (工具)", test_simple_agent_with_tools()))
+    results.append(("ReActAgent", test_react_agent()))
 
     # 打印总结
     print("\n" + "=" * 60)

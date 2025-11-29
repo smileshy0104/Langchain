@@ -10,12 +10,11 @@
 
 import os
 from typing import Optional, Dict, Any
-from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_community.chat_models import ChatZhipuAI
 
-# 加载环境变量
-load_dotenv()
+# 设置 API Key
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 
 class MultiModelLLM:

@@ -5,7 +5,9 @@
 
 import os
 import sys
-from dotenv import load_dotenv
+
+# 设置 API Key
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 # 添加项目根目录到 path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,9 +16,6 @@ from core.utils import setup_llm
 from agents.react_agent_langchain import ReActAgent
 from tools.calculator_tool import CalculatorTool
 from tools.search_tool import MockSearchTool
-
-# 加载环境变量
-load_dotenv()
 
 def main():
     print("🚀 ReActAgent 示例")
