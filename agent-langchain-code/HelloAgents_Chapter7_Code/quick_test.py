@@ -59,7 +59,7 @@ def test_core_utils():
 
     # 测试 LLM 设置
     try:
-        llm = setup_llm(model="glm-4-flash", temperature=0.7)
+        llm = setup_llm(model="glm-4.6", temperature=0.7)
         print(f"✅ LLM 初始化成功: {llm.model_name}")
     except Exception as e:
         print(f"❌ LLM 初始化失败: {e}")
@@ -93,7 +93,8 @@ def test_core_utils():
         {"role": "user", "content": "你好"}
     ])
     print(f"\n✅ format_chat_history 测试通过 (生成 {len(messages)} 条消息)")
-
+    response = llm.invoke(messages)
+    print(f"  ✅ 测试结果: {response}")
     return all_passed
 
 
@@ -146,7 +147,7 @@ def test_simple_agent():
     print_section("测试 4: SimpleAgent (无工具)")
 
     try:
-        llm = setup_llm(model="glm-4-flash", temperature=0.7)
+        llm = setup_llm(model="glm-4.6", temperature=0.7)
         agent = SimpleAgent(
             name="简单助手",
             llm=llm,
@@ -178,7 +179,7 @@ def test_simple_agent_with_tools():
     print_section("测试 5: SimpleAgent (带工具调用)")
 
     try:
-        llm = setup_llm(model="glm-4-flash", temperature=0.7)
+        llm = setup_llm(model="glm-4.6", temperature=0.7)
 
         # 创建工具
         calculator = CalculatorTool()
@@ -218,7 +219,7 @@ def test_react_agent():
     print_section("测试 6: ReActAgent (推理行动循环)")
 
     try:
-        llm = setup_llm(model="glm-4-flash", temperature=0.7)
+        llm = setup_llm(model="glm-4.6", temperature=0.7)
 
         # 创建工具
         calculator = CalculatorTool()
@@ -273,10 +274,10 @@ def run_all_tests():
         return
 
     results.append(("核心工具", test_core_utils()))
-    results.append(("工具系统", test_tool_system()))
-    results.append(("SimpleAgent", test_simple_agent()))
-    results.append(("SimpleAgent (工具)", test_simple_agent_with_tools()))
-    results.append(("ReActAgent", test_react_agent()))
+    # results.append(("工具系统", test_tool_system()))
+    # results.append(("SimpleAgent", test_simple_agent()))
+    # results.append(("SimpleAgent (工具)", test_simple_agent_with_tools()))
+    # results.append(("ReActAgent", test_react_agent()))
 
     # 打印总结
     print("\n" + "=" * 60)

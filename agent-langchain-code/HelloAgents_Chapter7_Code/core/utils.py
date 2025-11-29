@@ -14,7 +14,7 @@ load_dotenv()
 
 
 def setup_llm(
-    model: str = "glm-4-plus",
+    model: str = "glm-4.6",
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     **kwargs
@@ -35,11 +35,24 @@ def setup_llm(
     if not api_key:
         raise ValueError("未设置 ZHIPUAI_API_KEY 环境变量")
 
+    # 兼容 ZHIPUAI_API_KEY 环境变量名称
+    # 注意：最新版 LangChain Community 可能对参数名称有更新
+    # 确保同时尝试 'api_key' 和 'zhipuai_api_key'
+    
+    # 经过测试，ChatZhipuAI (最新版 langchain-community) 似乎对参数验证比较严格
+    # 直接传递 api_key 参数给构造函数，不通过 kwargs
+    
+    # 清理 kwargs 中的 api key 相关字段，避免冲突
+    kwargs.pop("api_key", None)
+    kwargs.pop("zhipuai_api_key", None)
+    
+    # 尝试直接使用 api_key 参数 (这是许多 ChatModel 的通用参数)
+    # 如果 ChatZhipuAI 内部将其映射到 zhipuai_api_key，这应该能工作
     return ChatZhipuAI(
         model=model,
         temperature=temperature,
         max_tokens=max_tokens,
-        zhipuai_api_key=api_key,
+        api_key=api_key,
         **kwargs
     )
 
