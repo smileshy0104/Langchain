@@ -120,13 +120,13 @@ class ContactInfo(BaseModel):
 ### Schema 和 Method
 
 **Schema** - 定义输出的结构：
-- Pydantic Model (Python)
+- Pydantic Model (Python)——Python 对象（重点）
 - TypedDict (Python)
 - JSON Schema (通用)
 - Zod Schema (JavaScript)
 
 **Method** - 生成结构化输出的方式：
-- `json_schema` - 提供商原生支持（最可靠）
+- `json_schema` - 提供商原生支持（最可靠）—— 通过工具调用实现
 - `function_calling` - 通过工具调用实现
 - `json_mode` - 生成有效 JSON（需在 prompt 中描述 schema）
 
@@ -147,7 +147,7 @@ class Movie(BaseModel):
     director: str = Field(..., description="导演")
     rating: float = Field(..., description="评分（满分 10）")
 
-model = init_chat_model("gpt-4o")
+model = init_chat_model("glm-4.6")
 model_with_structure = model.with_structured_output(Movie)
 
 response = model_with_structure.invoke("提供《盗梦空间》的详细信息")
@@ -311,7 +311,7 @@ class ContactInfo(BaseModel):
     phone: str
 
 agent = create_agent(
-    model="gpt-4o",
+    model="glm-4.6",
     tools=[search_tool],
     response_format=ContactInfo  # ⚠️ v1.0 后需要使用策略
 )
@@ -467,7 +467,7 @@ class Weather(BaseModel):
     condition: str
 
 agent = create_agent(
-    model="gpt-4o-mini",
+    model="glm-4.6",
     tools=[weather_tool],
     response_format=ToolStrategy(Weather)  # 使用 ToolStrategy
 )
@@ -537,7 +537,7 @@ response_format = Schema  # ❌ 不再支持
 from langchain.agents.structured_output import ToolStrategy
 
 agent = create_agent(
-    model="gpt-4o-mini",
+    model="glm-4.6",
     tools=[],
     response_format=ToolStrategy(
         Weather,
@@ -598,7 +598,7 @@ def state_based_output(
     return handler(request)
 
 agent = create_agent(
-    model="gpt-4o",
+    model="glm-4.6",
     tools=[],
     middleware=[state_based_output]
 )
@@ -637,7 +637,7 @@ def context_based_output(request: ModelRequest, handler):
     return handler(request)
 
 agent = create_agent(
-    model="gpt-4o",
+    model="glm-4.6",
     middleware=[context_based_output],
     context_schema=Context
 )
@@ -667,7 +667,7 @@ class DetailedAnswer(BaseModel):
 
 # Agent 可以选择返回哪种格式
 agent = create_agent(
-    model="gpt-4o",
+    model="glm-4.6",
     response_format=[ShortAnswer, DetailedAnswer]  # 多个格式
 )
 ```
@@ -679,7 +679,7 @@ OpenAI 支持严格模式，确保输出**严格**遵循 schema。
 ```python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4o-mini")
+model = ChatOpenAI(model="glm-4.6")
 
 model_with_structure = model.with_structured_output(
     Weather,
@@ -1122,7 +1122,7 @@ const ContactInfo = z.object({
   phone: z.string()
 });
 
-const model = new ChatOpenAI({ model: "gpt-4o" });
+const model = new ChatOpenAI({ model: "glm-4.6" });
 const modelWithStructure = model.withStructuredOutput(ContactInfo);
 
 const result = await modelWithStructure.invoke(
@@ -1196,7 +1196,7 @@ from langchain.agents.structured_output import ToolStrategy, ProviderStrategy
 
 # ToolStrategy
 agent = create_agent(
-    model="gpt-4o-mini",
+    model="glm-4.6",
     response_format=ToolStrategy(Schema)
 )
 
