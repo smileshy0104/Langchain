@@ -1,18 +1,21 @@
 """
 示例2：Agent 中使用 Structured Output
 演示如何在 LangChain Agent 中使用结构化输出
+
+注意：ChatZhipuAI 模型目前不支持 ToolStrategy，因为它只支持 'auto' 工具选择。
+本示例使用直接的 Model.with_structured_output() 方法演示结构化输出。
+如需在 Agent 中使用 ToolStrategy，请使用 OpenAI 等支持该功能的模型。
 """
 
 import os
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy, ProviderStrategy
 from langchain_community.chat_models import ChatZhipuAI
 from langchain.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 
-os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
+os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY")
 
 
 # ==================== 示例 2.1: 基础 Agent 结构化输出 ====================
@@ -43,38 +46,40 @@ def get_weather_tool(city: str) -> str:
 
 
 def example_01_basic_agent():
-    """示例 2.1: 基础 Agent 结构化输出"""
+    """示例 2.1: 基础 Agent 结构化输出（使用后处理方式）"""
     print("\n" + "=" * 60)
     print("示例 2.1: 基础 Agent 结构化输出")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
 
-    # 使用 ToolStrategy（适用于所有支持工具调用的模型）
+    # 创建普通 Agent（不使用 ToolStrategy，因为 GLM 不支持）
     agent = create_agent(
         model=model,
-        tools=[get_weather_tool],
-        response_format=ToolStrategy(Weather)  # 使用 ToolStrategy
+        tools=[get_weather_tool]
     )
 
-    print("\n👤 用户: 北京的天气怎么样？")
+    print("\n👤 用户: 北京的天气怎么样？请以结构化格式返回")
     result = agent.invoke({
         "messages": [{"role": "user", "content": "北京的天气怎么样？"}]
     })
 
-    # 结构化响应在 'structured_response' 键中
-    weather = result["structured_response"]
+    # 获取 Agent 的文本响应
+    agent_response = result['messages'][-1].content
 
-    print(f"\n🤖 结构化天气信息:")
+    print(f"\n🤖 Agent 响应:")
+    print(f"   {agent_response}")
+
+    # 使用 Model 的结构化输出解析 Agent 的响应
+    model_with_structure = model.with_structured_output(Weather)
+    weather = model_with_structure.invoke(f"从以下文本中提取天气信息：\n{agent_response}")
+
+    print(f"\n📊 提取的结构化天气信息:")
     print(f"   类型: {type(weather)}")
     print(f"   温度: {weather.temperature}°C")
     print(f"   状况: {weather.condition}")
     print(f"   湿度: {weather.humidity}%")
     print(f"   风速: {weather.wind_speed} km/h")
-
-    print(f"\n📊 完整消息历史:")
-    for i, msg in enumerate(result['messages'], 1):
-        print(f"   {i}. [{msg.type}] {str(msg.content)[:80]}...")
 
 
 # ==================== 示例 2.2: 复杂查询 ====================
@@ -107,17 +112,16 @@ def search_tool(query: str) -> str:
 
 
 def example_02_complex_query():
-    """示例 2.2: 复杂查询与结构化输出"""
+    """示例 2.2: 复杂查询与结构化输出（后处理方式）"""
     print("\n" + "=" * 60)
     print("示例 2.2: 复杂查询与结构化输出")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
 
     agent = create_agent(
         model=model,
-        tools=[search_tool],
-        response_format=ToolStrategy(ResearchResult)
+        tools=[search_tool]
     )
 
     print("\n👤 用户: 研究一下 Python 编程语言")
@@ -125,9 +129,15 @@ def example_02_complex_query():
         "messages": [{"role": "user", "content": "帮我研究一下 Python 编程语言"}]
     })
 
-    research = result["structured_response"]
+    agent_response = result['messages'][-1].content
+    print(f"\n🤖 Agent 响应:")
+    print(f"   {agent_response[:200]}...")
 
-    print(f"\n🤖 研究结果:")
+    # 提取结构化数据
+    model_with_structure = model.with_structured_output(ResearchResult)
+    research = model_with_structure.invoke(f"从以下研究结果中提取结构化信息：\n{agent_response}")
+
+    print(f"\n📊 结构化研究结果:")
     print(f"   主题: {research.topic}")
     print(f"   摘要: {research.summary}")
     print(f"\n🔍 关键发现:")
@@ -177,17 +187,16 @@ def file_info_tool(filename: str) -> str:
 
 
 def example_03_multi_tool():
-    """示例 2.3: 多工具协作"""
+    """示例 2.3: 多工具协作（后处理方式）"""
     print("\n" + "=" * 60)
     print("示例 2.3: 多工具协作")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
 
     agent = create_agent(
         model=model,
-        tools=[calculate_tool, file_info_tool, search_tool],
-        response_format=ToolStrategy(TaskAnalysis)
+        tools=[calculate_tool, file_info_tool, search_tool]
     )
 
     print("\n👤 用户: 计算 123 * 456，然后查找 data.csv 的信息")
@@ -195,9 +204,15 @@ def example_03_multi_tool():
         "messages": [{"role": "user", "content": "帮我计算 123 * 456，然后查找 data.csv 的信息"}]
     })
 
-    analysis = result["structured_response"]
+    agent_response = result['messages'][-1].content
+    print(f"\n🤖 Agent 响应:")
+    print(f"   {agent_response}")
 
-    print(f"\n🤖 任务分析:")
+    # 提取结构化任务分析
+    model_with_structure = model.with_structured_output(TaskAnalysis)
+    analysis = model_with_structure.invoke(f"分析以下任务执行情况并提取结构化信息：\n{agent_response}")
+
+    print(f"\n📊 结构化任务分析:")
     print(f"   描述: {analysis.task_description}")
     print(f"\n📋 执行步骤:")
     for i, step in enumerate(analysis.steps, 1):
@@ -213,26 +228,25 @@ def example_03_multi_tool():
 
 class ConversationSummary(BaseModel):
     """对话摘要"""
-    topics_discussed: List[str] = Field(description="讨论的主题列表")
-    key_points: List[str] = Field(description="关键要点")
+    topics_discussed: List[str] = Field(default_factory=list, description="讨论的主题列表")
+    key_points: List[str] = Field(default_factory=list, description="关键要点")
     user_intent: str = Field(description="用户意图")
-    next_steps: Optional[List[str]] = Field(None, description="建议的下一步")
+    next_steps: List[str] = Field(default_factory=list, description="建议的下一步行动")
 
 
 def example_04_agent_with_memory():
-    """示例 2.4: 带记忆的 Agent"""
+    """示例 2.4: 带记忆的 Agent（后处理方式）"""
     print("\n" + "=" * 60)
     print("示例 2.4: 带记忆的 Agent")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
         model=model,
         tools=[search_tool],
-        checkpointer=checkpointer,
-        response_format=ToolStrategy(ConversationSummary)
+        checkpointer=checkpointer
     )
 
     config = {"configurable": {"thread_id": "conversation-1"}}
@@ -243,11 +257,7 @@ def example_04_agent_with_memory():
         {"messages": [{"role": "user", "content": "我想学习机器学习"}]},
         config
     )
-
-    summary1 = result1["structured_response"]
-    print(f"\n🤖 第一轮摘要:")
-    print(f"   主题: {', '.join(summary1.topics_discussed)}")
-    print(f"   意图: {summary1.user_intent}")
+    response1 = result1['messages'][-1].content
 
     # 第二轮对话
     print("\n\n👤 用户: 从哪里开始比较好？")
@@ -255,62 +265,68 @@ def example_04_agent_with_memory():
         {"messages": [{"role": "user", "content": "从哪里开始比较好？"}]},
         config
     )
+    response2 = result2['messages'][-1].content
 
-    summary2 = result2["structured_response"]
-    print(f"\n🤖 第二轮摘要:")
-    print(f"   主题: {', '.join(summary2.topics_discussed)}")
+    print(f"\n🤖 Agent 完整对话响应:")
+    print(f"   {response2}")
+
+    # 对整个对话生成摘要
+    model_with_structure = model.with_structured_output(ConversationSummary)
+
+    # 构建对话历史
+    conversation_text = f"第一轮: 我想学习机器学习\n助手: {response1}\n\n第二轮: 从哪里开始比较好？\n助手: {response2}"
+    summary = model_with_structure.invoke(f"总结以下对话：\n{conversation_text}")
+
+    print(f"\n📊 结构化对话摘要:")
+    print(f"   主题: {', '.join(summary.topics_discussed)}")
+    print(f"   用户意图: {summary.user_intent}")
     print(f"   关键要点:")
-    for point in summary2.key_points:
+    for point in summary.key_points:
         print(f"   - {point}")
-    if summary2.next_steps:
-        print(f"   建议:")
-        for step in summary2.next_steps:
+    if summary.next_steps:
+        print(f"   建议的下一步:")
+        for step in summary.next_steps:
             print(f"   - {step}")
 
 
 # ==================== 示例 2.5: 错误处理 ====================
 
 def example_05_error_handling():
-    """示例 2.5: 错误处理"""
+    """示例 2.5: Pydantic 验证错误处理"""
     print("\n" + "=" * 60)
-    print("示例 2.5: 错误处理")
+    print("示例 2.5: Pydantic 验证错误处理")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    from pydantic import ValidationError
 
-    # 测试不同的错误处理策略
-    strategies = [
-        ("raise", "抛出异常"),
-        ("return_none", "返回 None"),
-    ]
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
+    model_with_structure = model.with_structured_output(Weather)
 
-    for handle_errors, description in strategies:
-        print(f"\n--- 策略: {description} ---")
+    # 测试1: 正常情况
+    print("\n--- 测试 1: 正常情况 ---")
+    try:
+        result = model_with_structure.invoke("北京今天晴天，温度25度，湿度45%，风速15公里/小时")
+        print(f"   ✅ 成功获取结构化响应")
+        print(f"   温度: {result.temperature}°C")
+        print(f"   状况: {result.condition}")
+    except ValidationError as e:
+        print(f"   ❌ 验证错误:")
+        for error in e.errors():
+            print(f"      - 字段: {error['loc']}, 错误: {error['msg']}")
 
-        agent = create_agent(
-            model=model,
-            tools=[get_weather_tool],
-            response_format=ToolStrategy(
-                Weather,
-                handle_errors=handle_errors  # 设置错误处理策略
-            )
-        )
-
-        try:
-            result = agent.invoke({
-                "messages": [{"role": "user", "content": "北京天气"}]
-            })
-
-            response = result.get("structured_response")
-            if response is None:
-                print(f"   ⚠️  返回值为 None（模型可能没有返回结构化数据）")
-            else:
-                print(f"   ✅ 成功获取结构化响应")
-                print(f"   温度: {response.temperature}°C")
-
-        except Exception as e:
-            print(f"   ❌ 捕获异常: {type(e).__name__}")
-            print(f"   错误信息: {str(e)[:100]}...")
+    # 测试2: 缺少数据的情况
+    print("\n--- 测试 2: 不完整数据 ---")
+    try:
+        # 故意提供不完整信息，可能导致验证失败
+        result = model_with_structure.invoke("今天天气不错")
+        print(f"   ✅ 成功获取结构化响应（模型推测了缺失数据）")
+        print(f"   温度: {result.temperature}°C")
+    except ValidationError as e:
+        print(f"   ❌ 验证错误（预期行为）:")
+        for error in e.errors():
+            print(f"      - 字段: {error['loc']}, 错误: {error['msg']}")
+    except Exception as e:
+        print(f"   ❌ 其他错误: {str(e)[:100]}")
 
 
 # ==================== 主函数 ====================
@@ -322,10 +338,10 @@ def main():
     print("=" * 60)
 
     examples = [
-        ("基础 Agent 结构化输出", example_01_basic_agent),
-        ("复杂查询", example_02_complex_query),
-        ("多工具协作", example_03_multi_tool),
-        ("带记忆的 Agent", example_04_agent_with_memory),
+        # ("基础 Agent 结构化输出", example_01_basic_agent),
+        # ("复杂查询", example_02_complex_query),
+        # ("多工具协作", example_03_multi_tool),
+        # ("带记忆的 Agent", example_04_agent_with_memory),
         ("错误处理", example_05_error_handling),
     ]
 

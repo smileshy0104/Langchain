@@ -4,7 +4,7 @@
 """
 
 import os
-from pydantic import BaseModel, Field, EmailStr, validator
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional
 from enum import Enum
 from datetime import date
@@ -39,7 +39,7 @@ def scenario_01_data_extraction():
     +86 138-1234-5678
     """
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.1)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.1)
     extractor = model.with_structured_output(ExtractedContact)
 
     print(f"\n📧 邮件签名:\n{email_signature}")
@@ -95,7 +95,7 @@ def scenario_02_classification():
     方面的性能。业界分析师预计，这将进一步巩固苹果在高端计算市场的领先地位。
     """
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.3)
     classifier = model.with_structured_output(ArticleClassification)
 
     print(f"\n📰 文章内容:\n{article.strip()}")
@@ -119,17 +119,22 @@ class JobApplication(BaseModel):
     first_name: str = Field(description="名字", min_length=1)
     last_name: str = Field(description="姓氏", min_length=1)
     email: EmailStr = Field(description="电子邮箱")
-    phone: str = Field(description="电话号码", pattern=r'^\+?86?\d{11}$')
+    phone: str = Field(description="电话号码（中国手机号）")
     position: str = Field(description="申请职位")
     years_experience: int = Field(description="工作年限", ge=0, le=50)
     skills: List[str] = Field(description="技能列表")
     education: str = Field(description="学历")
     cover_letter: str = Field(description="求职信", min_length=50, max_length=500)
 
-    @validator('phone')
+    @field_validator('phone')
+    @classmethod
     def standardize_phone(cls, v):
-        """标准化电话号码"""
-        return ''.join(c for c in v if c.isdigit())
+        """标准化电话号码 - 移除所有非数字字符"""
+        digits = ''.join(c for c in v if c.isdigit())
+        # 验证是否为有效的中国手机号（11位数字）
+        if len(digits) != 11:
+            raise ValueError(f'电话号码必须是11位数字，当前为{len(digits)}位')
+        return digits
 
 
 def scenario_03_form_filling():
@@ -149,7 +154,7 @@ def scenario_03_form_filling():
     创造价值。
     """
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.1)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.1)
     form_filler = model.with_structured_output(JobApplication)
 
     print(f"\n📝 用户输入:\n{user_input.strip()}")
@@ -198,7 +203,7 @@ def scenario_04_grading():
     我相信只要坚持不懈，总有一天能够实现自己的梦想，为人类的进步做出贡献。
     """
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.3)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.3)
     grader = model.with_structured_output(EssayGrade)
 
     print(f"\n📄 作文内容:\n{essay.strip()}")
@@ -260,7 +265,7 @@ def scenario_05_product_extraction():
     - IP68防尘防水
     """
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.1)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.1)
     extractor = model.with_structured_output(Product)
 
     print(f"\n🛍️  产品描述:\n{product_description.strip()}")
@@ -292,10 +297,10 @@ def main():
     print("=" * 60)
 
     scenarios = [
-        ("数据提取 - 邮件签名", scenario_01_data_extraction),
-        ("内容分类 - 新闻文章", scenario_02_classification),
-        ("表单填充 - 求职申请", scenario_03_form_filling),
-        ("评分系统 - 作文评分", scenario_04_grading),
+        # ("数据提取 - 邮件签名", scenario_01_data_extraction),
+        # ("内容分类 - 新闻文章", scenario_02_classification),
+        # ("表单填充 - 求职申请", scenario_03_form_filling),
+        # ("评分系统 - 作文评分", scenario_04_grading),
         ("产品信息提取 - 电商描述", scenario_05_product_extraction),
     ]
 

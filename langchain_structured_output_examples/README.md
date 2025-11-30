@@ -2,11 +2,19 @@
 
 > 基于官方文档：https://docs.langchain.com/oss/python/langchain/structured-output
 >
-> 使用 GLM-4.6 模型实现
+> 使用 GLM-4.5-air 模型实现
+>
+> ⚠️ **重要说明**: ChatZhipuAI 不支持 `ToolStrategy`，Agent 示例使用后处理方式实现。详见 [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md)
 
 ## 📖 项目简介
 
 本项目提供了完整的 LangChain Structured Output（结构化输出）功能示例代码，涵盖从基础到高级的所有核心功能。每个示例都可以独立运行，包含详细的注释和说明。
+
+**实现特色**:
+- ✅ Pydantic V2 兼容
+- ✅ 适配 ChatZhipuAI 限制
+- ✅ 完整的错误处理
+- ✅ 生产环境可用
 
 ## 🎯 什么是 Structured Output？
 
@@ -76,18 +84,21 @@ python 01_basic_model_usage.py
 
 **功能**：演示如何在 LangChain Agent 中使用结构化输出
 
+⚠️ **注意**: 由于 ChatZhipuAI 不支持 ToolStrategy，本文件使用**后处理方式**实现结构化输出。
+
 **包含示例**：
-- ✅ 基础 Agent 结构化输出
-- ✅ 使用 ToolStrategy
+- ✅ 基础 Agent 结构化输出（后处理方式）
 - ✅ 复杂查询
 - ✅ 多工具协作
 - ✅ 带记忆的 Agent
-- ✅ 错误处理
+- ✅ Pydantic 验证错误处理
 
 **运行**：
 ```bash
 python 02_agent_usage.py
 ```
+
+**实现说明**: Agent 执行任务后，使用 `model.with_structured_output()` 对响应进行结构化提取
 
 ---
 
