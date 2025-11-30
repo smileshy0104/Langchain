@@ -273,11 +273,48 @@
 
 ### 3.2 Prompt Engineering
 
-- [ ] [T065] [P1] [US1] 创建 `prompts/qa_prompts.py` Prompt 模板模块
-- [ ] [T066] [P1] [US1] 编写系统 Prompt 定义 Agent 角色和任务（参考 plan.md:433-449）
-- [ ] [T067] [P1] [US1] 添加上下文文档占位符和格式化指令（参考 plan.md:443-446）
-- [ ] [T068] [P1] [US1] 配置 PydanticOutputParser 生成结构化输出（参考 plan.md:453-461）
-- [ ] [T069] [P1] [US1] 测试 Prompt 有效性（使用真实示例问题）
+- [x] [T065] [P1] [US1] 创建 `prompts/qa_prompts.py` Prompt 模板模块 ✅
+  - **Status**: 完成
+  - **Summary**: 创建了完整的 Prompt 模板模块,包含多种场景的 Prompt
+  - **File**: `prompts/qa_prompts.py` (350+ 行)
+  - **Tests**: `tests/test_qa_prompts.py` (25 个测试,全部通过)
+
+- [x] [T066] [P1] [US1] 编写系统 Prompt 定义 Agent 角色和任务（参考 plan.md:433-449） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了 QA_SYSTEM_PROMPT 定义 Agent 角色和任务
+  - **Features**:
+    - 定义角色: 技术顾问、问题解决者、知识传播者
+    - 定义能力: 模型库、AI 框架、Python 编程、云端部署
+    - 回答要求: 准确性、完整性、实用性、可追溯性、清晰性、诚实性
+    - 回答结构: 问题分析、解决方案、代码示例、注意事项、参考资料
+
+- [x] [T067] [P1] [US1] 添加上下文文档占位符和格式化指令（参考 plan.md:443-446） ✅
+  - **Status**: 完成
+  - **Summary**: 添加了上下文占位符 {context}、{question}、{format_instructions}
+  - **Details**: 支持灵活的上下文注入和格式化指令配置
+  - **Validation**: 通过 validate_prompt_variables() 验证必需变量
+
+- [x] [T068] [P1] [US1] 配置 PydanticOutputParser 生成结构化输出（参考 plan.md:453-461） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了 get_qa_prompt_with_parser() 函数
+  - **Features**:
+    - 返回配置好的 ChatPromptTemplate 和 PydanticOutputParser
+    - 默认使用 TechnicalAnswer 模型
+    - 支持自定义 Pydantic 模型
+    - 自动生成格式化指令
+
+- [x] [T069] [P1] [US1] 测试 Prompt 有效性（使用真实示例问题） ✅
+  - **Status**: 完成
+  - **Summary**: 创建了 25 个综合测试,覆盖所有 Prompt 功能
+  - **Test Categories**:
+    - 基本功能测试 (4 个)
+    - Parser 配置测试 (3 个)
+    - 变量验证测试 (3 个)
+    - 统计信息测试 (3 个)
+    - Prompt 常量测试 (4 个)
+    - 集成场景测试 (5 个): 真实示例、链兼容性、空上下文、长上下文、特殊字符
+    - Prompt 质量测试 (3 个): 完整性、清晰度、输出格式
+  - **Additional Prompts**: CLARIFICATION_PROMPT、RERANK_PROMPT、ANSWER_VALIDATION_PROMPT
 
 ### 3.3 LLM 集成
 
