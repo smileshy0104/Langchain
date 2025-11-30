@@ -176,12 +176,40 @@
 
 ### 2.4 混合检索器
 
-- [ ] [T051] [P] 创建 `retrievers/hybrid_retriever.py` 混合检索模块
-- [ ] [T052] [P] 实现 `HybridRetriever.__init__()` 初始化向量和 BM25 检索器（参考 plan.md:306-321）
-- [ ] [T053] [P] 实现 `retrieve()` 执行混合检索（参考 plan.md:323-332）
-- [ ] [T054] [P] 实现 `rerank()` 重排序逻辑（可选,参考 plan.md:334-337）
-- [ ] [T055] [P] 编写混合检索测试 `tests/test_hybrid_retriever.py::test_retrieve`
-- [ ] [T056] [P] 测试向量和 BM25 权重调优
+- [x] [T051] [P] 创建 `retrievers/hybrid_retriever.py` 混合检索模块 ✅
+  - **Status**: 完成
+  - **Summary**: 创建了完整的混合检索器,结合向量检索和 BM25 关键词检索
+  - **File**: `retrievers/hybrid_retriever.py` (423 行)
+
+- [x] [T052] [P] 实现 `HybridRetriever.__init__()` 初始化向量和 BM25 检索器（参考 plan.md:306-321） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了构造函数,初始化向量检索器和 BM25 检索器
+  - **Details**: 支持权重验证(和为1.0)、文档列表验证、可配置 top_k
+
+- [x] [T053] [P] 实现 `retrieve()` 执行混合检索（参考 plan.md:323-332） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了自定义 RRF (Reciprocal Rank Fusion) 融合算法
+  - **Details**: RRF 公式 score(d) = Σ weight_i / (k + rank_i(d)), k=60
+  - **Features**: 元数据过滤、去重、降级策略(BM25失败时使用向量检索)
+  - **Note**: 由于 EnsembleRetriever 不可用,实现了完整的自定义 RRF 算法,未使用简化版本
+
+- [x] [T054] [P] 实现 `rerank()` 重排序逻辑（可选,参考 plan.md:334-337） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了多维度重排序系统
+  - **Dimensions**: 质量评分(40%), 文档类型优先级(30%), 来源可信度(30%)
+  - **Additional**: 动态权重更新、统计信息获取
+
+- [x] [T055] [P] 编写混合检索测试 `tests/test_hybrid_retriever.py::test_retrieve` ✅
+  - **Status**: 完成
+  - **Summary**: 创建了完整的测试套件,包含 18 个测试用例
+  - **Test Results**: 18 passed (100%)
+  - **Coverage**: 初始化、检索、过滤、融合、去重、重排序、降级策略等
+
+- [x] [T056] [P] 测试向量和 BM25 权重调优 ✅
+  - **Status**: 完成
+  - **Summary**: 测试了不同权重组合和权重影响
+  - **Tests**: 5种权重组合(0.5/0.5, 0.7/0.3, 0.3/0.7, 0.9/0.1, 0.1/0.9)
+  - **Features**: 动态权重更新功能已验证
 
 ---
 
