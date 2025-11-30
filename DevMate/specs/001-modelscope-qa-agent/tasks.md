@@ -70,10 +70,10 @@
 
 ### 1.4 基础设施验证
 
-- [X] [T023] 验证 Milvus 连接 - ⚠️ Milvus 容器存在 etcd 健康问题,已创建验证脚本 `scripts/verify_milvus.py`
+- [X] [T023] 验证 Milvus 连接 - ✅ 连接成功 (Milvus 2.5.10, 已重新安装),已创建验证脚本 `scripts/verify_milvus.py`
 - [X] [T024] 验证 Redis 连接 - ✅ 连接成功 (Redis 6.2.7),已创建验证脚本 `scripts/verify_redis.py`
 - [X] [T025] (可选) 验证 MySQL 连接 - ✅ 验证脚本已创建 `scripts/verify_mysql.py` (需配置密码)
-- [X] [T026] 编写基础设施健康检查脚本 `scripts/check_infrastructure.py` - ✅ 已完成并测试
+- [X] [T026] 编写基础设施健康检查脚本 `scripts/check_infrastructure.py` - ✅ 已完成并测试,修复了连接别名问题
 
 ---
 

@@ -36,23 +36,37 @@ class InfrastructureChecker:
 
     def check_milvus(self) -> Tuple[ServiceStatus, str]:
         """检查 Milvus 向量数据库"""
+        alias_name = "milvus_health_check"
         try:
+            # 清理可能存在的旧连接
+            try:
+                existing_connections = [c[0] for c in connections.list_connections()]
+                if alias_name in existing_connections:
+                    connections.disconnect(alias_name)
+            except:
+                pass
+
             connections.connect(
-                alias="milvus_health_check",
+                alias=alias_name,
                 host=settings.milvus_host,
                 port=settings.milvus_port,
                 timeout=5
             )
 
-            if not connections.has_connection("milvus_health_check"):
-                return ServiceStatus.UNHEALTHY, "无法建立连接"
-
-            version = utility.get_server_version()
-            connections.disconnect("milvus_health_check")
+            version = utility.get_server_version(using=alias_name)
+            connections.disconnect(alias_name)
 
             return ServiceStatus.HEALTHY, f"版本 {version}"
 
         except Exception as e:
+            # 确保连接被清理
+            try:
+                existing_connections = [c[0] for c in connections.list_connections()]
+                if alias_name in existing_connections:
+                    connections.disconnect(alias_name)
+            except:
+                pass
+
             error_msg = str(e)
             # 检测特定错误类型
             if "connection refused" in error_msg.lower():
