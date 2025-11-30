@@ -81,15 +81,15 @@
 
 ### 2.1 数据模型定义
 
-- [ ] [T027] [P] 创建 `models/schemas.py` 定义 Pydantic 数据模型
-- [ ] [T028] [P] 实现 `KnowledgeEntry` 知识库条目模型（参考 design/data-model.md:93-143）
-- [ ] [T029] [P] 实现 `TechnicalAnswer` 技术回答模型（参考 design/data-model.md:150-238）
-- [ ] [T030] [P] 实现 `DialogueSession` 对话会话模型（参考 design/data-model.md:245-295）
-- [ ] [T031] [P] 实现 `MessageRecord` 消息记录模型（参考 design/data-model.md:300-363）
-- [ ] [T032] [P] 实现 `UserFeedback` 用户反馈模型（参考 design/data-model.md:370-408）
-- [ ] [T033] [P] 实现 `QuestionCategory` 问题分类模型（参考 design/data-model.md:415-449）
-- [ ] [T034] [P] 实现 `ConversationState` LangGraph 状态模型（参考 design/data-model.md:10-50）
-- [ ] [T035] [P] 编写 Pydantic 模型单元测试 `tests/test_schemas.py`
+- [X] [T027] [P] 创建 `models/schemas.py` 定义 Pydantic 数据模型 - ✅ 已完成
+- [X] [T028] [P] 实现 `KnowledgeEntry` 知识库条目模型 - ✅ 包含所有字段和枚举类型
+- [X] [T029] [P] 实现 `TechnicalAnswer` 技术回答模型 - ✅ 包含验证器和示例
+- [X] [T030] [P] 实现 `DialogueSession` 对话会话模型 - ✅ 包含状态管理和反馈
+- [X] [T031] [P] 实现 `MessageRecord` 消息记录模型 - ✅ 支持多种消息类型
+- [X] [T032] [P] 实现 `UserFeedback` 用户反馈模型 - ✅ 符合 FR-016 要求
+- [X] [T033] [P] 实现 `QuestionCategory` 问题分类模型 - ✅ 包含主分类和子分类
+- [X] [T034] [P] 实现 `ConversationState` LangGraph 状态模型 - ✅ TypedDict with add_messages
+- [X] [T035] [P] 编写 Pydantic 模型单元测试 `tests/test_schemas.py` - ✅ 33个测试全部通过
 
 ### 2.2 向量数据库管理器
 
