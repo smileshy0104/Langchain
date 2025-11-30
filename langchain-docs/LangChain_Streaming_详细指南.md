@@ -98,7 +98,7 @@ LangChain 支持多种流式模式，每种模式提供不同级别的信息：
 ```python
 from langchain.chat_models import init_chat_model
 
-model = init_chat_model(model="gpt-4o")
+model = init_chat_model(model="glm-4.5-air")
 
 # 流式输出 tokens
 for chunk in model.stream("什么颜色是天空？"):
@@ -169,7 +169,7 @@ Args: ": "Boston"}
 from langchain.agents import create_agent
 
 agent = create_agent(
-    model="gpt-4o",
+    model="glm-4.5-air",
     tools=[get_weather],
 )
 
@@ -193,7 +193,7 @@ for chunk in agent.stream(
 {'model': {'messages': [AIMessage(content="旧金山今天晴天")]}}
 ```
 
-### 自动流式传输
+### 自动流式传输（`invoke()`）
 
 LangChain 的一个强大特性是**自动流式传输**：即使在节点内使用 `invoke()`，如果整个应用程序处于流式模式，LangChain 也会自动切换到流式传输。
 
@@ -328,7 +328,7 @@ class MyState:
     topic: str
     joke: str = ""
 
-model = init_chat_model(model="gpt-4o-mini")
+model = init_chat_model(model="glm-4.5-air-mini")
 
 def call_model(state: MyState):
     """调用 LLM 生成笑话"""
@@ -481,7 +481,7 @@ def query_database(query: str) -> str:
     return "查询结果"
 
 # 在 agent 中使用
-agent = create_agent(model="gpt-4o", tools=[query_database])
+agent = create_agent(model="glm-4.5-air", tools=[query_database])
 
 for chunk in agent.stream(
     {"messages": [{"role": "user", "content": "查询数据库"}]},
@@ -618,7 +618,7 @@ def get_weather(city: str) -> str:
     return f"{city} 总是晴天！"
 
 agent = create_agent(
-    model="gpt-4o-mini",
+    model="glm-4.5-air-mini",
     tools=[get_weather],
 )
 
@@ -770,7 +770,7 @@ for chunk in model_with_tools.stream("波士顿天气？"):
 from langchain.chat_models import init_chat_model
 from langchain.agents import create_agent
 
-model = init_chat_model("gpt-4o")
+model = init_chat_model("glm-4.5-air")
 agent = create_agent(model=model, tools=[])
 
 def chat_stream(user_message: str):
@@ -808,7 +808,7 @@ def process_document(file_path: str) -> str:
     writer({"stage": "complete", "progress": 100})
     return "处理完成"
 
-agent = create_agent(model="gpt-4o", tools=[process_document])
+agent = create_agent(model="glm-4.5-air", tools=[process_document])
 
 for chunk in agent.stream(
     {"messages": [{"role": "user", "content": "处理 report.pdf"}]},
@@ -896,7 +896,7 @@ for chunk in agent.stream(..., stream_mode="custom"):
 
 ---
 
-## 最佳实践
+## 最佳实践（重点）
 
 ### 1. **选择合适的流式模式**
 
