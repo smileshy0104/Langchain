@@ -39,11 +39,11 @@
 
 ### 1.1 项目结构初始化
 
-- [ ] [T001] 创建项目根目录结构 `modelscope_qa_agent/{core,tools,retrievers,agents,models,data,tests,config}`
-- [ ] [T002] 激活现有 conda 环境 `conda activate langchain-env`
-- [ ] [T003] 创建 `.gitignore` 文件,排除 `venv/`, `__pycache__/`, `.env`, `*.pyc`
-- [ ] [T004] 创建 `README.md` 项目说明文档
-- [ ] [T005] 创建 `requirements.txt` 依赖清单文件
+- [X] [T001] 创建项目根目录结构 `modelscope_qa_agent/{core,tools,retrievers,agents,models,data,tests,config}`
+- [X] [T002] 激活现有 conda 环境 `conda activate langchain-env` (环境已确认存在: /opt/anaconda3/envs/langchain-env)
+- [X] [T003] 创建 `.gitignore` 文件,排除 `venv/`, `__pycache__/`, `.env`, `*.pyc`
+- [X] [T004] 创建 `README.md` 项目说明文档
+- [X] [T005] 创建 `requirements.txt` 依赖清单文件
 
 ### 1.2 依赖检查与补充安装
 
