@@ -48,7 +48,7 @@ def example_01_basic_memory():
     print("示例1：基础短期记忆")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
@@ -93,7 +93,7 @@ def example_02_multi_thread():
     print("示例2：多线程会话管理")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
@@ -174,7 +174,7 @@ def example_03_trim_messages():
     print("示例3：消息修剪")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
@@ -220,7 +220,7 @@ def example_04_delete_messages():
     print("示例4：消息删除")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
@@ -250,7 +250,7 @@ def example_05_summarization():
     print("示例5：消息摘要")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     # 使用 SummarizationMiddleware
@@ -261,8 +261,8 @@ def example_05_summarization():
         middleware=[
             SummarizationMiddleware(
                 model=model,  # 使用相同模型进行摘要
-                trigger={"messages": 6},  # 当消息数超过6条时触发
-                keep={"messages": 3},  # 保留最近的3条消息
+                max_tokens_before_summary=500,  # 达到500个token时触发摘要
+                messages_to_keep=5,             # 保留最近 5 条消息
             )
         ],
         system_prompt="你是一个助手"
@@ -307,7 +307,7 @@ def example_06_custom_state():
     print("示例6：自定义状态")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
@@ -379,7 +379,7 @@ def example_07_tool_read_state():
     print("示例7：工具中读取状态")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -404,18 +404,16 @@ class UserContextState(AgentState):
     last_action: str = ""
 
 
-class ToolContext(BaseModel):
-    """工具上下文"""
-    user_id: str
-
-
 @tool
 def update_user_name(
-    runtime: ToolRuntime[ToolContext, UserContextState]
+    user_id: str,
+    runtime: ToolRuntime
 ) -> Command:
-    """查询并更新用户名到状态"""
-    user_id = runtime.context.user_id
+    """查询并更新用户名到状态
 
+    Args:
+        user_id: 用户ID
+    """
     # 模拟查询
     name_db = {
         "user_123": "张三",
@@ -438,7 +436,7 @@ def update_user_name(
 
 @tool
 def greet_user(
-    runtime: ToolRuntime[ToolContext, UserContextState]
+    runtime: ToolRuntime
 ) -> str:
     """问候用户（从状态读取用户名）"""
     user_name = runtime.state.get("user_name", "")
@@ -455,20 +453,23 @@ def example_08_tool_write_state():
     print("示例8：工具中写入状态")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
+    checkpointer = MemorySaver()
 
     agent = create_agent(
         model=model,
         tools=[update_user_name, greet_user],
         state_schema=UserContextState,
-        context_schema=ToolContext,
+        checkpointer=checkpointer,
         system_prompt="你是一个助手，可以更新和使用用户信息"
     )
 
-    print("\n👤 用户: 问候我")
+    config = {"configurable": {"thread_id": "write-state-test"}}
+
+    print("\n👤 用户: 帮我更新用户ID为 user_123 的用户名，然后问候我")
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": "问候我"}]},
-        context=ToolContext(user_id="user_123")
+        {"messages": [{"role": "user", "content": "帮我更新用户ID为 user_123 的用户名，然后问候我"}]},
+        config
     )
     print(f"🤖 助手: {result['messages'][-1].content}")
 
@@ -485,8 +486,9 @@ class GreetingContext(BaseModel):
 def create_dynamic_system_prompt(request) -> str:
     """根据上下文动态生成系统提示词"""
     context = request.runtime.context
-    user_name = context.get("user_name", "用户")
-    time_of_day = context.get("time_of_day", "")
+    # GreetingContext 是 Pydantic 模型，使用属性访问而不是 .get()
+    user_name = getattr(context, "user_name", "用户")
+    time_of_day = getattr(context, "time_of_day", "")
 
     greeting = {
         "morning": "早上好",
@@ -503,7 +505,7 @@ def example_09_dynamic_prompt():
     print("示例9：动态提示词")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
 
     agent = create_agent(
         model=model,
@@ -537,7 +539,7 @@ def example_10_state_management():
     print("示例10：状态查询与管理")
     print("=" * 60)
 
-    model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
+    model = ChatZhipuAI(model="glm-4.5-air", temperature=0.5)
     checkpointer = MemorySaver()
 
     agent = create_agent(
