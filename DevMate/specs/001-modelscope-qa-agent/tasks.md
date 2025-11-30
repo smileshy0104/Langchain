@@ -133,14 +133,46 @@
 
 ### 2.3 文档处理器
 
-- [ ] [T043] [P] 创建 `core/document_processor.py` 文档处理模块
-- [ ] [T044] [P] 实现 `DocumentProcessor.__init__()` 初始化分块器（参考 plan.md:196-210）
-- [ ] [T045] [P] 实现 `load_modelscope_docs()` 加载魔搭官方文档（参考 plan.md:211-225）
-- [ ] [T046] [P] 实现 `clean_document()` 清洗文档内容（参考 plan.md:227-241）
-- [ ] [T047] [P] 实现 `split_with_code_protection()` 语义分块保护代码块（参考 plan.md:243-262）
-- [ ] [T048] [P] 实现 `calculate_quality_score()` 计算文档质量评分（参考 plan.md:264-287）
-- [ ] [T049] [P] 编写文档清洗测试 `tests/test_document_processor.py::test_clean_document`
-- [ ] [T050] [P] 编写代码块保护测试 `tests/test_document_processor.py::test_split_with_code_protection`
+- [x] [T043] [P] 创建 `core/document_processor.py` 文档处理模块 ✅
+  - **Status**: 完成
+  - **Summary**: 创建了完整的文档处理器,支持加载、清洗、分块和质量评分
+  - **File**: `core/document_processor.py` (530 行)
+
+- [x] [T044] [P] 实现 `DocumentProcessor.__init__()` 初始化分块器（参考 plan.md:196-210） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了构造函数,配置 Markdown 和递归字符分块器
+  - **Details**: chunk_size=1000, chunk_overlap=200, 支持自定义配置
+
+- [x] [T045] [P] 实现 `load_modelscope_docs()` 加载魔搭官方文档（参考 plan.md:211-225） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了 Web 文档加载功能,使用 WebBaseLoader
+  - **Details**: 支持自定义 URL 列表,自动添加元数据(source_type, source_url, document_type)
+
+- [x] [T046] [P] 实现 `clean_document()` 清洗文档内容（参考 plan.md:227-241） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了文档清洗,移除 HTML、规范化空白、统一代码块格式
+  - **Details**: 6步清洗流程,保护代码块完整性
+
+- [x] [T047] [P] 实现 `split_with_code_protection()` 语义分块保护代码块（参考 plan.md:243-262） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了智能语义分块,基于 Markdown 标题,保护代码块完整性
+  - **Details**: 支持检测超长代码块,在代码块边界处拆分,添加 chunk_boundary 元数据
+
+- [x] [T048] [P] 实现 `calculate_quality_score()` 计算文档质量评分（参考 plan.md:264-287） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了4维度质量评分系统
+  - **Dimensions**: 长度合理性(0.25), 结构完整性(0.25), 代码示例(0.25), 来源可信度(0.25)
+
+- [x] [T049] [P] 编写文档清洗测试 `tests/test_document_processor.py::test_clean_document` ✅
+  - **Status**: 完成
+  - **Summary**: 创建了完整的测试套件,包含 21 个测试用例
+  - **Test Results**: 20 passed, 1 skipped
+  - **Coverage**: HTML清除、空白规范化、代码块保护、元数据继承等
+
+- [x] [T050] [P] 编写代码块保护测试 `tests/test_document_processor.py::test_split_with_code_protection` ✅
+  - **Status**: 完成
+  - **Summary**: 实现了代码块保护、Markdown分块、边界情况等测试
+  - **Tests**: 代码块完整性、超长代码块、多代码块、纯文本等场景
 
 ### 2.4 混合检索器
 
