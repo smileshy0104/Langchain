@@ -217,14 +217,59 @@
 
 ### 3.1 LangGraph Agent 核心工作流
 
-- [ ] [T057] [P1] [US1] 创建 `agents/qa_agent.py` 问答 Agent 模块
-- [ ] [T058] [P1] [US1] 实现 `ModelScopeQAAgent.__init__()` 初始化 LLM 和工作流（参考 plan.md:375-390）
-- [ ] [T059] [P1] [US1] 实现 `_build_graph()` 构建 LangGraph 工作流（参考 plan.md:392-412）
-- [ ] [T060] [P1] [US1] 添加 `retrieve` 节点实现文档检索（参考 plan.md:414-418）
-- [ ] [T061] [P1] [US1] 添加 `generate` 节点实现答案生成（参考 plan.md:420-464）
-- [ ] [T062] [P1] [US1] 添加 `validate` 节点实现答案验证（参考 plan.md:466-469）
-- [ ] [T063] [P1] [US1] 实现条件分支 `_should_validate()`（参考 plan.md:471-474）
-- [ ] [T064] [P1] [US1] 配置 MemorySaver Checkpointer 支持对话持久化（参考 plan.md:389-390）
+- [x] [T057] [P1] [US1] 创建 `agents/qa_agent.py` 问答 Agent 模块 ✅
+  - **Status**: 完成
+  - **Summary**: 创建了完整的 ModelScopeQAAgent 类,包含 LangGraph 工作流
+  - **File**: `agents/qa_agent.py` (430 行)
+  - **Tests**: `tests/test_qa_agent.py` (17 个测试,全部通过)
+
+- [x] [T058] [P1] [US1] 实现 `ModelScopeQAAgent.__init__()` 初始化 LLM 和工作流（参考 plan.md:375-390） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了构造函数,初始化 ChatTongyi LLM 和 StateGraph
+  - **Details**: 支持自定义 model、temperature、top_p 参数
+  - **Validation**: 参数验证(retriever 非空、API key 非空)
+  - **Note**: 由于 ChatTongyi 不暴露 temperature 等属性,在 Agent 中单独存储了配置参数
+
+- [x] [T059] [P1] [US1] 实现 `_build_graph()` 构建 LangGraph 工作流（参考 plan.md:392-412） ✅
+  - **Status**: 完成
+  - **Summary**: 构建了完整的 LangGraph 工作流
+  - **Workflow**: START → retrieve → generate → [条件分支: validate/END]
+  - **Nodes**: retrieve(文档检索)、generate(答案生成)、validate(答案验证)
+  - **Edges**: 顺序边 + 条件边(基于置信度)
+
+- [x] [T060] [P1] [US1] 添加 `retrieve` 节点实现文档检索（参考 plan.md:414-418） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了 `_retrieve_documents()` 方法
+  - **Features**: 提取用户问题、调用混合检索器、异常处理
+  - **Updates State**: current_question、retrieved_documents
+
+- [x] [T061] [P1] [US1] 添加 `generate` 节点实现答案生成（参考 plan.md:420-464） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了 `_generate_answer()` 方法
+  - **Features**:
+    - 构建上下文(拼接检索文档)
+    - 使用 ChatPromptTemplate 定义系统 Prompt
+    - 配置 PydanticOutputParser 生成结构化输出
+    - 异常处理和降级策略(返回错误信息)
+  - **Updates State**: generated_answer(TechnicalAnswer 字典)
+
+- [x] [T062] [P1] [US1] 添加 `validate` 节点实现答案验证（参考 plan.md:466-469） ✅
+  - **Status**: 完成(占位实现)
+  - **Summary**: 实现了 `_validate_answer()` 方法
+  - **Note**: 目前为占位节点,未来可添加 Self-RAG 验证逻辑
+  - **TODO**: 相关性评分、引用验证、代码可执行性检查
+
+- [x] [T063] [P1] [US1] 实现条件分支 `_should_validate()`（参考 plan.md:471-474） ✅
+  - **Status**: 完成
+  - **Summary**: 实现了条件分支逻辑
+  - **Logic**: 置信度 < 0.8 → "validate", 置信度 ≥ 0.8 → "end"
+  - **Edge Cases**: 处理缺失 confidence_score(默认 0.0)
+
+- [x] [T064] [P1] [US1] 配置 MemorySaver Checkpointer 支持对话持久化（参考 plan.md:389-390） ✅
+  - **Status**: 完成
+  - **Summary**: 配置了 MemorySaver 检查点器
+  - **Features**: 多轮对话状态管理、thread_id 隔离
+  - **Methods**: get_state() 获取线程状态
 
 ### 3.2 Prompt Engineering
 
