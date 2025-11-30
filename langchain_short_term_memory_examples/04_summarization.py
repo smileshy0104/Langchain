@@ -29,9 +29,9 @@ def main():
         checkpointer=checkpointer,
         middleware=[
             SummarizationMiddleware(
-                model=model,                    # 用于生成摘要的模型
-                trigger={"messages": 6},        # 当消息数超过6条时触发摘要
-                keep={"messages": 3},           # 摘要后保留最近3条消息
+                model=model,                       # 用于生成摘要的模型
+                max_tokens_before_summary=1000,    # Token数超过1000时触发摘要
+                messages_to_keep=3,                # 摘要后保留最近3条消息
             )
         ],
         system_prompt="你是一个助手，能够自动总结对话历史"
@@ -40,7 +40,7 @@ def main():
     config = {"configurable": {"thread_id": "summary-test"}}
 
     print("\n【摘要策略说明】")
-    print("- 触发条件: 消息数 > 6 条")
+    print("- 触发条件: Token 数 > 1000")
     print("- 保留策略: 保留最近 3 条消息")
     print("- 其余消息会被自动总结")
     print("- 摘要会永久替换旧消息（持久化更新）")
@@ -129,7 +129,7 @@ def example_with_custom_trigger():
     model = ChatZhipuAI(model="glm-4.6", temperature=0.5)
     checkpointer = MemorySaver()
 
-    # 使用 Token 数量作为触发条件
+    # 自定义 Token 数量触发条件
     agent = create_agent(
         model=model,
         tools=[],
@@ -137,15 +137,15 @@ def example_with_custom_trigger():
         middleware=[
             SummarizationMiddleware(
                 model=model,
-                trigger={"tokens": 500},     # 当 Token 数超过 500 时触发
-                keep={"tokens": 200},        # 保留约 200 Token
+                max_tokens_before_summary=500,  # Token 数超过 500 时触发
+                messages_to_keep=5,             # 保留最近 5 条消息
             )
         ],
         system_prompt="你是一个助手"
     )
 
     print("\n触发条件: Token 数 > 500")
-    print("保留策略: 保留约 200 Token 的消息")
+    print("保留策略: 保留最近 5 条消息")
 
 
 if __name__ == "__main__":

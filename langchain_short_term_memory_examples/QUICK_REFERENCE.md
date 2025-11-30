@@ -61,8 +61,8 @@ from langchain.agents.middleware import SummarizationMiddleware
 middleware=[
     SummarizationMiddleware(
         model=model,
-        trigger={"messages": 6},   # 超过6条时触发
-        keep={"messages": 3},      # 保留最近3条
+        max_tokens_before_summary=1000,  # Token数超过1000时触发
+        messages_to_keep=3,              # 保留最近3条消息
     )
 ]
 ```
@@ -229,39 +229,33 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 
 ## ⚙️ 摘要配置选项
 
-### 触发条件
+### 主要参数
 
 ```python
-# 按消息数
-trigger={"messages": 10}
-
-# 按 Token 数
-trigger={"tokens": 4000}
-
-# 按比例（上下文的80%）
-trigger={"fraction": 0.8}
-
-# 组合条件（AND）
-trigger={"messages": 10, "tokens": 5000}
-
-# 多条件（OR）
-trigger=[
-    {"messages": 10},
-    {"tokens": 5000}
-]
+SummarizationMiddleware(
+    model=model,                      # 用于生成摘要的模型
+    max_tokens_before_summary=1000,   # Token数超过此值时触发摘要
+    messages_to_keep=20,              # 摘要后保留最近N条消息（默认20）
+    token_counter=custom_counter,     # 可选：自定义Token计数函数
+    summary_prompt="...",             # 可选：自定义摘要提示词
+    summary_prefix="..."              # 可选：摘要消息前缀
+)
 ```
 
-### 保留策略
+### 常用配置
 
 ```python
-# 保留消息数
-keep={"messages": 5}
+# 配置1：保守策略（较少触发）
+max_tokens_before_summary=4000
+messages_to_keep=20
 
-# 保留 Token 数
-keep={"tokens": 1000}
+# 配置2：激进策略（频繁触发）
+max_tokens_before_summary=500
+messages_to_keep=5
 
-# 保留比例
-keep={"fraction": 0.3}
+# 配置3：平衡策略（推荐）
+max_tokens_before_summary=1500
+messages_to_keep=10
 ```
 
 ---
@@ -307,15 +301,16 @@ agent.update_state(config, {"user_name": "新名字"})
 ### 1. 选择合适的模型
 
 ```python
-# 摘要使用便宜的模型
+# 可以使用与主模型相同的模型
+model = ChatZhipuAI(model="glm-4.6")
+
 SummarizationMiddleware(
-    model="gpt-4o-mini",  # 便宜
+    model=model,  # 使用相同模型
     # ...
 )
 
-# 主 Agent 使用强大的模型
 agent = create_agent(
-    model="gpt-4o",  # 强大
+    model=model,
     # ...
 )
 ```
@@ -323,11 +318,14 @@ agent = create_agent(
 ### 2. 合理设置触发条件
 
 ```python
-# 避免过早触发
-trigger={"tokens": 4000}  # 接近上下文限制
+# 避免过早触发（太频繁）
+max_tokens_before_summary=500  # 可能过于频繁
 
-# 避免过晚触发
-trigger={"tokens": 8000}  # 可能已经超限
+# 推荐设置（接近上下文限制的70-80%）
+max_tokens_before_summary=1500  # 合适
+
+# 避免过晚触发（可能超限）
+max_tokens_before_summary=5000  # 可能已经超限
 ```
 
 ### 3. 组合使用策略
@@ -368,8 +366,8 @@ agent = create_agent(
     middleware=[
         SummarizationMiddleware(
             model=model,
-            trigger={"messages": 6},
-            keep={"messages": 3}
+            max_tokens_before_summary=1000,
+            messages_to_keep=3
         )
     ],
     system_prompt="你是一个助手"

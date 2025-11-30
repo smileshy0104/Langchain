@@ -4,7 +4,6 @@
 """
 
 import os
-from pydantic import BaseModel
 from langchain.agents import create_agent, AgentState
 from langchain_community.chat_models import ChatZhipuAI
 from langchain.tools import tool, ToolRuntime
@@ -15,7 +14,7 @@ from langgraph.types import Command
 os.environ["ZHIPUAI_API_KEY"] = os.getenv("ZHIPUAI_API_KEY", "your-api-key-here")
 
 
-# ==================== 自定义状态和上下文 ====================
+# ==================== 自定义状态 ====================
 
 class UserContextState(AgentState):
     """包含用户上下文的状态"""
@@ -23,12 +22,6 @@ class UserContextState(AgentState):
     user_name: str = ""
     user_points: int = 0
     last_purchase: str = ""
-
-
-class ToolContext(BaseModel):
-    """工具上下文（运行时提供）"""
-    user_id: str
-    session_id: str = ""
 
 
 # ==================== 工具：读取状态 ====================
@@ -65,15 +58,17 @@ def get_user_profile(runtime: ToolRuntime) -> str:
 
 @tool
 def update_user_info(
-    runtime: ToolRuntime[ToolContext, UserContextState]
+    user_id: str,
+    runtime: ToolRuntime
 ) -> Command:
     """
     更新用户信息到状态
 
     这个工具展示了如何在工具中写入状态
-    """
-    user_id = runtime.context.user_id
 
+    Args:
+        user_id: 用户ID
+    """
     # 模拟从数据库查询用户信息
     user_db = {
         "user_123": {"name": "张三", "points": 1500},
@@ -99,7 +94,7 @@ def update_user_info(
 @tool
 def add_points(
     points: int,
-    runtime: ToolRuntime[ToolContext, UserContextState]
+    runtime: ToolRuntime
 ) -> Command:
     """
     增加用户积分
@@ -124,7 +119,7 @@ def add_points(
 @tool
 def record_purchase(
     item_name: str,
-    runtime: ToolRuntime[ToolContext, UserContextState]
+    runtime: ToolRuntime
 ) -> Command:
     """
     记录购买记录
@@ -164,24 +159,22 @@ def main():
             record_purchase      # 记录状态
         ],
         state_schema=UserContextState,
-        context_schema=ToolContext,
         checkpointer=checkpointer,
         system_prompt="你是一个购物助手，可以查询和更新用户信息"
     )
 
     config = {"configurable": {"thread_id": "tool-state-test"}}
-    context = ToolContext(user_id="user_123", session_id="session-001")
 
     # ========== 示例1：初始化用户信息 ==========
     print(f"\n{'='*60}")
     print("【示例1】工具写入状态 - 初始化用户")
     print(f"{'='*60}")
 
-    print("\n👤 用户: 初始化我的账户信息")
+    print("\n👤 用户: 初始化用户ID为 user_123 的账户信息")
+    # 调用update_user_info工具
     result1 = agent.invoke(
-        {"messages": [{"role": "user", "content": "初始化我的账户信息"}]},
-        config=config,
-        context=context
+        {"messages": [{"role": "user", "content": "帮我初始化用户ID为 user_123 的账户信息"}]},
+        config=config
     )
     print(f"🤖 助手: {result1['messages'][-1].content}")
 
@@ -191,10 +184,10 @@ def main():
     print(f"{'='*60}")
 
     print("\n👤 用户: 查询我的资料")
+    # 调用get_user_profile工具
     result2 = agent.invoke(
         {"messages": [{"role": "user", "content": "查询我的详细资料"}]},
-        config=config,
-        context=context
+        config=config
     )
     print(f"🤖 助手: {result2['messages'][-1].content}")
 
@@ -204,10 +197,10 @@ def main():
     print(f"{'='*60}")
 
     print("\n👤 用户: 给我增加200积分")
+    # 调用add_points工具
     result3 = agent.invoke(
         {"messages": [{"role": "user", "content": "给我增加200积分"}]},
-        config=config,
-        context=context
+        config=config
     )
     print(f"🤖 助手: {result3['messages'][-1].content}")
 
@@ -217,10 +210,10 @@ def main():
     print(f"{'='*60}")
 
     print("\n👤 用户: 我购买了一台iPhone 15")
+    # 调用record_purchase工具
     result4 = agent.invoke(
         {"messages": [{"role": "user", "content": "我购买了一台iPhone 15"}]},
-        config=config,
-        context=context
+        config=config
     )
     print(f"🤖 助手: {result4['messages'][-1].content}")
 
@@ -244,8 +237,7 @@ def main():
     print("\n👤 用户: 我的积分是多少？上次买了什么？")
     result5 = agent.invoke(
         {"messages": [{"role": "user", "content": "我的积分是多少？上次买了什么？"}]},
-        config=config,
-        context=context
+        config=config
     )
     print(f"🤖 助手: {result5['messages'][-1].content}")
 

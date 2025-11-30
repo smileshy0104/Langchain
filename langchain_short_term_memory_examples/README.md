@@ -139,9 +139,9 @@ agent = create_agent(
     model=model,
     middleware=[
         SummarizationMiddleware(
-            model=model,
-            trigger={"messages": 6},   # 超过6条时触发
-            keep={"messages": 3},      # 保留最近3条
+            model=model,                       # 用于生成摘要的模型
+            max_tokens_before_summary=1000,    # Token数超过1000时触发摘要
+            messages_to_keep=3,                # 摘要后保留最近3条消息
         )
     ]
 )
@@ -149,8 +149,8 @@ agent = create_agent(
 
 **学到什么**：
 - ✅ `SummarizationMiddleware` 的使用
-- ✅ 触发条件配置（messages/tokens/fraction）
-- ✅ 保留策略设置
+- ✅ 基于 Token 数量的触发条件
+- ✅ 控制保留消息的数量
 
 **运行**：
 ```bash
@@ -323,9 +323,9 @@ middleware=[trim_messages, SummarizationMiddleware(...)]
 
 ```python
 SummarizationMiddleware(
-    model="gpt-4o-mini",  # 使用便宜的模型
-    trigger={"tokens": 4000},  # 接近上下文限制
-    keep={"messages": 20},  # 保留足够上下文
+    model=model,                      # 使用与主模型相同或更便宜的模型
+    max_tokens_before_summary=1500,   # 接近上下文限制的70-80%
+    messages_to_keep=10,              # 保留足够上下文
 )
 ```
 
