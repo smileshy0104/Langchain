@@ -1,0 +1,57 @@
+ModelScope Q&A Agent 文档上传功能测试
+
+这是一个测试文档,用于验证文档上传和处理功能。
+
+# 功能特性
+
+## 支持的文档格式
+- PDF 文档 (.pdf)
+- Word 文档 (.docx, .doc)
+- Excel 表格 (.xlsx, .xls)
+- PowerPoint 演示文稿 (.pptx, .ppt)
+- 纯文本文件 (.txt)
+- Markdown 文件 (.md)
+- JSON 文件 (.json)
+- XML 文件 (.xml)
+- HTML 文件 (.html)
+- RTF 文件 (.rtf)
+
+## 处理流程
+1. 文件上传到存储系统 (MinIO 或本地)
+2. 使用对应的加载器解析文档内容
+3. 文档清洗和格式化
+4. 智能分块 (基于 Markdown 标题或递归字符分割)
+5. 质量评分
+6. 向量化并存储到 Milvus
+7. 支持通过大模型进行问答
+
+## 配置说明
+
+系统支持通过 YAML 配置文件进行管理:
+- AI 服务配置 (VolcEngine, OpenAI, DashScope)
+- 存储配置 (MinIO, Local, OSS, S3)
+- 向量数据库配置 (Milvus)
+- 检索参数配置
+
+# 使用示例
+
+```python
+from core.document_processor import DocumentProcessor
+
+# 初始化处理器
+processor = DocumentProcessor(chunk_size=1000, chunk_overlap=200)
+
+# 加载并处理文件
+processed_docs = processor.load_and_process_file(
+    "document.pdf",
+    clean=True,
+    split=True,
+    calculate_score=True
+)
+
+print(f"处理后共 {len(processed_docs)} 个文档块")
+```
+
+# 总结
+
+本系统实现了完整的文档上传、处理和问答功能,支持多种文档格式和存储后端。

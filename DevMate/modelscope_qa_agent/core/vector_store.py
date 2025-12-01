@@ -3,6 +3,7 @@
 
 负责 Milvus 向量数据库的连接、Collection 创建、索引配置和 LangChain 集成。
 提供统一的向量存储接口,支持文档插入、更新、删除和相似度检索。
+支持多种 Embedding 服务: VolcEngine, DashScope, OpenAI
 """
 
 from typing import Optional
@@ -12,8 +13,21 @@ from pymilvus import (
     Collection, connections, utility
 )
 from langchain_milvus import Milvus
-from langchain_community.embeddings import DashScopeEmbeddings
-from config.settings import settings
+from langchain_core.embeddings import Embeddings
+
+# 支持旧配置和新配置
+try:
+    from config.settings import settings as old_settings
+    OLD_CONFIG_AVAILABLE = True
+except ImportError:
+    OLD_CONFIG_AVAILABLE = False
+
+try:
+    from config.config_loader import load_config, get_config
+    from core.embeddings import get_embeddings
+    NEW_CONFIG_AVAILABLE = True
+except ImportError:
+    NEW_CONFIG_AVAILABLE = False
 
 
 class VectorStoreManager:
@@ -24,14 +38,15 @@ class VectorStoreManager:
     Features:
         - 自动创建和管理 Milvus Collection
         - 配置向量索引和标量字段索引
-        - 集成通义千问 Embedding 模型
+        - 支持多种 Embedding 服务 (VolcEngine, DashScope, OpenAI)
         - 提供 LangChain Milvus 实例
 
     Attributes:
-        embeddings: DashScope embedding 模型实例
+        embeddings: Embedding 模型实例
         collection_name: Milvus collection 名称
         collection: Milvus Collection 对象
         connection_alias: Milvus 连接别名
+        vector_dim: 向量维度
     """
 
     def __init__(
@@ -39,7 +54,10 @@ class VectorStoreManager:
         host: Optional[str] = None,
         port: Optional[int] = None,
         collection_name: str = "modelscope_docs",
-        connection_alias: str = "default"
+        connection_alias: str = "default",
+        embeddings: Optional[Embeddings] = None,
+        vector_dim: Optional[int] = None,
+        use_new_config: bool = True
     ):
         """初始化向量存储管理器
 
@@ -48,6 +66,9 @@ class VectorStoreManager:
             port: Milvus 服务器端口,默认从配置读取
             collection_name: Collection 名称
             connection_alias: 连接别名,用于管理多个连接
+            embeddings: Embeddings 实例 (可选,不提供则从配置创建)
+            vector_dim: 向量维度 (可选,不提供则从配置读取)
+            use_new_config: 是否使用新配置系统 (YAML)
 
         Raises:
             ConnectionError: 无法连接到 Milvus 服务器
@@ -55,16 +76,51 @@ class VectorStoreManager:
         """
         self.collection_name = collection_name
         self.connection_alias = connection_alias
+        self.use_new_config = use_new_config
 
-        # 使用配置文件中的参数或传入的参数
-        self.host = host or settings.milvus_host
-        self.port = port or settings.milvus_port
+        # 加载配置
+        if use_new_config and NEW_CONFIG_AVAILABLE:
+            # 使用新的 YAML 配置
+            try:
+                config = get_config()
+            except RuntimeError:
+                config = load_config()
+
+            self.host = host or config.milvus.host
+            self.port = port or config.milvus.port
+            self.vector_dim = vector_dim or config.milvus.vector_dim
+
+            # 获取 Embeddings
+            if embeddings is None:
+                self.embeddings = get_embeddings(config.ai)
+            else:
+                self.embeddings = embeddings
+
+        elif OLD_CONFIG_AVAILABLE:
+            # 使用旧的 .env 配置
+            self.host = host or old_settings.milvus_host
+            self.port = port or old_settings.milvus_port
+            self.vector_dim = vector_dim or 1536  # DashScope 默认维度
+
+            # 获取 Embeddings
+            if embeddings is None:
+                from langchain_community.embeddings import DashScopeEmbeddings
+                self.embeddings = DashScopeEmbeddings(
+                    model="text-embedding-v2",
+                    dashscope_api_key=old_settings.dashscope_api_key
+                )
+            else:
+                self.embeddings = embeddings
+
+        else:
+            raise RuntimeError(
+                "无法加载配置。请确保以下之一可用:\n"
+                "1. 新配置系统: config.yaml 和 config_loader.py\n"
+                "2. 旧配置系统: .env 和 settings.py"
+            )
 
         # 连接 Milvus
         self._connect_milvus()
-
-        # 初始化嵌入模型
-        self._init_embeddings()
 
         # 创建或加载 Collection
         self._init_collection()
@@ -94,25 +150,6 @@ class VectorStoreManager:
             raise ConnectionError(
                 f"无法连接到 Milvus 服务器 {self.host}:{self.port}: {e}"
             ) from e
-
-    def _init_embeddings(self):
-        """初始化 DashScope Embedding 模型
-
-        Raises:
-            ValueError: API key 未配置
-        """
-        api_key = settings.dashscope_api_key
-        if not api_key:
-            raise ValueError(
-                "DASHSCOPE_API_KEY 未配置,请在 .env 文件中设置"
-            )
-
-        self.embeddings = DashScopeEmbeddings(
-            model="text-embedding-v2",
-            dashscope_api_key=api_key
-        )
-
-        print("✅ DashScope Embedding 模型初始化成功")
 
     def _init_collection(self):
         """初始化 Milvus Collection Schema
@@ -233,7 +270,7 @@ class VectorStoreManager:
             FieldSchema(
                 name="embedding",
                 dtype=DataType.FLOAT_VECTOR,
-                dim=1536,  # 通义千问 text-embedding-v2 维度
+                dim=self.vector_dim,  # 根据配置的模型设置维度
                 description="文档向量"
             ),
 

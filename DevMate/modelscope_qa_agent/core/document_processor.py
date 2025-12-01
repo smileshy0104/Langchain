@@ -3,9 +3,11 @@
 
 负责文档的加载、清洗、分块和质量评分。
 支持 Markdown 语义分块、代码块完整性保护、多源文档加载。
+支持文件上传: PDF, Word, Excel, PowerPoint, 文本文件等多种格式。
 """
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
+from pathlib import Path
 import re
 from langchain_core.documents import Document
 from langchain_text_splitters import (
@@ -15,6 +17,9 @@ from langchain_text_splitters import (
 from langchain_community.document_loaders import WebBaseLoader
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
+
+# 导入文件上传加载器
+from data.loaders.file_upload_loader import FileUploadLoader
 
 
 class DocumentProcessor:
@@ -453,6 +458,92 @@ class DocumentProcessor:
                 chunk.metadata["quality_score"] = quality_score
 
         return chunks
+
+    def load_uploaded_file(
+        self,
+        file_path: Union[str, Path],
+        metadata: Optional[Dict] = None
+    ) -> List[Document]:
+        """加载上传的文件
+
+        支持多种文档格式: PDF, Word, Excel, PowerPoint, TXT, MD, JSON, XML, HTML, RTF
+
+        Args:
+            file_path: 文件路径
+            metadata: 自定义元数据
+
+        Returns:
+            List[Document]: 加载的文档列表
+
+        Raises:
+            FileNotFoundError: 文件不存在
+            ValueError: 不支持的文件格式
+
+        Example:
+            >>> processor = DocumentProcessor()
+            >>> docs = processor.load_uploaded_file("document.pdf")
+            >>> print(f"加载了 {len(docs)} 个文档块")
+        """
+        print(f"\n📄 加载文件: {file_path}")
+
+        # 使用 FileUploadLoader 加载文件
+        loader = FileUploadLoader(
+            file_path=file_path,
+            metadata=metadata,
+            verbose=True
+        )
+
+        documents = loader.load()
+
+        print(f"✅ 文件加载完成: {len(documents)} 个文档块")
+
+        return documents
+
+    def load_and_process_file(
+        self,
+        file_path: Union[str, Path],
+        metadata: Optional[Dict] = None,
+        clean: bool = True,
+        split: bool = True,
+        calculate_score: bool = True
+    ) -> List[Document]:
+        """加载并处理上传的文件 (一站式处理)
+
+        Args:
+            file_path: 文件路径
+            metadata: 自定义元数据
+            clean: 是否清洗文档
+            split: 是否分块
+            calculate_score: 是否计算质量评分
+
+        Returns:
+            List[Document]: 处理后的文档列表
+
+        Example:
+            >>> processor = DocumentProcessor()
+            >>> processed_docs = processor.load_and_process_file(
+            ...     "document.pdf",
+            ...     clean=True,
+            ...     split=True,
+            ...     calculate_score=True
+            ... )
+            >>> print(f"处理后共 {len(processed_docs)} 个文档块")
+        """
+        # 1. 加载文件
+        documents = self.load_uploaded_file(file_path, metadata)
+
+        # 2. 处理文档
+        print(f"\n🔧 处理文档...")
+        processed_docs = self.process_documents(
+            documents,
+            clean=clean,
+            split=split,
+            calculate_score=calculate_score
+        )
+
+        print(f"✅ 文档处理完成: {len(processed_docs)} 个文档块")
+
+        return processed_docs
 
     def process_documents(
         self,
