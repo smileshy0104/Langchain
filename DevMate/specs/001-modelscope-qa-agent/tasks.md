@@ -612,11 +612,55 @@
 
 ### 4.1 对话历史管理
 
-- [ ] [T102] [P2] [US2] 创建 `core/memory_manager.py` 对话记忆管理模块
-- [ ] [T103] [P2] [US2] 实现 `trim_conversation()` 保留最近10轮对话（参考 research.md:69-78）
-- [ ] [T104] [P2] [US2] 实现 `summarize_early_messages()` 压缩早期对话为摘要
-- [ ] [T105] [P2] [US2] 在 ConversationState 中添加 `summary` 字段
-- [ ] [T106] [P2] [US2] 编写对话修剪测试 `tests/test_memory_manager.py::test_trim_conversation`
+- [X] [T102] [P2] [US2] 创建 `core/memory_manager.py` 对话记忆管理模块 ✅
+  - **Status**: 完成
+  - **File**: `core/memory_manager.py` (395 行)
+  - **Summary**: 实现了完整的对话记忆管理器，支持滑动窗口、对话摘要、Token 限制
+
+- [X] [T103] [P2] [US2] 实现 `trim_conversation()` 保留最近10轮对话（参考 research.md:69-78） ✅
+  - **Status**: 完成
+  - **Method**: `MemoryManager.trim_conversation()` in `core/memory_manager.py:53-122`
+  - **Features**:
+    - 滑动窗口机制（默认保留10轮对话）
+    - 自动保留系统消息
+    - 支持 "last" 和 "first" 修剪策略
+
+- [X] [T104] [P2] [US2] 实现 `summarize_early_messages()` 压缩早期对话为摘要 ✅
+  - **Status**: 完成
+  - **Method**: `MemoryManager.summarize_early_messages()` in `core/memory_manager.py:124-198`
+  - **Features**:
+    - LLM 驱动的智能摘要生成
+    - 支持增量更新现有摘要
+    - 包含问题、解决方案、进展状态
+    - 错误处理和降级策略
+
+- [X] [T105] [P2] [US2] 在 ConversationState 中添加 `summary` 字段 ✅
+  - **Status**: 完成（已在 T034 中实现）
+  - **Field**: `conversation_summary: Optional[str]` in `models/schemas.py:457`
+  - **Note**: 该字段已在初始实现时添加，符合 FR-003 要求
+
+- [X] [T106] [P2] [US2] 编写对话修剪测试 `tests/test_memory_manager.py::test_trim_conversation` ✅
+  - **Status**: 完成
+  - **File**: `tests/test_memory_manager.py` (560 行)
+  - **Test Results**: 39 passed (100%)
+  - **Test Categories**:
+    - 初始化测试 (3 个)
+    - 对话修剪测试 (6 个) - 包含 T106 核心测试
+    - 早期对话摘要测试 (7 个)
+    - 对话窗口测试 (4 个)
+    - 摘要判断测试 (4 个)
+    - 早期消息获取测试 (4 个)
+    - 统计信息测试 (3 个)
+    - 集成场景测试 (3 个)
+    - 边界情况测试 (5 个)
+
+**Phase 4.1 Summary**:
+- ✅ 所有5个任务完成
+- ✅ 核心功能: 滑动窗口 + 摘要策略
+- ✅ 39个测试全部通过
+- ✅ 完全符合 FR-003 要求（保留最近10轮对话）
+- ✅ 支持 LLM 驱动的智能摘要
+- ✅ 代码编译运行正常
 
 ### 4.2 上下文理解增强
 
