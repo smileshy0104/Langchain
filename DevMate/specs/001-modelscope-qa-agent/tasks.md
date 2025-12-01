@@ -991,6 +991,216 @@
 
 ---
 
+## Phase 11: 文档上传功能 (Priority: P1)
+
+**目标**: 实现完整的文档上传、处理和向量化存储功能,支持多种文档格式和存储后端,使用火山引擎豆包模型
+
+### 11.1 配置系统
+
+- [X] [T212] 创建 `config.yaml` YAML 配置文件
+  - **Status**: 完成
+  - **Summary**: 创建完整的 YAML 配置文件,支持 AI 服务(VolcEngine/DashScope/OpenAI)、存储(MinIO/Local/OSS/S3)、Milvus、Redis、检索参数等配置
+  - **File**: `config.yaml` (70 行)
+  - **Details**: 配置了火山引擎豆包模型 (doubao-embedding-text-240715, doubao-seed-1-6-250615)
+
+- [X] [T213] 实现 `config/config_loader.py` 配置加载器
+  - **Status**: 完成
+  - **Summary**: 实现类型安全的 YAML 配置加载器,使用 Pydantic 进行验证
+  - **File**: `config/config_loader.py` (378 行)
+  - **Details**: 支持单例模式、配置验证、便捷函数等
+
+### 11.2 存储管理
+
+- [X] [T214] 实现 `storage/storage_manager.py` 存储管理器
+  - **Status**: 完成
+  - **Summary**: 实现统一存储接口,支持 MinIO 对象存储和本地文件系统
+  - **File**: `storage/storage_manager.py` (480 行)
+  - **Details**:
+    - 抽象基类 `StorageBackend`
+    - `LocalStorage` 实现本地文件存储
+    - `MinIOStorage` 实现 MinIO 对象存储
+    - `StorageManager` 统一管理器
+    - 文件验证 (大小、格式)
+    - 文件上传/下载/删除/存在检查
+
+- [X] [T215] 创建 `storage/__init__.py` 模块初始化文件
+  - **Status**: 完成
+  - **File**: `storage/__init__.py` (16 行)
+
+- [X] [T216] 测试存储管理器功能
+  - **Status**: 完成
+  - **Test Results**:
+    - ✅ MinIO 连接成功
+    - ✅ 存储桶创建成功 (ai-documents)
+    - ✅ 文件验证正常 (格式、大小)
+
+### 11.3 文档加载器
+
+- [X] [T217] 实现 `data/loaders/file_upload_loader.py` 多格式文档加载器
+  - **Status**: 完成
+  - **Summary**: 支持 10+ 种文档格式的加载和解析
+  - **File**: `data/loaders/file_upload_loader.py` (650 行)
+  - **Supported Formats**:
+    - PDF (.pdf) - PyPDFLoader
+    - Word (.docx, .doc) - Docx2txtLoader
+    - Excel (.xlsx, .xls) - UnstructuredExcelLoader
+    - PowerPoint (.pptx, .ppt) - UnstructuredPowerPointLoader
+    - Text (.txt) - TextLoader
+    - Markdown (.md) - UnstructuredMarkdownLoader
+    - JSON (.json) - 自定义加载器
+    - XML (.xml) - UnstructuredXMLLoader
+    - HTML (.html) - UnstructuredHTMLLoader
+    - RTF (.rtf) - UnstructuredRTFLoader
+  - **Features**:
+    - 自动格式检测
+    - 元数据提取 (文件名、大小、类型、时间戳等)
+    - 类方法: `get_supported_formats()`, `is_supported()`
+
+- [X] [T218] 测试文档加载器功能
+  - **Status**: 完成
+  - **Test Results**:
+    - ✅ 10种格式检测正确
+    - ✅ 格式验证正常
+
+### 11.4 文档处理集成
+
+- [X] [T219] 更新 `core/document_processor.py` 支持文件上传
+  - **Status**: 完成
+  - **Summary**: 在 DocumentProcessor 中添加文件加载方法
+  - **File**: `core/document_processor.py` (修改)
+  - **New Methods**:
+    - `load_uploaded_file(file_path, metadata)` - 加载上传的文件
+    - `load_and_process_file(file_path, ...)` - 一站式加载和处理
+  - **Details**: 集成 FileUploadLoader,支持完整处理流程
+
+- [X] [T220] 测试文档处理流程
+  - **Status**: 完成
+  - **Test File**: `tests/test_document_upload.py` (77 行)
+  - **Test Results**:
+    - ✅ 文件加载成功 (test_document.txt)
+    - ✅ 文档处理成功 (1 文档 → 6 块)
+    - ✅ 质量评分正常 (0.2-0.55)
+    - ✅ 元数据提取完整
+
+### 11.5 Embeddings 支持
+
+- [X] [T221] 实现 `core/embeddings.py` 统一 Embeddings 接口
+  - **Status**: 完成
+  - **Summary**: 支持多种 AI 服务提供商的 Embeddings
+  - **File**: `core/embeddings.py` (236 行)
+  - **Supported Providers**:
+    - VolcEngine (火山引擎豆包) - `VolcEngineEmbeddings` 类
+    - DashScope (通义千问) - 使用 `DashScopeEmbeddings`
+    - OpenAI - 使用 `OpenAIEmbeddings`
+  - **Features**:
+    - 统一接口 `get_embeddings(config)`
+    - 批处理支持 (每批最多100个)
+    - OpenAI 兼容的客户端
+
+- [X] [T222] 更新 `core/vector_store.py` 支持多种 Embeddings
+  - **Status**: 完成
+  - **Summary**: VectorStoreManager 支持多种 Embedding 服务
+  - **File**: `core/vector_store.py` (修改)
+  - **Changes**:
+    - 删除硬编码的 DashScope Embeddings
+    - 新增 `embeddings` 参数
+    - 新增 `vector_dim` 参数
+    - 新增 `use_new_config` 参数
+    - 支持新旧配置系统兼容
+    - 向量维度从配置读取
+
+- [X] [T223] 测试 VolcEngine Embeddings
+  - **Status**: 完成
+  - **Test Results**:
+    - ✅ VolcEngine Embeddings 初始化成功
+    - ✅ 模型配置正确 (doubao-embedding-text-240715)
+    - ✅ Base URL 配置正确
+
+- [X] [T224] 测试 VectorStoreManager 集成
+  - **Status**: 完成
+  - **Test Results**:
+    - ✅ Milvus 连接成功
+    - ✅ Collection 创建成功 (modelscope_docs)
+    - ✅ 向量维度正确 (1024 维)
+    - ✅ 向量索引创建成功 (IVF_FLAT, IP)
+    - ✅ 标量索引创建成功 (source_type, document_type, quality_score)
+
+### 11.6 文档上传服务
+
+- [X] [T225] 实现 `services/document_upload_service.py` 文档上传服务
+  - **Status**: 完成
+  - **Summary**: 提供完整的文档上传和处理服务
+  - **File**: `services/document_upload_service.py` (380 行)
+  - **Features**:
+    - `upload_file()` - 上传文件到存储系统
+    - `process_uploaded_file()` - 处理上传的文件
+    - `store_documents()` - 存储到向量数据库
+    - `upload_and_process()` - 一站式上传和处理
+    - `process_local_file()` - 处理本地文件
+  - **Workflow**: 上传 → 处理 → 向量化 → 存储到 Milvus
+
+- [X] [T226] 创建 `services/__init__.py` 服务模块初始化文件
+  - **Status**: 完成
+  - **File**: `services/__init__.py` (9 行)
+
+- [X] [T227] 测试文档上传服务
+  - **Status**: 完成
+  - **Test Results**:
+    - ✅ 服务初始化成功
+    - ✅ 存储管理器初始化成功 (MinIO)
+    - ✅ 文档处理器初始化成功
+    - ✅ 向量存储管理器初始化成功 (Milvus + VolcEngine Embeddings)
+    - ✅ 本地文件处理成功 (6 个文档块)
+
+### 11.7 测试与文档
+
+- [X] [T228] 创建测试文档 `test_document.txt`
+  - **Status**: 完成
+  - **File**: `test_document.txt` (1409 字节)
+  - **Content**: 文档上传功能测试内容
+
+- [X] [T229] 创建文档上传功能文档 `DOCUMENT_UPLOAD_FEATURE.md`
+  - **Status**: 完成
+  - **File**: `DOCUMENT_UPLOAD_FEATURE.md` (完整功能文档)
+  - **Sections**:
+    - 概述
+    - 功能特性
+    - 配置说明
+    - 使用方式 (3种方式)
+    - 处理流程
+    - 核心模块
+    - 测试验证
+    - 依赖包
+    - 架构设计
+    - 注意事项
+    - 扩展性
+    - 问题排查
+
+- [X] [T230] 编译测试所有新增代码
+  - **Status**: 完成
+  - **Test Results**: ✅ 所有模块均可正常导入和运行
+  - **Tests Passed**:
+    - ✅ 配置加载器测试
+    - ✅ 存储管理器测试
+    - ✅ 文件加载器测试
+    - ✅ 文档处理测试
+    - ✅ Embeddings 测试
+    - ✅ 向量存储测试
+    - ✅ 文档上传服务测试
+
+### 11.8 依赖安装
+
+- [X] [T231] 安装 MinIO 客户端
+  - **Status**: 完成
+  - **Package**: minio==7.2.20
+  - **Dependencies**: argon2-cffi, pycryptodome
+
+- [X] [T232] 安装 OpenAI SDK (VolcEngine 兼容)
+  - **Status**: 已安装
+  - **Package**: openai (已存在于环境中)
+
+---
+
 ## 依赖关系图
 
 ```
@@ -1008,7 +1218,17 @@ Phase 1 (环境搭建)
     │       │
     │       ├──> Phase 5 (US3 - 平台导航)
     │       │
-    │       └──> Phase 6 (US4 - 项目指导)
+    │       ├──> Phase 6 (US4 - 项目指导)
+    │       │
+    │       └──> Phase 11 (文档上传功能) [已完成] ✅
+    │               │
+    │               ├──> 11.1 配置系统 (YAML + Pydantic)
+    │               ├──> 11.2 存储管理 (MinIO + Local)
+    │               ├──> 11.3 文档加载器 (10+ 格式)
+    │               ├──> 11.4 文档处理集成
+    │               ├──> 11.5 Embeddings 支持 (VolcEngine)
+    │               ├──> 11.6 文档上传服务
+    │               └──> 11.7 测试与文档
     │
     ├──> Phase 7 (功能增强)
     │       │
@@ -1050,13 +1270,25 @@ Phase 1 (环境搭建)
 
 ## 任务统计
 
-- **总任务数**: 208
+- **总任务数**: 232 (新增 24 个任务)
+- **已完成任务**: 157 (包括 Phase 1-4 和 Phase 11)
 - **阻塞性任务 [P]**: 30
-- **P1 任务 (US1)**: 45
+- **P1 任务**: 66 (原45个 + Phase 11 的21个)
 - **P2 任务 (US2)**: 17
 - **P3 任务 (US3)**: 14
 - **P4 任务 (US4)**: 10
 - **跨功能任务**: 92
+
+### Phase 11 任务明细 (T212-T232) - 全部完成 ✅
+
+- **11.1 配置系统**: T212-T213 (2 个任务)
+- **11.2 存储管理**: T214-T216 (3 个任务)
+- **11.3 文档加载器**: T217-T218 (2 个任务)
+- **11.4 文档处理集成**: T219-T220 (2 个任务)
+- **11.5 Embeddings 支持**: T221-T224 (4 个任务)
+- **11.6 文档上传服务**: T225-T227 (3 个任务)
+- **11.7 测试与文档**: T228-T230 (3 个任务)
+- **11.8 依赖安装**: T231-T232 (2 个任务)
 
 ---
 
