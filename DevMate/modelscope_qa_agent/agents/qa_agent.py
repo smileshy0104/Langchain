@@ -21,6 +21,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from models.schemas import ConversationState, TechnicalAnswer
 from retrievers.hybrid_retriever import HybridRetriever
 from tools.clarification_tool import ClarificationTool
+from core.memory_manager import MemoryManager
 
 
 class ModelScopeQAAgent:
@@ -109,6 +110,13 @@ class ModelScopeQAAgent:
             llm_api_key=llm_api_key,
             model=model,
             temperature=temperature
+        )
+
+        # 初始化对话记忆管理器 (Phase 4.1: 对话历史管理)
+        self.memory_manager = MemoryManager(
+            llm=self.llm,
+            max_turns=10,  # 保留最近10轮对话
+            max_tokens=4000
         )
 
         # 构建 LangGraph 工作流
@@ -272,7 +280,7 @@ class ModelScopeQAAgent:
     def _generate_answer(self, state: ConversationState) -> ConversationState:
         """生成技术回答节点
 
-        基于检索到的文档和用户问题,使用 LLM 生成结构化技术回答。
+        基于检索到的文档、用户问题和对话历史,使用 LLM 生成结构化技术回答。
 
         Args:
             state: 当前对话状态
@@ -285,10 +293,11 @@ class ModelScopeQAAgent:
 
         Prompt 结构:
             - System: 定义角色、任务和输出格式
-            - Human: 用户问题
+            - Conversation History: 对话历史摘要（如果有）
             - Context: 检索到的文档内容
+            - Human: 当前用户问题
         """
-        # 构建上下文
+        # 构建文档上下文
         context = "\n\n".join([
             f"文档 {i+1}:\n{doc.page_content}"
             for i, doc in enumerate(state["retrieved_documents"])
@@ -297,18 +306,24 @@ class ModelScopeQAAgent:
         if not context.strip():
             context = "未检索到相关文档。"
 
-        # 系统提示词
+        # 构建对话历史上下文（T107: 支持对话历史引用）
+        conversation_history = self._build_conversation_history(state)
+
+        # 系统提示词（T108: 添加对话历史占位符）
         prompt = ChatPromptTemplate.from_messages([
             ("system", """你是魔搭社区的技术支持专家。
 
-**任务**: 基于提供的文档上下文,回答用户的技术问题。
+**任务**: 基于提供的文档上下文和对话历史,回答用户的技术问题。
 
 **要求**:
 1. 回答必须基于文档内容,不得编造
-2. 提供至少1种可执行的解决方案
-3. 包含完整的代码示例（如果适用）
-4. 引用信息来源
-5. 如果文档不足以回答问题,明确说明
+2. 如果用户问题引用了之前的对话内容（如"刚才你建议的方法"、"你刚说的"、"之前提到的"),要准确理解代词指向,结合对话历史给出回答
+3. 提供至少1种可执行的解决方案
+4. 包含完整的代码示例（如果适用）
+5. 引用信息来源
+6. 如果文档不足以回答问题,明确说明
+
+{conversation_history_section}
 
 **上下文文档**:
 {context}
@@ -326,9 +341,10 @@ class ModelScopeQAAgent:
         chain = prompt | self.llm | parser
 
         try:
-            # 生成答案
+            # 生成答案（包含对话历史）
             answer = chain.invoke({
                 "context": context,
+                "conversation_history_section": conversation_history,
                 "question": state["current_question"],
                 "format_instructions": parser.get_format_instructions()
             })
@@ -405,6 +421,82 @@ class ModelScopeQAAgent:
         else:
             print(f"✅ 置信度较高 ({confidence:.2f}), 直接返回")
             return "end"
+
+    def _build_conversation_history(self, state: ConversationState) -> str:
+        """构建对话历史上下文（T107: 支持对话历史引用）
+
+        使用 MemoryManager 获取优化的对话窗口，包含早期对话摘要和最近对话。
+
+        Args:
+            state: 当前对话状态
+
+        Returns:
+            str: 格式化的对话历史文本，如果是首轮对话则返回空字符串
+
+        处理流程:
+            1. 检查是否有对话历史（消息数 > 2: System + 当前问题）
+            2. 如果需要摘要，生成早期对话摘要
+            3. 使用 MemoryManager 获取优化的对话窗口
+            4. 格式化为可读文本
+
+        Example Output:
+            **对话历史**:
+            早期对话摘要: 用户询问了模型加载问题...
+
+            用户: 如何加载 Qwen-7B 模型?
+            Agent: 使用 AutoModelForCausalLM.from_pretrained()...
+            用户: CUDA 内存不足怎么办?
+            Agent: 可以降低 batch_size...
+        """
+        messages = state.get("messages", [])
+
+        # 如果只有当前问题（没有历史对话），返回空
+        # 通常第一轮对话会有: SystemMessage (if any) + HumanMessage
+        if len(messages) <= 2:
+            return ""
+
+        # 检查是否需要生成摘要
+        conversation_summary = state.get("conversation_summary")
+        if self.memory_manager.should_generate_summary(messages):
+            # 获取需要摘要的早期消息
+            early_messages = self.memory_manager.get_early_messages(messages)
+            if early_messages:
+                # 生成或更新摘要
+                conversation_summary = self.memory_manager.summarize_early_messages(
+                    early_messages,
+                    current_summary=conversation_summary
+                )
+                # 更新状态中的摘要（供下次使用）
+                state["conversation_summary"] = conversation_summary
+
+        # 获取优化的对话窗口（包含摘要 + 最近对话）
+        conversation_window = self.memory_manager.get_conversation_window(
+            messages[:-1],  # 排除当前问题（最后一条消息）
+            summary=conversation_summary
+        )
+
+        # 格式化对话历史
+        if not conversation_window:
+            return ""
+
+        history_lines = ["**对话历史**:"]
+
+        for msg in conversation_window:
+            if hasattr(msg, '__class__') and msg.__class__.__name__ == 'SystemMessage':
+                # 系统消息（包括摘要）
+                if "早期对话摘要" in msg.content:
+                    history_lines.append(msg.content)
+                # 跳过其他系统消息（如初始的 System Prompt）
+            elif hasattr(msg, '__class__') and msg.__class__.__name__ == 'HumanMessage':
+                history_lines.append(f"用户: {msg.content}")
+            elif hasattr(msg, '__class__') and msg.__class__.__name__ == 'AIMessage':
+                # 简化 AI 回答（只显示摘要，不显示完整的结构化输出）
+                content = msg.content
+                if len(content) > 200:
+                    content = content[:200] + "..."
+                history_lines.append(f"Agent: {content}")
+
+        return "\n".join(history_lines) if len(history_lines) > 1 else ""
 
     def invoke(
         self,

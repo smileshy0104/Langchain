@@ -664,11 +664,48 @@
 
 ### 4.2 上下文理解增强
 
-- [ ] [T107] [P2] [US2] 修改 `generate` 节点支持对话历史引用
-- [ ] [T108] [P2] [US2] 在 Prompt 中添加对话历史占位符
-- [ ] [T109] [P2] [US2] 实现代词消解（如"刚才你建议的方法"）
-- [ ] [T110] [P2] [US2] 测试场景:第二轮对话引用第一轮（对应 spec.md:105）
-- [ ] [T111] [P2] [US2] 测试场景:第三轮对话引用第二轮建议（对应 spec.md:106）
+- [x] [T107] [P2] [US2] 修改 `generate` 节点支持对话历史引用 ✅
+  - **Status**: 完成
+  - **Summary**: 在 `_generate_answer()` 中添加了对话历史构建逻辑
+  - **Implementation**: 新增 `_build_conversation_history()` 方法 (agents/qa_agent.py:425-499)
+  - **Features**: 集成 MemoryManager、滑动窗口策略、自动摘要生成
+  - **Details**: 支持最近10轮完整对话 + 早期对话摘要
+
+- [x] [T108] [P2] [US2] 在 Prompt 中添加对话历史占位符 ✅
+  - **Status**: 完成
+  - **Summary**: 在系统提示词中添加 `{conversation_history_section}` 占位符
+  - **Implementation**: 更新 `_generate_answer()` 的 ChatPromptTemplate (agents/qa_agent.py:297-321)
+  - **Features**: 动态注入对话历史、向后兼容单轮对话
+  - **Format**: 人类可读格式("用户:"、"Agent:")
+
+- [x] [T109] [P2] [US2] 实现代词消解（如"刚才你建议的方法"） ✅
+  - **Status**: 完成
+  - **Summary**: 通过 Prompt 工程实现自然语言级别的代词消解
+  - **Implementation**: 在系统 Prompt 中添加明确的代词理解指令
+  - **Instructions**: "如果用户问题引用了之前的对话内容（如'刚才你建议的方法'、'你刚说的'、'之前提到的'),要准确理解代词指向,结合对话历史给出回答"
+  - **Approach**: 依赖 LLM 的自然语言理解能力
+
+- [x] [T110] [P2] [US2] 测试场景:第二轮对话引用第一轮（对应 spec.md:105） ✅
+  - **Status**: 完成
+  - **Summary**: 创建了 3 个测试用例验证第二轮引用第一轮场景
+  - **File**: `tests/test_multi_turn_conversation.py::TestSecondTurnReference`
+  - **Tests**:
+    - test_second_turn_references_first_question: 验证第二轮能引用第一轮问题
+    - test_build_conversation_history_with_previous_turn: 验证对话历史构建
+    - test_conversation_history_format: 验证对话历史格式
+  - **Results**: 3/3 passed ✅
+
+- [x] [T111] [P2] [US2] 测试场景:第三轮对话引用第二轮建议（对应 spec.md:106） ✅
+  - **Status**: 完成
+  - **Summary**: 创建了 3 个测试用例验证第三轮引用第二轮场景
+  - **File**: `tests/test_multi_turn_conversation.py::TestThirdTurnReference`
+  - **Tests**:
+    - test_third_turn_references_second_suggestion: 验证第三轮能引用第二轮建议
+    - test_pronoun_resolution_in_third_turn: 验证代词消解("我按照你的建议")
+    - test_multi_turn_context_accumulation: 验证多轮上下文累积
+  - **Results**: 3/3 passed ✅
+  - **Additional**: 额外创建了 8 个测试覆盖边界情况和集成场景
+  - **Total Test Results**: 14/14 passed (100%) ✅
 
 ### 4.3 多轮对话状态管理
 
