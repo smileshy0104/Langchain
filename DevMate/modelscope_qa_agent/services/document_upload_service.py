@@ -135,7 +135,7 @@ class DocumentUploadService:
         """处理上传的文件
 
         Args:
-            file_path: 文件路径
+            file_path: 文件路径 (MinIO对象路径或本地路径)
             metadata: 自定义元数据
             clean: 是否清洗
             split: 是否分块
@@ -146,13 +146,37 @@ class DocumentUploadService:
         """
         print(f"\n🔧 处理文件: {file_path}")
 
-        processed_docs = self.doc_processor.load_and_process_file(
-            file_path=file_path,
-            metadata=metadata,
-            clean=clean,
-            split=split,
-            calculate_score=calculate_score
-        )
+        # 如果是 MinIO 存储,需要先下载到临时目录
+        local_file_path = file_path
+        temp_file = None
+
+        if self.config.storage.type == "minio":
+            import tempfile
+            import os
+
+            # 创建临时文件
+            suffix = Path(file_path).suffix
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            temp_file.close()
+            local_file_path = temp_file.name
+
+            print(f"📥 从 MinIO 下载文件到临时目录: {local_file_path}")
+            self.storage_manager.download_file(file_path, local_file_path)
+
+        try:
+            # 处理本地文件
+            processed_docs = self.doc_processor.load_and_process_file(
+                file_path=local_file_path,
+                metadata=metadata,
+                clean=clean,
+                split=split,
+                calculate_score=calculate_score
+            )
+        finally:
+            # 清理临时文件
+            if temp_file and os.path.exists(local_file_path):
+                os.unlink(local_file_path)
+                print(f"🗑️  删除临时文件: {local_file_path}")
 
         return processed_docs
 

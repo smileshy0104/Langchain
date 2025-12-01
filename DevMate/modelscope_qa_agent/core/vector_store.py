@@ -193,12 +193,12 @@ class VectorStoreManager:
 
         # 定义完整的 Schema
         fields = [
-            # 主键
+            # 主键 (使用 INT64 + auto_id 以兼容 LangChain)
             FieldSchema(
                 name="id",
-                dtype=DataType.VARCHAR,
+                dtype=DataType.INT64,
                 is_primary=True,
-                max_length=100,
+                auto_id=True,
                 description="条目唯一标识符"
             ),
 
@@ -207,6 +207,7 @@ class VectorStoreManager:
                 name="title",
                 dtype=DataType.VARCHAR,
                 max_length=500,
+                nullable=True,  # 可选字段
                 description="文档标题"
             ),
             FieldSchema(
@@ -219,6 +220,7 @@ class VectorStoreManager:
                 name="content_summary",
                 dtype=DataType.VARCHAR,
                 max_length=1000,
+                nullable=True,  # 可选字段
                 description="内容摘要"
             ),
 
@@ -227,24 +229,28 @@ class VectorStoreManager:
                 name="source_type",
                 dtype=DataType.VARCHAR,
                 max_length=50,
+                nullable=True,  # 可选字段
                 description="来源类型"
             ),
             FieldSchema(
                 name="source_url",
                 dtype=DataType.VARCHAR,
                 max_length=500,
+                nullable=True,  # 可选字段
                 description="来源URL"
             ),
             FieldSchema(
                 name="document_type",
                 dtype=DataType.VARCHAR,
                 max_length=50,
+                nullable=True,  # 可选字段
                 description="文档类型"
             ),
             FieldSchema(
                 name="chunk_boundary",
                 dtype=DataType.VARCHAR,
                 max_length=50,
+                nullable=True,  # 可选字段
                 description="分块边界类型"
             ),
 
@@ -255,6 +261,7 @@ class VectorStoreManager:
                 element_type=DataType.VARCHAR,
                 max_capacity=20,
                 max_length=100,
+                nullable=True,  # 可选字段
                 description="标签列表"
             ),
             FieldSchema(
@@ -263,6 +270,7 @@ class VectorStoreManager:
                 element_type=DataType.VARCHAR,
                 max_capacity=10,
                 max_length=100,
+                nullable=True,  # 可选字段
                 description="问题分类列表"
             ),
 
@@ -278,6 +286,7 @@ class VectorStoreManager:
             FieldSchema(
                 name="quality_score",
                 dtype=DataType.FLOAT,
+                nullable=True,  # 可选字段
                 description="质量评分(0-1)"
             ),
 
@@ -285,11 +294,13 @@ class VectorStoreManager:
             FieldSchema(
                 name="created_at",
                 dtype=DataType.INT64,
+                nullable=True,  # 可选字段
                 description="创建时间（Unix timestamp）"
             ),
             FieldSchema(
                 name="last_updated",
                 dtype=DataType.INT64,
+                nullable=True,  # 可选字段
                 description="最后更新时间（Unix timestamp）"
             ),
         ]

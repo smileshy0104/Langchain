@@ -30,7 +30,7 @@ milvus:
   host: "localhost"
   port: 19530
   collection_name: "modelscope_docs"
-  vector_dim: 1024  # doubao-embedding-text-240715 维度
+  vector_dim: 2560  # doubao-embedding-text-240715 维度 (实际测试为2560维)
 
 # Redis 缓存配置
 redis:
