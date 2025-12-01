@@ -459,6 +459,10 @@ class ConversationState(TypedDict):
     # 用户反馈
     user_feedback: Optional[dict]  # {"helpful": bool, "resolved": bool, "comment": str}
 
+    # 澄清相关 (Phase 3.6: 主动澄清机制)
+    needs_clarification: bool  # 是否需要澄清
+    clarification_questions: list[str]  # 澄清问题列表
+
     # 错误信息（如果有）
     error: Optional[str]
 

@@ -20,6 +20,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from models.schemas import ConversationState, TechnicalAnswer
 from retrievers.hybrid_retriever import HybridRetriever
+from tools.clarification_tool import ClarificationTool
 
 
 class ModelScopeQAAgent:
@@ -34,6 +35,7 @@ class ModelScopeQAAgent:
     Attributes:
         retriever: HybridRetriever 混合检索器实例
         llm: ChatTongyi LLM 客户端
+        clarification_tool: ClarificationTool 澄清问题工具
         workflow: StateGraph LangGraph 工作流
         checkpointer: MemorySaver 检查点持久化器
         app: CompiledGraph 编译后的工作流应用
@@ -102,6 +104,13 @@ class ModelScopeQAAgent:
             dashscope_api_key=llm_api_key
         )
 
+        # 初始化澄清工具 (Phase 3.6: 主动澄清机制)
+        self.clarification_tool = ClarificationTool(
+            llm_api_key=llm_api_key,
+            model=model,
+            temperature=temperature
+        )
+
         # 构建 LangGraph 工作流
         self.workflow = StateGraph(ConversationState)
         self._build_graph()
@@ -120,27 +129,41 @@ class ModelScopeQAAgent:
         """构建 LangGraph 工作流
 
         工作流节点:
-        1. retrieve: 文档检索节点
-        2. generate: 答案生成节点
-        3. validate: 答案验证节点(可选)
+        1. clarify: 澄清问题节点 (Phase 3.6)
+        2. retrieve: 文档检索节点
+        3. generate: 答案生成节点
+        4. validate: 答案验证节点(可选)
 
         工作流:
-        START → retrieve → generate → [条件分支]
-                                         ├─> validate → END (置信度 < 0.8)
-                                         └─> END (置信度 ≥ 0.8)
+        START → clarify → [条件分支]
+                           ├─> END (需要澄清, 返回澄清问题)
+                           └─> retrieve → generate → [条件分支]
+                                                       ├─> validate → END (置信度 < 0.8)
+                                                       └─> END (置信度 ≥ 0.8)
         """
         # 添加节点
+        self.workflow.add_node("clarify", self._clarify_question)
         self.workflow.add_node("retrieve", self._retrieve_documents)
         self.workflow.add_node("generate", self._generate_answer)
         self.workflow.add_node("validate", self._validate_answer)
 
-        # 设置入口点
-        self.workflow.set_entry_point("retrieve")
+        # 设置入口点: 从澄清节点开始
+        self.workflow.set_entry_point("clarify")
 
-        # 添加边
+        # 条件分支1: 澄清后决定是继续还是返回澄清问题
+        self.workflow.add_conditional_edges(
+            "clarify",
+            self._should_retrieve_or_clarify,
+            {
+                "retrieve": "retrieve",  # 不需要澄清,继续检索
+                "end": END  # 需要澄清,返回澄清问题
+            }
+        )
+
+        # 添加边: retrieve → generate
         self.workflow.add_edge("retrieve", "generate")
 
-        # 条件分支: 根据置信度决定是否验证
+        # 条件分支2: 根据置信度决定是否验证
         self.workflow.add_conditional_edges(
             "generate",
             self._should_validate,
@@ -153,7 +176,66 @@ class ModelScopeQAAgent:
         self.workflow.add_edge("validate", END)
 
         print("✅ LangGraph 工作流构建完成")
-        print("   节点: retrieve → generate → [validate]")
+        print("   节点: clarify → [retrieve → generate → validate]")
+
+    def _clarify_question(self, state: ConversationState) -> ConversationState:
+        """澄清问题节点 (Phase 3.6: 主动澄清机制)
+
+        检测用户问题是否缺失关键信息,如果需要则生成澄清问题。
+
+        Args:
+            state: 当前对话状态
+
+        Returns:
+            ConversationState: 更新后的状态,包含澄清检查结果
+
+        Updates:
+            - needs_clarification: 是否需要澄清
+            - clarification_questions: 澄清问题列表
+        """
+        # 获取用户问题
+        question = state["messages"][-1].content
+
+        # 使用澄清工具检查问题
+        try:
+            clarification_result = self.clarification_tool.check_and_clarify(question)
+
+            # 更新状态
+            state["needs_clarification"] = clarification_result.needs_clarification
+            state["clarification_questions"] = clarification_result.clarification_questions
+
+            if clarification_result.needs_clarification:
+                print(f"❓ 需要澄清, 生成了 {len(clarification_result.clarification_questions)} 个问题")
+            else:
+                print(f"✅ 问题信息充分, 无需澄清")
+
+        except Exception as e:
+            print(f"⚠️  澄清检查失败: {e}")
+            # 降级: 假设不需要澄清,继续处理
+            state["needs_clarification"] = False
+            state["clarification_questions"] = []
+
+        return state
+
+    def _should_retrieve_or_clarify(self, state: ConversationState) -> str:
+        """条件分支: 判断是继续检索还是返回澄清问题
+
+        Args:
+            state: 当前对话状态
+
+        Returns:
+            str: "retrieve" 或 "end"
+
+        逻辑:
+            - 如果需要澄清: 返回 "end" (结束流程,返回澄清问题)
+            - 如果不需要澄清: 返回 "retrieve" (继续检索流程)
+        """
+        if state["needs_clarification"]:
+            print(f"🔀 需要澄清, 终止检索流程")
+            return "end"
+        else:
+            print(f"🔀 无需澄清, 继续检索流程")
+            return "retrieve"
 
     def _retrieve_documents(self, state: ConversationState) -> ConversationState:
         """检索相关文档节点
@@ -264,7 +346,7 @@ class ModelScopeQAAgent:
             fallback_answer = TechnicalAnswer(
                 summary=f"抱歉,生成答案时出现错误: {str(e)}",
                 problem_analysis="答案生成失败",
-                solutions=[],
+                solutions=["请稍后重试或联系技术支持"],
                 code_examples=[],
                 references=[],
                 confidence_score=0.0
@@ -371,6 +453,8 @@ class ModelScopeQAAgent:
                     "current_question": "",
                     "retrieved_documents": [],
                     "generated_answer": {},
+                    "needs_clarification": False,  # Phase 3.6: 澄清标记
+                    "clarification_questions": [],  # Phase 3.6: 澄清问题列表
                     "turn_count": 0
                 },
                 config={"configurable": {"thread_id": thread_id}}
@@ -380,7 +464,21 @@ class ModelScopeQAAgent:
             print(f"✅ 处理完成")
             print(f"{'='*70}\n")
 
-            return result["generated_answer"]
+            # 如果需要澄清,返回澄清问题而不是答案
+            if result["needs_clarification"]:
+                print(f"❓ 需要用户澄清信息")
+                return {
+                    "needs_clarification": True,
+                    "clarification_questions": result["clarification_questions"],
+                    "summary": "为了更好地帮助您,我需要了解以下信息:",
+                    "problem_analysis": "问题描述不够清晰",
+                    "solutions": result["clarification_questions"],
+                    "code_examples": [],
+                    "references": [],
+                    "confidence_score": 0.0
+                }
+            else:
+                return result["generated_answer"]
 
         except Exception as e:
             print(f"\n⚠️  工作流执行失败: {e}")
