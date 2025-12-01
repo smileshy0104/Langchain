@@ -460,22 +460,91 @@
 
 ### 3.5 单轮问答功能实现
 
-- [x] [T083] [P1] [US1] 实现 `invoke()` 方法接收用户问题（参考 plan.md:476-482）
-- [x] [T084] [P1] [US1] 集成检索、生成、验证完整流程
-- [x] [T085] [P1] [US1] 返回 TechnicalAnswer 结构化响应
-- [x] [T086] [P1] [US1] 编写单轮问答测试 `tests/test_qa_agent.py::test_single_turn_qa`
-- [x] [T087] [P1] [US1] 测试场景:模型调用错误问题（对应 spec.md:88）
-- [x] [T088] [P1] [US1] 测试场景:多模态场景问题（对应 spec.md:89）
-- [x] [T089] [P1] [US1] 验证回答包含问题分析、解决方案、代码示例、引用来源
+- [X] [T083] [P1] [US1] 实现 `invoke()` 方法接收用户问题（参考 plan.md:476-482） ✅
+  - **Status**: 完成
+  - **Location**: `agents/qa_agent.py:327-387`
+  - **Features**: 接收用户问题、支持 thread_id、调用 LangGraph workflow、返回 TechnicalAnswer
+
+- [X] [T084] [P1] [US1] 集成检索、生成、验证完整流程 ✅
+  - **Status**: 完成
+  - **Workflow**: retrieve → generate → [validate]
+  - **Nodes**: `_retrieve_documents`、`_generate_answer`、`_validate_answer`
+  - **Conditional**: 置信度 < 0.8 触发验证节点
+
+- [X] [T085] [P1] [US1] 返回 TechnicalAnswer 结构化响应 ✅
+  - **Status**: 完成
+  - **Format**: TechnicalAnswer 字典
+  - **Fields**: summary、problem_analysis、solutions (≥1)、code_examples、references、confidence_score
+  - **Fix**: 修复 fallback 答案 solutions=[] 违反 min_length=1 验证错误
+
+- [X] [T086] [P1] [US1] 编写单轮问答测试 `tests/test_qa_agent.py::test_single_turn_qa` ✅
+  - **Status**: 完成
+  - **Test Class**: `TestSingleTurnQA`
+  - **Test Method**: `test_single_turn_qa()`
+  - **Coverage**: 完整问答流程、响应结构、内容非空验证
+
+- [X] [T087] [P1] [US1] 测试场景:模型调用错误问题（对应 spec.md:88） ✅
+  - **Status**: 完成
+  - **Test Method**: `test_qa_with_model_error()`
+  - **Scenario**: LLM 调用失败
+  - **Validation**: Fallback 答案、confidence = 0.0、错误信息在 summary
+
+- [X] [T088] [P1] [US1] 测试场景:多模态场景问题（对应 spec.md:89） ✅
+  - **Status**: 完成
+  - **Test Method**: `test_qa_multimodal_scenario()`
+  - **Scenario**: 图像识别、视觉问答等多模态问题
+  - **Validation**: 多模态关键词 (qwen-vl)、解决方案非空
+
+- [X] [T089] [P1] [US1] 验证回答包含问题分析、解决方案、代码示例、引用来源 ✅
+  - **Status**: 完成
+  - **Test Method**: `test_answer_completeness()`
+  - **Validation**: 问题分析 (>10字)、解决方案 (≥1个)、代码示例 (≥1个)、引用来源 (≥1个 URL)、置信度 >0
+  - **Additional Tests**: `test_qa_with_no_retrieved_docs()`、`test_qa_response_format()`
+  - **Summary**: 详见 `PHASE_3.5_SUMMARY.md`
 
 ### 3.6 主动澄清机制
 
-- [ ] [T090] [P1] [US1] 创建 `tools/clarification_tool.py` 澄清问题工具
-- [ ] [T091] [P1] [US1] 实现 `detect_missing_info()` 检测缺失关键信息
-- [ ] [T092] [P1] [US1] 实现 `generate_clarification_questions()` 生成澄清问题
-- [ ] [T093] [P1] [US1] 添加 `clarify` 节点到 LangGraph 工作流
-- [ ] [T094] [P1] [US1] 测试场景:问题描述不清晰（对应 spec.md:91）
-- [ ] [T095] [P1] [US1] 验证主动提出澄清问题（如"您使用的是哪个版本?"）
+- [X] [T090] [P1] [US1] 创建 `tools/clarification_tool.py` 澄清问题工具 ✅
+  - **Status**: 完成
+  - **Summary**: 创建了完整的 ClarificationTool 类,包含 MissingInfo、ClarificationResult 模型
+  - **File**: `tools/clarification_tool.py` (395 行)
+  - **Features**: LLM 驱动的缺失信息检测、结构化输出、降级机制
+
+- [X] [T091] [P1] [US1] 实现 `detect_missing_info()` 检测缺失关键信息 ✅
+  - **Status**: 完成
+  - **Summary**: 使用 LLM 分析问题,识别 6 类缺失信息(版本、环境、错误、模型、代码、数据)
+  - **Method**: `ClarificationTool.detect_missing_info()` in `tools/clarification_tool.py:71-129`
+  - **Features**: 使用 PydanticOutputParser 保证结构化输出,评估重要性 (high/medium/low)
+
+- [X] [T092] [P1] [US1] 实现 `generate_clarification_questions()` 生成澄清问题 ✅
+  - **Status**: 完成
+  - **Summary**: 基于缺失信息生成具体、友好、易于回答的澄清问题
+  - **Method**: `ClarificationTool.generate_clarification_questions()` in `tools/clarification_tool.py:131-222`
+  - **Features**: 按重要性排序、友好语气、降级模板、最多 3 个问题
+
+- [X] [T093] [P1] [US1] 添加 `clarify` 节点到 LangGraph 工作流 ✅
+  - **Status**: 完成
+  - **Summary**: 将 clarify 节点设为工作流入口点,实现条件分支路由
+  - **Location**: `agents/qa_agent.py:181-238`
+  - **Workflow**: START → clarify → [retrieve 或 END]
+  - **Features**: `_clarify_question()` 节点、`_should_retrieve_or_clarify()` 条件分支
+
+- [X] [T094] [P1] [US1] 测试场景:问题描述不清晰（对应 spec.md:91） ✅
+  - **Status**: 完成
+  - **Test**: `test_unclear_question_triggers_clarification()` in `tests/test_qa_agent.py:666-694`
+  - **Result**: ✅ PASSED
+  - **Coverage**: 验证不清晰问题触发澄清机制、返回澄清问题
+
+- [X] [T095] [P1] [US1] 验证主动提出澄清问题（如"您使用的是哪个版本?"） ✅
+  - **Status**: 完成
+  - **Tests**: 4 个测试用例全部通过
+    * `test_clarification_questions_format()` - 验证问题格式
+    * `test_clarification_with_version_missing()` - 验证版本信息缺失
+    * `test_clarification_with_error_missing()` - 验证错误信息缺失
+    * `test_clear_question_skips_clarification()` - 验证清晰问题跳过澄清
+  - **Location**: `tests/test_qa_agent.py:722-831`
+  - **Result**: ✅ 5/5 tests PASSED
+  - **Summary**: 详见 `PHASE_3.6_SUMMARY.md`
 
 ### 3.7 评估与优化
 
