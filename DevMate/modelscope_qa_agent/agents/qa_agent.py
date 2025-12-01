@@ -21,6 +21,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from models.schemas import ConversationState, TechnicalAnswer
 from retrievers.hybrid_retriever import HybridRetriever
 from tools.clarification_tool import ClarificationTool
+from tools.progress_assessment_tool import ProgressAssessmentTool
 from core.memory_manager import MemoryManager
 
 
@@ -119,11 +120,21 @@ class ModelScopeQAAgent:
             max_tokens=4000
         )
 
+        # 初始化进度评估工具 (Phase 4.4: 对话进度评估)
+        self.progress_tool = ProgressAssessmentTool(
+            llm_api_key=llm_api_key,
+            model=model,
+            temperature=temperature,
+            turn_threshold=5  # 超过5轮触发主动总结
+        )
+
         # 构建 LangGraph 工作流
         self.workflow = StateGraph(ConversationState)
         self._build_graph()
 
         # 添加检查点器支持对话持久化
+        # T114: 多线程会话隔离 (Phase 4.3: 通过 thread_id 实现不同用户会话隔离)
+        # MemorySaver 基于 thread_id 进行状态隔离，确保不同用户的对话互不干扰
         self.checkpointer = MemorySaver()
         self.app = self.workflow.compile(checkpointer=self.checkpointer)
 
@@ -259,9 +270,15 @@ class ModelScopeQAAgent:
         Updates:
             - current_question: 当前用户问题
             - retrieved_documents: 检索到的相关文档列表
+            - turn_count: 对话轮次计数 (T112: Phase 4.3)
         """
         # 获取最后一条消息作为问题
         question = state["messages"][-1].content
+
+        # T112: 增加对话轮次计数 (Phase 4.3: 多轮对话状态管理)
+        current_turn = state.get("turn_count", 0)
+        state["turn_count"] = current_turn + 1
+        print(f"📊 当前对话轮次: {state['turn_count']}")
 
         # 执行混合检索
         try:
@@ -368,6 +385,44 @@ class ModelScopeQAAgent:
                 confidence_score=0.0
             )
             state["generated_answer"] = fallback_answer.model_dump()
+
+        # T118: 主动总结和进度评估 (Phase 4.4: 对话进度评估)
+        # 检查是否需要进行进度评估
+        turn_count = state.get("turn_count", 0)
+        if self.progress_tool.should_assess(turn_count):
+            print(f"\n🔔 触发进度评估（轮次 >= {self.progress_tool.turn_threshold}）")
+            try:
+                # 执行进度评估
+                assessment = self.progress_tool.assess_progress(
+                    messages=state.get("messages", []),
+                    turn_count=turn_count,
+                    current_question=state.get("current_question", "")
+                )
+
+                # 格式化评估摘要
+                assessment_summary = self.progress_tool.format_assessment_summary(assessment)
+                print(assessment_summary)
+
+                # 将评估结果添加到答案中（作为附加信息）
+                answer_dict = state["generated_answer"]
+
+                # 在 solutions 中添加进度总结
+                progress_note = f"\n\n📊 **对话进度总结**（第 {turn_count} 轮）:\n"
+                progress_note += f"- 已尝试: {', '.join(assessment.attempted_solutions[:3])}\n"
+                progress_note += f"- 建议: {assessment.recommendation_reason}"
+
+                if assessment.needs_human_support:
+                    progress_note += f"\n⚠️  建议寻求人工技术支持"
+
+                # 添加到第一个解决方案
+                if answer_dict.get("solutions"):
+                    answer_dict["solutions"][0] += progress_note
+
+                state["generated_answer"] = answer_dict
+
+            except Exception as e:
+                print(f"⚠️  进度评估失败: {e}")
+                # 评估失败不影响正常流程
 
         return state
 
@@ -538,17 +593,36 @@ class ModelScopeQAAgent:
         print(f"{'='*70}\n")
 
         try:
-            # 调用工作流
-            result = self.app.invoke(
-                {
+            # T113: 会话恢复逻辑 (Phase 4.3: 多轮对话状态管理)
+            # 尝试获取现有会话状态
+            existing_state = self.get_state(thread_id)
+
+            if existing_state:
+                # 会话已存在，恢复状态并继续对话
+                print(f"♻️  恢复现有会话 (轮次: {existing_state.get('turn_count', 0)})")
+                # 只需要传入新消息，LangGraph 会自动合并现有状态
+                initial_state = {
+                    "messages": [HumanMessage(content=question)]
+                }
+            else:
+                # 新会话，初始化完整状态
+                print(f"🆕 创建新会话")
+                initial_state = {
                     "messages": [HumanMessage(content=question)],
                     "current_question": "",
                     "retrieved_documents": [],
                     "generated_answer": {},
                     "needs_clarification": False,  # Phase 3.6: 澄清标记
                     "clarification_questions": [],  # Phase 3.6: 澄清问题列表
-                    "turn_count": 0
-                },
+                    "turn_count": 0,
+                    "thread_id": thread_id,
+                    "last_updated": "",
+                    "conversation_summary": None
+                }
+
+            # 调用工作流
+            result = self.app.invoke(
+                initial_state,
                 config={"configurable": {"thread_id": thread_id}}
             )
 

@@ -709,18 +709,107 @@
 
 ### 4.3 多轮对话状态管理
 
-- [ ] [T112] [P2] [US2] 添加 `turn_count` 字段到 ConversationState
-- [ ] [T113] [P2] [US2] 实现会话恢复逻辑（基于 thread_id）
-- [ ] [T114] [P2] [US2] 实现多线程会话隔离（不同用户互不干扰）
-- [ ] [T115] [P2] [US2] 测试场景:处理不同格式信息（代码、配置、日志,对应 spec.md:107）
-- [ ] [T116] [P2] [US2] 编写多轮对话测试 `tests/test_qa_agent.py::test_multi_turn_qa`
+- [x] [T112] [P2] [US2] 添加 `turn_count` 字段到 ConversationState ✅
+  - **Status**: 完成
+  - **Summary**: 在 `_retrieve_documents()` 方法中添加 turn_count 自动递增逻辑
+  - **Implementation**: 在 agents/qa_agent.py:267-270 添加计数逻辑
+  - **Details**: 每次检索时自动递增，初始值为 0
+  - **Logging**: 添加"📊 当前对话轮次"日志输出
+
+- [x] [T113] [P2] [US2] 实现会话恢复逻辑（基于 thread_id） ✅
+  - **Status**: 完成
+  - **Summary**: 增强 `invoke()` 方法以支持会话状态恢复
+  - **Implementation**: 在 agents/qa_agent.py:547-572 添加会话恢复逻辑
+  - **Features**:
+    - 调用前检查现有会话状态 (`get_state()`)
+    - 现有会话：只传入新消息，LangGraph 自动合并状态
+    - 新会话：初始化完整状态字段
+  - **Logging**: "♻️ 恢复现有会话" / "🆕 创建新会话"
+
+- [x] [T114] [P2] [US2] 实现多线程会话隔离（不同用户互不干扰） ✅
+  - **Status**: 完成
+  - **Summary**: 通过 LangGraph MemorySaver + thread_id 实现会话隔离
+  - **Implementation**: 在 agents/qa_agent.py:127-130 添加文档注释
+  - **Mechanism**: MemorySaver 基于 thread_id 进行状态隔离
+  - **Note**: 已有机制，通过 checkpointer 的 thread_id 参数自动实现
+  - **Validation**: 不同 thread_id 的会话完全独立，互不干扰
+
+- [x] [T115] [P2] [US2] 测试场景:处理不同格式信息（代码、配置、日志,对应 spec.md:107） ✅
+  - **Status**: 完成
+  - **Summary**: 创建测试验证处理不同格式内容的能力
+  - **File**: `tests/test_state_management.py::TestDifferentContentFormats` (4 tests)
+  - **Tests**:
+    - test_handle_code_format: 验证处理代码块（```python）
+    - test_handle_configuration_format: 验证处理配置文件（```yaml）
+    - test_handle_log_format: 验证处理日志信息（[ERROR]）
+    - test_handle_mixed_formats_in_conversation: 验证混合格式处理
+  - **Results**: 4/4 passed ✅
+
+- [x] [T116] [P2] [US2] 编写多轮对话测试 `tests/test_qa_agent.py::test_multi_turn_qa` ✅
+  - **Status**: 完成
+  - **Summary**: 创建完整的多轮对话状态管理测试套件
+  - **File**: `tests/test_state_management.py` (16 tests)
+  - **Test Classes**:
+    - TestTurnCountManagement: turn_count 字段管理（3 tests）
+    - TestSessionRecovery: 会话恢复逻辑（4 tests）
+    - TestMultiThreadSessionIsolation: 多线程隔离（2 tests）
+    - TestDifferentContentFormats: 不同格式处理（4 tests）
+    - TestMultiTurnConversation: 多轮对话综合（3 tests）
+  - **Results**: 16/16 passed (100%) ✅
+  - **Coverage**: 初始化、递增、持久化、恢复、隔离、格式处理、错误恢复
 
 ### 4.4 对话进度评估
 
-- [ ] [T117] [P2] [US2] 实现 `assess_progress()` 评估问题解决进度
-- [ ] [T118] [P2] [US2] 实现主动总结已尝试方法和排除的可能性
-- [ ] [T119] [P2] [US2] 测试场景:对话超过5轮主动总结（对应 spec.md:108）
-- [ ] [T120] [P2] [US2] 建议是否转向其他排查路径或人工支持
+- [x] [T117] [P2] [US2] 实现 `assess_progress()` 评估问题解决进度 ✅
+  - **Status**: 完成
+  - **Summary**: 创建 ProgressAssessmentTool 实现进度评估功能
+  - **File**: `tools/progress_assessment_tool.py` (500+ 行)
+  - **Features**:
+    - 评估问题解决进度和置信度
+    - 总结已尝试的方案
+    - 识别已排除的可能性
+    - 列出剩余可尝试选项
+    - 提供后续行动建议（continue/pivot/escalate）
+  - **Data Model**: ProgressAssessment (Pydantic)
+
+- [x] [T118] [P2] [US2] 实现主动总结已尝试方法和排除的可能性 ✅
+  - **Status**: 完成
+  - **Summary**: 在 QA Agent 中集成进度评估工具
+  - **Implementation**: 在 agents/qa_agent.py:389-426 添加主动评估逻辑
+  - **Trigger**: 对话轮次 >= 5 时自动触发
+  - **Integration**:
+    - 在 `_generate_answer()` 方法中检查轮次
+    - 调用 `progress_tool.assess_progress()`
+    - 将评估摘要添加到答案中
+  - **Logging**: "🔔 触发进度评估"
+
+- [x] [T119] [P2] [US2] 测试场景:对话超过5轮主动总结（对应 spec.md:108） ✅
+  - **Status**: 完成
+  - **Summary**: 创建完整的进度评估测试套件
+  - **File**: `tests/test_progress_assessment.py` (18 tests)
+  - **Test Classes**:
+    - TestProgressAssessmentFunction: 核心评估功能（4 tests）
+    - TestActiveSummarization: 主动总结功能（4 tests）
+    - TestMultiTurnActiveSummary: 多轮触发测试（3 tests）
+    - TestRecommendations: 建议功能测试（5 tests）
+    - TestProgressAssessmentIntegration: 集成测试（2 tests）
+  - **Results**: 18/18 passed (100%) ✅
+  - **Coverage**: 轮次判断、评估生成、摘要格式化、集成触发
+
+- [x] [T120] [P2] [US2] 建议是否转向其他排查路径或人工支持 ✅
+  - **Status**: 完成
+  - **Summary**: 实现智能建议逻辑
+  - **Implementation**: 在 ProgressAssessmentTool 中实现三级建议
+  - **建议类型**:
+    - "continue": 继续当前路径（轮次 < 6）
+    - "pivot": 转向其他角度（轮次 6-7）
+    - "escalate": 寻求人工支持（轮次 >= 8）
+  - **Features**:
+    - 基于轮次和解决状态自动判断
+    - 提供建议理由
+    - 列出具体的下一步行动
+    - 标记是否需要人工支持
+  - **Validation**: 6 个专项测试全部通过
 
 ---
 
