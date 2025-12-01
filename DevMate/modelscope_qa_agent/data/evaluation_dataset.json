@@ -1,0 +1,320 @@
+[
+  {
+    "question": "如何使用 transformers 库加载 Qwen-7B 模型？",
+    "ground_truth": "使用 AutoModelForCausalLM.from_pretrained('Qwen/Qwen-7B') 方法加载模型。需要先安装 transformers 库，然后使用 from_pretrained 方法指定模型名称或路径。建议同时加载 tokenizer 使用 AutoTokenizer.from_pretrained()。",
+    "contexts": [
+      "Qwen 系列模型可以通过 Hugging Face transformers 库加载。",
+      "使用 AutoModelForCausalLM 类来加载因果语言模型。",
+      "模型名称格式为 'Qwen/Qwen-7B'，也可以使用本地路径。"
+    ],
+    "category": "model_usage"
+  },
+  {
+    "question": "ModelScope 平台上如何下载模型？",
+    "ground_truth": "使用 ModelScope SDK 的 snapshot_download 函数下载模型。需要先安装 modelscope 库，然后调用 snapshot_download('model_id', cache_dir='path') 下载模型到指定目录。",
+    "contexts": [
+      "ModelScope SDK 提供 snapshot_download 函数用于下载模型。",
+      "下载时需要指定 model_id 和 cache_dir 参数。",
+      "可以使用 revision 参数指定模型版本。"
+    ],
+    "category": "platform_usage"
+  },
+  {
+    "question": "Qwen-VL 模型支持哪些图像输入格式？",
+    "ground_truth": "Qwen-VL 支持 JPG、PNG、BMP 等常见图像格式。图像可以通过 URL 或本地路径输入。建议图像尺寸在 224x224 到 1024x1024 之间以获得最佳效果。",
+    "contexts": [
+      "Qwen-VL 是多模态视觉语言模型，支持图像和文本输入。",
+      "支持的图像格式包括 JPG、PNG、BMP。",
+      "可以通过 URL 或本地文件路径输入图像。"
+    ],
+    "category": "multimodal"
+  },
+  {
+    "question": "如何解决 CUDA out of memory 错误？",
+    "ground_truth": "CUDA内存不足可以通过以下方法解决：1) 减小batch size；2) 使用梯度累积；3) 启用混合精度训练(fp16/bf16)；4) 使用模型量化；5) 使用gradient checkpointing；6) 升级到更大显存的GPU。",
+    "contexts": [
+      "CUDA out of memory 是GPU显存不足的常见错误。",
+      "可以通过减小batch size来降低显存使用。",
+      "混合精度训练可以减少一半的显存占用。",
+      "模型量化可以将模型大小压缩到原来的1/4。"
+    ],
+    "category": "error_handling"
+  },
+  {
+    "question": "如何在魔搭社区创建自己的模型空间？",
+    "ground_truth": "在魔搭社区创建模型空间的步骤：1) 登录魔搭账号；2) 进入'模型'页面；3) 点击'创建模型'按钮；4) 填写模型名称、描述、标签等信息；5) 选择模型类型(公开/私有)；6) 上传模型文件或连接Git仓库。",
+    "contexts": [
+      "魔搭社区支持用户创建自己的模型空间。",
+      "可以选择公开或私有模型。",
+      "支持直接上传模型文件或连接Git仓库。"
+    ],
+    "category": "platform_usage"
+  },
+  {
+    "question": "如何使用 ModelScope Pipeline 进行文本分类？",
+    "ground_truth": "使用 Pipeline API 进行文本分类：from modelscope.pipelines import pipeline; classifier = pipeline('text-classification', model='model_id'); result = classifier('输入文本')。返回结果包含标签和置信度。",
+    "contexts": [
+      "ModelScope Pipeline 提供简化的模型调用接口。",
+      "text-classification 任务用于文本分类。",
+      "需要指定 task 类型和 model_id。"
+    ],
+    "category": "model_usage"
+  },
+  {
+    "question": "Qwen 模型的 tokenizer 有什么特点？",
+    "ground_truth": "Qwen tokenizer 基于 tiktoken，支持约 150K 词汇量。特点包括：1) 高效的编码解码速度；2) 对中英文都有良好支持；3) 支持特殊token如<|im_start|>、<|im_end|>；4) 兼容 ChatML 格式。",
+    "contexts": [
+      "Qwen tokenizer 基于 tiktoken 实现。",
+      "词汇量约为 150K。",
+      "支持中英文双语编码。",
+      "使用 ChatML 格式进行对话。"
+    ],
+    "category": "model_details"
+  },
+  {
+    "question": "如何在 CPU 上运行 Qwen-7B 模型？",
+    "ground_truth": "在CPU上运行Qwen-7B：1) 加载模型时不指定device，或显式指定device='cpu'；2) 使用 torch_dtype=torch.float32 避免精度问题；3) 考虑使用 8-bit 量化减少内存占用；4) 注意CPU推理速度较慢，适合测试而非生产环境。",
+    "contexts": [
+      "Qwen-7B 可以在 CPU 上运行，但速度较慢。",
+      "需要约 28GB 内存运行 float32 版本。",
+      "使用量化可以减少内存需求。"
+    ],
+    "category": "deployment"
+  },
+  {
+    "question": "如何微调 Qwen 模型？",
+    "ground_truth": "微调 Qwen 模型的步骤：1) 准备训练数据(JSON/JSONL格式)；2) 使用 LoRA 或 QLoRA 降低显存需求；3) 使用 transformers Trainer 或 swift 框架；4) 设置合适的学习率(1e-4到1e-5)；5) 训练并评估模型；6) 合并 LoRA 权重(如需要)。",
+    "contexts": [
+      "Qwen 模型支持多种微调方法。",
+      "推荐使用 LoRA 进行参数高效微调。",
+      "可以使用 ModelScope Swift 框架简化微调流程。",
+      "训练数据需要按照特定格式组织。"
+    ],
+    "category": "training"
+  },
+  {
+    "question": "ModelScope 支持哪些深度学习框架？",
+    "ground_truth": "ModelScope 主要支持 PyTorch 框架，部分模型支持 TensorFlow。推荐使用 PyTorch 1.11+ 版本。通过 ModelScope SDK 可以无缝集成这些框架。",
+    "contexts": [
+      "ModelScope 主要支持 PyTorch 框架。",
+      "部分模型提供 TensorFlow 版本。",
+      "建议使用 PyTorch 1.11 或更高版本。"
+    ],
+    "category": "platform_details"
+  },
+  {
+    "question": "如何解决模型加载时的 'Checkpoint' 错误？",
+    "ground_truth": "Checkpoint 错误通常由以下原因导致：1) 模型文件损坏或下载不完整，需重新下载；2) 版本不兼容，检查 transformers 版本；3) 权限问题，检查文件访问权限；4) 磁盘空间不足，清理缓存。使用 huggingface-cli scan-cache 查看缓存。",
+    "contexts": [
+      "Checkpoint 错误通常与模型文件相关。",
+      "可能是下载不完整导致的。",
+      "需要检查 transformers 库版本兼容性。"
+    ],
+    "category": "error_handling"
+  },
+  {
+    "question": "Qwen-Audio 模型可以处理哪些音频任务？",
+    "ground_truth": "Qwen-Audio 支持多种音频任务：1) 语音识别(ASR)；2) 音频问答；3) 音乐理解；4) 声音分类；5) 语音翻译。可以处理各种音频格式如 WAV、MP3、FLAC 等。",
+    "contexts": [
+      "Qwen-Audio 是多模态音频语言模型。",
+      "支持语音识别、音频问答等任务。",
+      "可以处理多种音频格式。"
+    ],
+    "category": "multimodal"
+  },
+  {
+    "question": "如何设置模型的 generation_config？",
+    "ground_truth": "设置 generation_config 的方法：1) 直接传参：model.generate(max_length=100, temperature=0.7, top_p=0.9)；2) 使用 GenerationConfig 对象：from transformers import GenerationConfig; config = GenerationConfig(max_length=100); 3) 修改模型的默认配置：model.generation_config.max_length = 100。",
+    "contexts": [
+      "generation_config 控制文本生成的参数。",
+      "可以通过 generate() 方法的参数设置。",
+      "常用参数包括 max_length、temperature、top_p。"
+    ],
+    "category": "model_usage"
+  },
+  {
+    "question": "如何在 ModelScope 上查找适合情感分析的模型？",
+    "ground_truth": "在 ModelScope 查找情感分析模型：1) 访问 modelscope.cn；2) 在搜索框输入'情感分析'或'sentiment analysis'；3) 使用筛选器选择任务类型为'文本分类'；4) 查看模型的评分、下载量和文档；5) 推荐模型：structbert-base-chinese-sentiment。",
+    "contexts": [
+      "ModelScope 提供丰富的情感分析模型。",
+      "可以使用搜索和筛选功能查找模型。",
+      "模型页面包含详细的使用文档和示例。"
+    ],
+    "category": "platform_usage"
+  },
+  {
+    "question": "Qwen 模型的上下文长度限制是多少？",
+    "ground_truth": "Qwen 模型的上下文长度因版本而异：Qwen-7B 支持 8K tokens；Qwen-14B/72B 支持 32K tokens；Qwen-Long 支持 100K+ tokens。使用时需注意输入长度不要超过模型的最大上下文长度。",
+    "contexts": [
+      "不同版本的 Qwen 模型支持不同的上下文长度。",
+      "Qwen-7B 支持 8K tokens。",
+      "Qwen-Long 可以处理超长文本。"
+    ],
+    "category": "model_details"
+  },
+  {
+    "question": "如何使用 vLLM 部署 Qwen 模型？",
+    "ground_truth": "使用 vLLM 部署 Qwen：1) 安装 vLLM：pip install vllm；2) 启动服务：python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen-7B-Chat；3) 使用 OpenAI API 格式调用；4) 可以设置 --tensor-parallel-size 启用多GPU。",
+    "contexts": [
+      "vLLM 是高性能的 LLM 推理引擎。",
+      "支持 Qwen 系列模型部署。",
+      "提供 OpenAI 兼容的 API 接口。",
+      "支持多 GPU 并行推理。"
+    ],
+    "category": "deployment"
+  },
+  {
+    "question": "如何解决 'EOFError: Ran out of input' 错误？",
+    "ground_truth": "EOFError 通常表示模型文件损坏或下载不完整。解决方法：1) 清除缓存：rm -rf ~/.cache/huggingface/hub；2) 重新下载模型；3) 检查网络连接；4) 使用断点续传工具如 huggingface-cli download；5) 验证文件完整性。",
+    "contexts": [
+      "EOFError 表示文件读取到末尾时出错。",
+      "通常是模型文件损坏导致。",
+      "需要清除缓存并重新下载。"
+    ],
+    "category": "error_handling"
+  },
+  {
+    "question": "ModelScope MCP 是什么？",
+    "ground_truth": "ModelScope MCP (Model Capability Platform) 是魔搭社区提供的模型能力平台，提供模型推理、训练、评估等一站式服务。支持无代码使用模型、在线训练、API 调用等功能。",
+    "contexts": [
+      "MCP 是 ModelScope 的模型能力平台。",
+      "提供无代码的模型使用方式。",
+      "支持在线训练和推理服务。"
+    ],
+    "category": "platform_details"
+  },
+  {
+    "question": "如何量化 Qwen 模型以节省显存？",
+    "ground_truth": "量化 Qwen 模型的方法：1) INT8量化：使用 load_in_8bit=True 参数；2) INT4量化：使用 load_in_4bit=True 和 BitsAndBytesConfig；3) GPTQ量化：使用 AutoGPTQForCausalLM；4) AWQ量化：使用 autoawq 库。建议使用 4-bit 量化，可节省约 75% 显存。",
+    "contexts": [
+      "量化可以显著减少模型显存占用。",
+      "BitsAndBytes 支持 8-bit 和 4-bit 量化。",
+      "GPTQ 和 AWQ 是更高级的量化方法。",
+      "4-bit 量化可节省约 75% 显存。"
+    ],
+    "category": "optimization"
+  },
+  {
+    "question": "如何处理 Qwen 模型生成的重复文本？",
+    "ground_truth": "解决重复文本问题的方法：1) 调整 repetition_penalty 参数(1.1-1.5)；2) 启用 no_repeat_ngram_size 参数(如设为 3)；3) 降低 temperature(0.7-0.8)；4) 使用 top_p 采样(0.8-0.95)；5) 检查输入prompt是否合理。",
+    "contexts": [
+      "repetition_penalty 可以惩罚重复生成。",
+      "no_repeat_ngram_size 禁止n-gram重复。",
+      "适当的 temperature 和 top_p 可以提升生成质量。"
+    ],
+    "category": "model_usage"
+  },
+  {
+    "question": "ModelScope Studio 支持哪些功能？",
+    "ground_truth": "ModelScope Studio 是在线开发环境，支持：1) Jupyter Notebook 编程；2) 数据集管理；3) 模型训练和微调；4) 可视化实验管理；5) 一键部署为应用；6) 团队协作功能。提供免费的 GPU/CPU 算力。",
+    "contexts": [
+      "ModelScope Studio 是在线开发环境。",
+      "支持 Jupyter Notebook 编程。",
+      "提供免费的计算资源。",
+      "支持模型训练和部署。"
+    ],
+    "category": "platform_details"
+  },
+  {
+    "question": "如何实现 Qwen 模型的流式输出？",
+    "ground_truth": "实现流式输出的方法：1) 使用 TextIteratorStreamer：from transformers import TextIteratorStreamer; streamer = TextIteratorStreamer(tokenizer); 2) 在 generate() 中传入 streamer 参数；3) 在单独线程中运行生成；4) 迭代 streamer 获取输出。或使用 generate() 的 stream=True 参数。",
+    "contexts": [
+      "流式输出可以实时显示生成过程。",
+      "使用 TextIteratorStreamer 实现流式输出。",
+      "需要在单独线程中运行生成过程。"
+    ],
+    "category": "model_usage"
+  },
+  {
+    "question": "如何在 ModelScope 上发布自己训练的模型？",
+    "ground_truth": "发布模型到 ModelScope：1) 创建模型仓库；2) 准备模型文件(config.json, pytorch_model.bin等)；3) 编写 README.md 说明文档；4) 使用 Git 或 ModelScope SDK 上传；5) 填写模型卡片信息(标签、任务类型等)；6) 提交审核。",
+    "contexts": [
+      "ModelScope 支持用户发布自己的模型。",
+      "需要准备完整的模型文件和文档。",
+      "可以使用 Git 或 SDK 上传模型。"
+    ],
+    "category": "platform_usage"
+  },
+  {
+    "question": "Qwen-Chat 和 Qwen-Base 有什么区别？",
+    "ground_truth": "Qwen-Chat 和 Qwen-Base 的区别：1) Base 是预训练基座模型，适合继续训练；2) Chat 是经过对齐训练的对话模型，可直接用于聊天；3) Chat 使用 ChatML 格式，Base 使用纯文本；4) Chat 更安全，有内容过滤；5) 应用场景：Base 用于微调，Chat 用于直接部署。",
+    "contexts": [
+      "Qwen-Base 是预训练基座模型。",
+      "Qwen-Chat 是对话优化版本。",
+      "Base 适合微调，Chat 适合直接使用。"
+    ],
+    "category": "model_details"
+  },
+  {
+    "question": "如何设置 Qwen 模型的系统提示词？",
+    "ground_truth": "设置系统提示词使用 ChatML 格式：messages = [{'role': 'system', 'content': '你是一个有帮助的助手'}, {'role': 'user', 'content': '用户问题'}]。使用 apply_chat_template() 方法格式化：text = tokenizer.apply_chat_template(messages, tokenize=False)。",
+    "contexts": [
+      "Qwen-Chat 使用 ChatML 格式。",
+      "系统提示词通过 system role 设置。",
+      "使用 apply_chat_template 格式化消息。"
+    ],
+    "category": "model_usage"
+  },
+  {
+    "question": "如何监控模型推理的性能指标？",
+    "ground_truth": "监控模型性能的方法：1) 使用 time 模块测量延迟；2) 记录 tokens/second 吞吐量；3) 使用 torch.cuda.memory_allocated() 监控显存；4) 集成 Prometheus 指标；5) 使用 LangSmith 或 Weights & Biases 平台；6) 记录每个请求的详细日志。",
+    "contexts": [
+      "性能监控包括延迟、吞吐量、显存使用等。",
+      "可以使用 Python time 模块测量时间。",
+      "专业监控工具如 Prometheus、LangSmith。"
+    ],
+    "category": "monitoring"
+  },
+  {
+    "question": "如何解决 'CUDA error: device-side assert triggered' 错误？",
+    "ground_truth": "Device-side assert 错误的解决方法：1) 运行 CUDA_LAUNCH_BLOCKING=1 获取详细错误；2) 检查输入数据范围是否合法；3) 检查索引是否越界；4) 验证 token ids 在词汇表范围内；5) 检查 attention_mask 形状；6) 更新 CUDA 和 PyTorch 版本。",
+    "contexts": [
+      "Device-side assert 通常是数据或索引问题。",
+      "需要使用 CUDA_LAUNCH_BLOCKING 调试。",
+      "常见原因：索引越界、数据范围异常。"
+    ],
+    "category": "error_handling"
+  },
+  {
+    "question": "ModelScope 的 Swift 框架有什么优势？",
+    "ground_truth": "Swift (Scalable lightWeight Infrastructure for Fine-Tuning) 的优势：1) 支持 250+ 模型的开箱即用微调；2) 集成 LoRA、QLoRA、AdaLoRA 等高效方法；3) 提供简单的命令行和 Python 接口；4) 自动处理数据格式转换；5) 内置实验管理和可视化；6) 支持分布式训练。",
+    "contexts": [
+      "Swift 是 ModelScope 的微调框架。",
+      "支持大量预训练模型。",
+      "集成多种高效微调方法。",
+      "提供简单易用的接口。"
+    ],
+    "category": "platform_details"
+  },
+  {
+    "question": "如何处理 Qwen 模型的多轮对话历史？",
+    "ground_truth": "处理多轮对话历史：1) 使用 messages 列表累积对话：[{'role': 'user', 'content': '...'}, {'role': 'assistant', 'content': '...'}]；2) 使用滑动窗口保留最近N轮；3) 定期总结早期对话；4) 注意总 token 数不要超过上下文长度；5) 使用 tokenizer.apply_chat_template() 格式化。",
+    "contexts": [
+      "多轮对话需要维护消息历史列表。",
+      "使用滑动窗口限制历史长度。",
+      "注意控制总 token 数量。"
+    ],
+    "category": "model_usage"
+  },
+  {
+    "question": "如何评估 RAG 系统的检索质量？",
+    "ground_truth": "评估 RAG 检索质量的指标：1) Recall@K：前K个结果中相关文档的比例；2) MRR (Mean Reciprocal Rank)：第一个相关结果的位置；3) NDCG：考虑排序的归一化折损累积增益；4) Precision@K：前K个结果的精确率；5) 使用 RAGAs 框架进行自动评估。",
+    "contexts": [
+      "RAG 系统需要评估检索和生成两个环节。",
+      "常用指标：Recall、MRR、NDCG。",
+      "RAGAs 提供自动化评估工具。"
+    ],
+    "category": "evaluation"
+  },
+  {
+    "question": "如何优化向量检索的速度？",
+    "ground_truth": "优化向量检索速度的方法：1) 使用 HNSW 索引而非 FLAT；2) 调整 HNSW 参数 (M, efConstruction, efSearch)；3) 使用量化技术(Product Quantization)；4) 批量查询而非单条；5) 使用 GPU 加速(如 Faiss GPU)；6) 缓存热门查询结果；7) 分片和负载均衡。",
+    "contexts": [
+      "HNSW 索引比 FLAT 更快。",
+      "量化可以减少索引大小并加速。",
+      "批量查询可以提升吞吐量。",
+      "可以使用 GPU 加速检索。"
+    ],
+    "category": "optimization"
+  }
+]
