@@ -38,6 +38,60 @@ class SessionDeleteResponse(BaseModel):
     message: str
 
 
+@router.get("", response_model=List[SessionInfo], summary="列出会话")
+async def list_sessions(
+    user_id: Optional[str] = None,
+    app_request: Request = None
+):
+    """
+    列出会话 (T043)
+
+    Args:
+        user_id: 可选的用户ID过滤，如果不提供则返回所有会话
+        app_request: FastAPI Request 对象,用于访问 session_manager
+
+    Returns:
+        会话信息列表，按最后活跃时间倒序排序
+    """
+    try:
+        # 从 app state 获取 session_manager
+        session_manager = getattr(app_request.app.state, 'session_manager', None)
+
+        if session_manager is None:
+            raise HTTPException(
+                status_code=503,
+                detail="会话管理器未初始化,请检查服务配置"
+            )
+
+        # 获取会话列表
+        sessions_data = session_manager.list_sessions(user_id=user_id)
+
+        # 转换为响应格式
+        sessions = []
+        for session_data in sessions_data:
+            sessions.append(
+                SessionInfo(
+                    session_id=session_data["session_id"],
+                    user_id=session_data["user_id"],
+                    created_at=session_data["created_at"],
+                    last_active=session_data["last_active"],
+                    turn_count=int(session_data.get("turn_count", 0))
+                )
+            )
+
+        return sessions
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"列出会话失败: {str(e)}"
+        )
+
+
 @router.post("", response_model=SessionInfo, summary="创建新会话")
 async def create_session(
     request: SessionCreateRequest = SessionCreateRequest(),

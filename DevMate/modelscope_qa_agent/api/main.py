@@ -404,13 +404,27 @@ async def ask_question(request: QuestionRequest):
         import uuid
         session_id = request.session_id or str(uuid.uuid4())
 
+        # T032: Load conversation history from SessionManager
+        conversation_history = []
+        if session_manager and session_id:
+            try:
+                history_turns = session_manager.get_conversation_history(session_id)
+                # Convert ConversationTurn to messages format
+                for turn in history_turns:
+                    from langchain_core.messages import HumanMessage, AIMessage
+                    conversation_history.append(HumanMessage(content=turn.question))
+                    conversation_history.append(AIMessage(content=turn.answer))
+            except Exception as e:
+                print(f"Warning: Failed to load conversation history: {e}")
+
         # 调用完整的 QA Agent
         from agents.simple_agent import invoke_agent
 
         result = invoke_agent(
             agent=qa_agent,
             question=request.question.strip(),
-            session_id=session_id
+            session_id=session_id,
+            conversation_history=conversation_history
         )
 
         # 提取 Agent 返回的结果
@@ -455,6 +469,40 @@ async def ask_question(request: QuestionRequest):
                     "score": float(score)
                 }
                 sources.append(source_info)
+
+        # T032: Save conversation turn to SessionManager
+        if session_manager and session_id:
+            try:
+                from services.session_manager import ConversationTurn
+                from datetime import datetime as dt
+
+                # Ensure session exists
+                existing_session = session_manager.get_session(session_id)
+                if not existing_session:
+                    # Create session if it doesn't exist
+                    print(f"⚠️  Session {session_id} not found, creating new one")
+                    new_session_id = session_manager.create_session(user_id="anonymous")
+                    if new_session_id != session_id:
+                        # Update session_id if a new one was created
+                        session_id = new_session_id
+                        print(f"✅ Created new session: {session_id}")
+
+                turn = ConversationTurn(
+                    question=request.question.strip(),
+                    answer=final_answer,
+                    timestamp=dt.now(),
+                    sources=[{"source": s["source"], "score": s["score"]} for s in sources],
+                    confidence=confidence_score
+                )
+                success = session_manager.add_conversation_turn(session_id, turn)
+                if success:
+                    print(f"✅ Saved conversation turn to session {session_id}")
+                else:
+                    print(f"❌ Failed to save conversation turn to session {session_id}")
+            except Exception as e:
+                print(f"Warning: Failed to save conversation turn: {e}")
+                import traceback
+                traceback.print_exc()
 
         # 返回响应
         return AnswerResponse(

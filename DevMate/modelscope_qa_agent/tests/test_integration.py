@@ -663,5 +663,114 @@ class TestAPIIntegration:
         print("✅ API 端点结构测试通过")
 
 
+class TestSessionRecovery:
+    """测试会话恢复功能 (T051)"""
+
+    @pytest.mark.asyncio
+    async def test_session_recovery_after_page_refresh(self):
+        """
+        测试页面刷新后会话恢复
+
+        场景:
+        1. 用户创建会话并进行对话
+        2. 模拟页面刷新（重新加载会话）
+        3. 验证对话历史保留
+        """
+        import httpx
+
+        API_BASE = "http://localhost:8000"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # 1. 创建会话
+            print("\n📝 创建新会话...")
+            response = await client.post(f"{API_BASE}/api/v2/sessions")
+            assert response.status_code == 200
+            session_data = response.json()
+            session_id = session_data["session_id"]
+            print(f"✅ 会话创建成功: {session_id}")
+
+            # 2. 进行对话
+            print("\n📝 第一轮对话...")
+            response = await client.post(
+                f"{API_BASE}/api/question",
+                json={
+                    "question": "什么是机器学习?",
+                    "session_id": session_id
+                }
+            )
+            assert response.status_code == 200
+            answer1 = response.json()
+            print(f"✅ 第一轮回答: {answer1['answer'][:50]}...")
+
+            print("\n📝 第二轮对话...")
+            response = await client.post(
+                f"{API_BASE}/api/question",
+                json={
+                    "question": "它有哪些应用?",
+                    "session_id": session_id
+                }
+            )
+            assert response.status_code == 200
+            answer2 = response.json()
+            print(f"✅ 第二轮回答: {answer2['answer'][:50]}...")
+
+            # 3. 模拟页面刷新：重新获取会话
+            print("\n📝 模拟页面刷新，重新加载会话...")
+            response = await client.get(f"{API_BASE}/api/v2/sessions/{session_id}")
+            assert response.status_code == 200
+            recovered_session = response.json()
+            print(f"✅ 会话恢复成功: {recovered_session['turn_count']} 轮对话")
+
+            # 4. 获取对话历史
+            print("\n📝 获取对话历史...")
+            response = await client.get(f"{API_BASE}/api/v2/sessions/{session_id}/history")
+            assert response.status_code == 200
+            history = response.json()
+
+            # 验证历史记录完整
+            assert len(history) == 2, f"应有2轮对话,实际: {len(history)}"
+            assert history[0]["question"] == "什么是机器学习?"
+            assert history[1]["question"] == "它有哪些应用?"
+            print(f"✅ 对话历史完整: {len(history)} 轮")
+
+            # 5. 验证可以继续对话
+            print("\n📝 验证可以继续对话...")
+            response = await client.post(
+                f"{API_BASE}/api/question",
+                json={
+                    "question": "能举个例子吗?",
+                    "session_id": session_id
+                }
+            )
+            assert response.status_code == 200
+            answer3 = response.json()
+            print(f"✅ 第三轮回答: {answer3['answer'][:50]}...")
+
+            # 清理
+            await client.delete(f"{API_BASE}/api/v2/sessions/{session_id}")
+            print("\n✅ 会话恢复测试通过!")
+
+    @pytest.mark.asyncio
+    async def test_session_expiry_handling(self):
+        """
+        测试会话过期处理
+
+        场景:
+        1. 尝试访问不存在的会话
+        2. 验证返回 404 错误
+        """
+        import httpx
+
+        API_BASE = "http://localhost:8000"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # 尝试访问不存在的会话
+            fake_session_id = "non-existent-session-12345"
+            response = await client.get(f"{API_BASE}/api/v2/sessions/{fake_session_id}")
+
+            assert response.status_code == 404
+            print("✅ 不存在的会话返回 404 错误")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

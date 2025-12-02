@@ -279,21 +279,21 @@ python3 -c "from config.config_loader import get_config; config = get_config(); 
 
 ### 6.1 会话管理 API (US4)
 
-- [ ] T043 [P] [US4] 在 api/routers/session.py 中实现 GET /api/v2/sessions 端点 (列出会话)
-- [ ] T044 [P] [US4] 在 api/routers/session.py 中实现 GET /api/v2/sessions/{session_id} 端点 (获取会话详情)
-- [ ] T045 [P] [US4] 在 api/routers/session.py 中实现 DELETE /api/v2/sessions/{session_id} 端点 (删除会话)
+- [x] T043 [P] [US4] 在 api/routers/session.py 中实现 GET /api/v2/sessions 端点 (列出会话)
+- [x] T044 [P] [US4] 在 api/routers/session.py 中实现 GET /api/v2/sessions/{session_id} 端点 (获取会话详情)
+- [x] T045 [P] [US4] 在 api/routers/session.py 中实现 DELETE /api/v2/sessions/{session_id} 端点 (删除会话)
 
 ### 6.2 前端会话管理 (US4)
 
-- [ ] T046 [US4] 在 api/static/index.html 中实现页面加载时的会话初始化
-- [ ] T047 [US4] 在 api/static/index.html 中添加"新建会话"按钮
-- [ ] T048 [US4] 在 api/static/index.html 中实现会话列表侧边栏
-- [ ] T049 [US4] 在 api/static/index.html 中实现会话切换逻辑
+- [x] T046 [US4] 在 api/static/index.html 中实现页面加载时的会话初始化
+- [x] T047 [US4] 在 api/static/index.html 中添加"新建会话"按钮
+- [x] T048 [US4] 在 api/static/index.html 中实现会话列表侧边栏
+- [x] T049 [US4] 在 api/static/index.html 中实现会话切换逻辑
 
 ### 6.3 测试 (US4)
 
-- [ ] T050 [US4] 在 tests/test_concurrent.py 中创建多用户隔离测试
-- [ ] T051 [US4] 在 tests/test_integration.py 中创建会话恢复测试
+- [x] T050 [US4] 在 tests/test_concurrent.py 中创建多用户隔离测试
+- [x] T051 [US4] 在 tests/test_integration.py 中创建会话恢复测试
 
 **依赖**: US2 (阶段 4) 必须完成 (需要会话管理基础)
 

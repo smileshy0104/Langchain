@@ -258,6 +258,47 @@ class SessionManager:
             session_id, _ = sessions_with_time[i]
             self.delete_session(session_id)
 
+    def list_sessions(self, user_id: Optional[str] = None) -> List[dict]:
+        """
+        列出会话
+
+        Args:
+            user_id: 用户ID，如果为 None 则列出所有会话（仅用于管理）
+
+        Returns:
+            会话信息列表
+        """
+        sessions = []
+
+        if user_id:
+            # 获取特定用户的会话
+            user_sessions_key = f"user:{user_id}:sessions"
+            session_ids = self.redis_client.smembers(user_sessions_key)
+        else:
+            # 获取所有会话 (扫描所有 session:* 键)
+            session_keys = []
+            cursor = 0
+            while True:
+                cursor, keys = self.redis_client.scan(cursor, match="session:*", count=100)
+                # 过滤出会话键（不包括历史键）
+                session_keys.extend([k for k in keys if ":history" not in k])
+                if cursor == 0:
+                    break
+
+            # 从键中提取 session_id
+            session_ids = [key.split("session:")[1] for key in session_keys]
+
+        # 获取每个会话的详细信息
+        for session_id in session_ids:
+            session_data = self.get_session(session_id)
+            if session_data:
+                sessions.append(session_data)
+
+        # 按最后活跃时间倒序排序
+        sessions.sort(key=lambda x: x.get("last_active", ""), reverse=True)
+
+        return sessions
+
     def ping(self) -> bool:
         """
         测试 Redis 连接
