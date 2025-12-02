@@ -51,6 +51,16 @@ agent:
   max_conversation_turns: 10       # 最大对话轮数
   context_window_size: 4000        # 上下文窗口大小
   progress_threshold: 5            # 进度评估触发轮数
+  clarification:
+    enabled: true                  # 是否启用主动澄清
+    threshold: 0.6                 # 触发澄清的置信度阈值
+    max_attempts: 2                # 最大澄清尝试次数
+
+# Session 配置
+session:
+  ttl: 3600                        # 会话过期时间(秒)，默认1小时
+  max_sessions_per_user: 5         # 每个用户最大会话数
+  cleanup_interval: 300            # 清理过期会话的间隔(秒)，默认5分钟
 
 # 应用配置
 app:

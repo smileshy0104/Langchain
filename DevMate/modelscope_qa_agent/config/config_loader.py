@@ -124,11 +124,19 @@ class RetrievalConfig(BaseModel):
     bm25_weight: float = Field(default=0.4, ge=0.0, le=1.0)
 
 
+class ClarificationConfig(BaseModel):
+    """主动澄清配置"""
+    enabled: bool = Field(default=True, description="是否启用主动澄清")
+    threshold: float = Field(default=0.6, ge=0.0, le=1.0, description="触发澄清的置信度阈值")
+    max_attempts: int = Field(default=2, ge=1, description="最大澄清尝试次数")
+
+
 class AgentConfig(BaseModel):
     """Agent 配置"""
     max_conversation_turns: int = Field(default=10, ge=1)
     context_window_size: int = Field(default=4000, ge=100)
     progress_threshold: int = Field(default=5, ge=1, description="进度评估触发轮数")
+    clarification: ClarificationConfig = Field(default_factory=ClarificationConfig)
 
 
 class AppConfig(BaseModel):
@@ -148,6 +156,13 @@ class AppConfig(BaseModel):
         return v_upper
 
 
+class SessionConfig(BaseModel):
+    """会话配置"""
+    ttl: int = Field(default=3600, ge=60, description="会话过期时间(秒)")
+    max_sessions_per_user: int = Field(default=5, ge=1, description="每个用户最大会话数")
+    cleanup_interval: int = Field(default=300, ge=60, description="清理过期会话的间隔(秒)")
+
+
 class LangSmithConfig(BaseModel):
     """LangSmith 配置"""
     enabled: bool = Field(default=False)
@@ -163,6 +178,7 @@ class Config(BaseModel):
     redis: RedisConfig
     retrieval: RetrievalConfig
     agent: AgentConfig
+    session: SessionConfig
     app: AppConfig
     langsmith: LangSmithConfig = Field(default_factory=LangSmithConfig)
 

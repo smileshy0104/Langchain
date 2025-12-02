@@ -97,11 +97,11 @@ graph TD
 
 **任务清单**:
 
-- [ ] T001 在 modelscope_qa_agent/requirements.txt 中添加 LangGraph 及相关依赖
-- [ ] T002 在 modelscope_qa_agent/requirements.txt 中添加 Redis Python 客户端 (redis-py)
-- [ ] T003 [P] 在 config/config.yaml 中添加 agent 和 session 配置段
-- [ ] T004 [P] 创建 agents/ 模块目录结构 (agents/__init__.py, agents/state.py, agents/nodes.py, agents/prompts.py)
-- [ ] T005 [P] 创建 api/routers/ 目录用于模块化路由 (api/routers/__init__.py, api/routers/qa.py, api/routers/session.py, api/routers/admin.py)
+- [x] T001 在 modelscope_qa_agent/requirements.txt 中添加 LangGraph 及相关依赖
+- [x] T002 在 modelscope_qa_agent/requirements.txt 中添加 Redis Python 客户端 (redis-py)
+- [x] T003 [P] 在 config/config.yaml 中添加 agent 和 session 配置段
+- [x] T004 [P] 创建 agents/ 模块目录结构 (agents/__init__.py, agents/state.py, agents/nodes.py, agents/prompts.py)
+- [x] T005 [P] 创建 api/routers/ 目录用于模块化路由 (api/routers/__init__.py, api/routers/qa.py, api/routers/session.py, api/routers/admin.py)
 
 **验证方法**:
 ```bash
@@ -122,12 +122,12 @@ grep -E "agent:|session:" modelscope_qa_agent/config/config.yaml
 
 **任务清单**:
 
-- [ ] T006 在 agents/state.py 中实现 AgentState TypedDict 定义
-- [ ] T007 [P] 在 services/session_manager.py 中实现 SessionManager 类及 Redis CRUD 操作
-- [ ] T008 [P] 在 services/session_manager.py 中实现 ConversationTurn 数据类
-- [ ] T009 更新 config_loader.py 以加载 agent 和 session 配置
-- [ ] T010 [P] 在 agents/prompts.py 中创建基础 Agent 提示词库
-- [ ] T011 在 api/main.py 的启动事件中添加 Redis 连接初始化
+- [x] T006 在 agents/state.py 中实现 AgentState TypedDict 定义
+- [x] T007 [P] 在 services/session_manager.py 中实现 SessionManager 类及 Redis CRUD 操作
+- [x] T008 [P] 在 services/session_manager.py 中实现 ConversationTurn 数据类
+- [x] T009 更新 config_loader.py 以加载 agent 和 session 配置
+- [x] T010 [P] 在 agents/prompts.py 中创建基础 Agent 提示词库
+- [x] T011 在 api/main.py 的启动事件中添加 Redis 连接初始化
 
 **验证方法**:
 ```bash
@@ -158,22 +158,22 @@ python3 -c "from config.config_loader import get_config; config = get_config(); 
 
 ### 3.1 Agent 核心逻辑 (US1)
 
-- [ ] T012 [US1] 在 agents/nodes.py 中实现 question_analysis_node (问题分析节点)
-- [ ] T013 [US1] 在 agents/nodes.py 中实现 retrieval_node (检索节点,集成 retrieval.hybrid_retrieval)
-- [ ] T014 [US1] 在 agents/nodes.py 中实现 answer_generation_node (答案生成节点)
-- [ ] T015 [US1] 在 agents/qa_agent.py 中创建 LangGraph 工作流及 create_agent() 函数
+- [x] T012 [US1] 在 agents/nodes.py 中实现 question_analysis_node (问题分析节点)
+- [x] T013 [US1] 在 agents/nodes.py 中实现 retrieval_node (检索节点,集成 retrieval.hybrid_retrieval)
+- [x] T014 [US1] 在 agents/nodes.py 中实现 answer_generation_node (答案生成节点)
+- [x] T015 [US1] 在 agents/simple_agent.py 中创建 LangGraph 工作流及 create_agent() 函数
 
 ### 3.2 API 实现 (US1)
 
-- [ ] T016 [P] [US1] 在 api/routers/qa.py 中实现 POST /api/v2/qa/ask 端点
-- [ ] T017 [P] [US1] 在 api/main.py 中实现 GET /api/health 健康检查端点
-- [ ] T018 [P] [US1] 在 agents/nodes.py 的 answer_generation_node 中实现置信度评分逻辑
+- [x] T016 [P] [US1] 在 api/routers/qa.py 中实现 POST /api/v2/qa/ask 端点
+- [x] T017 [P] [US1] 在 api/main.py 中实现 GET /api/health 健康检查端点
+- [x] T018 [P] [US1] 在 agents/nodes.py 的 answer_generation_node 中实现置信度评分逻辑
 
 ### 3.3 前端更新 (US1)
 
-- [ ] T019 [US1] 更新 api/static/index.html 以展示答案和来源
-- [ ] T020 [US1] 在 api/static/index.html 中添加加载状态指示器
-- [ ] T021 [US1] 在 api/static/index.html 中实现置信度评分显示
+- [x] T019 [US1] 更新 api/static/index.html 以展示答案和来源
+- [x] T020 [US1] 在 api/static/index.html 中添加加载状态指示器
+- [x] T021 [US1] 在 api/static/index.html 中实现置信度评分显示
 
 ### 3.4 集成与测试 (US1)
 

@@ -26,6 +26,10 @@ import uvicorn
 
 from config.config_loader import load_config
 from services.document_upload_service import DocumentUploadService
+from services.session_manager import SessionManager
+from agents.simple_agent import create_agent
+from core.llm_client import TongyiLLMClient
+from api.routers import qa_router, session_router, admin_router
 
 # 初始化 FastAPI 应用
 app = FastAPI(
@@ -48,8 +52,16 @@ static_dir = project_root / "api" / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# 注册路由
+app.include_router(qa_router)
+app.include_router(session_router)
+app.include_router(admin_router)
+
 # 全局服务实例
 doc_service: Optional[DocumentUploadService] = None
+session_manager: Optional[SessionManager] = None
+qa_agent: Optional[Any] = None
+llm_client: Optional[Any] = None
 
 
 # ========== Pydantic Models ==========
@@ -86,7 +98,7 @@ class SystemStatusResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """应用启动时初始化服务"""
-    global doc_service
+    global doc_service, session_manager, qa_agent, llm_client
 
     print("\n" + "=" * 70)
     print("启动魔搭社区智能答疑系统 API 服务")
@@ -99,10 +111,102 @@ async def startup_event():
         print(f"   - AI Provider: {config.ai.provider}")
         print(f"   - Storage Type: {config.storage.type}")
         print(f"   - Milvus: {config.milvus.host}:{config.milvus.port}")
+        print(f"   - Redis: {config.redis.host}:{config.redis.port}")
+
+        # 初始化 Redis 会话管理器
+        try:
+            session_manager = SessionManager()
+            if session_manager.ping():
+                print(f"✅ Redis 连接成功")
+                print(f"   - TTL: {config.session.ttl}秒")
+                print(f"   - 最大会话数/用户: {config.session.max_sessions_per_user}")
+            else:
+                print(f"⚠️  Redis 连接失败,会话功能将不可用")
+                session_manager = None
+        except Exception as e:
+            print(f"⚠️  Redis 初始化失败: {e}")
+            session_manager = None
 
         # 初始化文档上传服务
         doc_service = DocumentUploadService(config)
         print(f"✅ 文档上传服务初始化成功")
+
+        # 初始化 LLM 客户端
+        try:
+            # 根据配置创建对应的 LLM 客户端
+            if config.ai.provider == "volcengine":
+                # 使用豆包 (VolcEngine) - 需要导入相应的客户端
+                from langchain_community.chat_models import ChatTongyi
+                # 创建一个简单的 wrapper
+                class VolcEngineLLM:
+                    def __init__(self, api_key, base_url, model_name, temperature, top_p):
+                        # VolcEngine 使用兼容 OpenAI 的 API
+                        from langchain_openai import ChatOpenAI
+                        self.llm = ChatOpenAI(
+                            api_key=api_key,
+                            base_url=base_url,
+                            model=model_name,
+                            temperature=temperature,
+                            top_p=top_p
+                        )
+
+                    def invoke(self, messages):
+                        return self.llm.invoke(messages)
+
+                llm_client = VolcEngineLLM(
+                    api_key=config.ai.api_key,
+                    base_url=config.ai.base_url,
+                    model_name=config.ai.models["chat"],
+                    temperature=config.ai.parameters["temperature"],
+                    top_p=config.ai.parameters["top_p"]
+                )
+            else:
+                # 使用通义千问
+                from core.llm_client import TongyiLLMClient
+                llm_client = TongyiLLMClient(
+                    api_key=config.ai.api_key,
+                    model_name=config.ai.models["chat"],
+                    temperature=config.ai.parameters["temperature"],
+                    top_p=config.ai.parameters["top_p"]
+                )
+            print(f"✅ LLM 客户端初始化成功 (提供商: {config.ai.provider}, 模型: {config.ai.models['chat']})")
+        except Exception as e:
+            print(f"⚠️  LLM 客户端初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            llm_client = None
+
+        # 初始化 QA Agent
+        try:
+            # 获取检索器
+            vector_store = doc_service.vector_store.get_vector_store()
+
+            # 加载文档用于 BM25 (简化版本:使用向量存储中的文档)
+            # 注意:生产环境应该维护一个专门的文档集合
+            try:
+                from retrievers.hybrid_retriever import HybridRetriever
+                # 暂时使用空列表,实际应该从向量库加载
+                retriever = HybridRetriever(
+                    vector_store=vector_store,
+                    documents=[],  # TODO: 加载文档
+                    vector_weight=config.retrieval.vector_weight,
+                    bm25_weight=config.retrieval.bm25_weight,
+                    top_k=config.retrieval.top_k
+                )
+                print(f"✅ 混合检索器初始化成功")
+            except Exception as e:
+                print(f"⚠️  混合检索器初始化失败: {e}, 使用向量检索")
+                retriever = None
+
+            # 创建 Agent
+            qa_agent = create_agent(retriever=retriever, llm=llm_client)
+            # 将 agent 存储到 app.state 中
+            app.state.qa_agent = qa_agent
+            print(f"✅ QA Agent 初始化成功")
+        except Exception as e:
+            print(f"⚠️  QA Agent 初始化失败: {e}")
+            qa_agent = None
+            app.state.qa_agent = None
 
     except Exception as e:
         print(f"❌ 服务初始化失败: {e}")
@@ -130,6 +234,13 @@ async def shutdown_event():
             print("✅ 向量存储连接已关闭")
         except Exception as e:
             print(f"⚠️  关闭向量存储时出错: {e}")
+
+    if session_manager:
+        try:
+            session_manager.redis_client.close()
+            print("✅ Redis 连接已关闭")
+        except Exception as e:
+            print(f"⚠️  关闭 Redis 连接时出错: {e}")
 
     print("API 服务已关闭\n")
 
