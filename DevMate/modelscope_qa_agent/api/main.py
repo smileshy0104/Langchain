@@ -364,52 +364,91 @@ async def upload_document(
 
 @app.post("/api/question", response_model=AnswerResponse, tags=["问答"])
 async def ask_question(request: QuestionRequest):
-    """提交问题并获取答案"""
-    if not doc_service:
-        raise HTTPException(status_code=503, detail="服务未初始化")
+    """提交问题并获取答案 - 使用完整 QA Agent"""
+    # 检查 QA Agent 是否已初始化
+    qa_agent = getattr(app.state, 'qa_agent', None)
 
-    try:
-        # TODO: 集成 QA Agent 进行问答
-        # 目前返回模拟响应
-
-        # 从向量数据库检索相关文档
-        vector_store = doc_service.vector_store.get_vector_store()
-
-        results = vector_store.similarity_search_with_score(
-            request.question,
-            k=request.top_k
+    if qa_agent is None:
+        raise HTTPException(
+            status_code=503,
+            detail="QA Agent 未初始化,请检查服务配置"
         )
 
-        # 构造来源文档列表
+    try:
+        # 生成或使用提供的 session_id
+        import uuid
+        session_id = request.session_id or str(uuid.uuid4())
+
+        # 调用完整的 QA Agent
+        from agents.simple_agent import invoke_agent
+
+        result = invoke_agent(
+            agent=qa_agent,
+            question=request.question.strip(),
+            session_id=session_id
+        )
+
+        # 提取 Agent 返回的结果
+        final_answer = result.get("final_answer")
+        confidence_score = result.get("confidence_score", 0.0)
+        retrieved_docs = result.get("retrieved_docs", [])
+
+        # 检查是否需要澄清
+        if result.get("need_clarification") or final_answer is None:
+            # 如果需要澄清,返回澄清问题作为答案
+            clarification_questions = result.get("clarification_questions", [])
+            if clarification_questions:
+                final_answer = "需要更多信息来回答您的问题:\n" + "\n".join(
+                    f"{i+1}. {q}" for i, q in enumerate(clarification_questions)
+                )
+            else:
+                final_answer = "抱歉,我需要更多信息才能回答您的问题。请提供更多详细信息。"
+            confidence_score = 0.0
+
+        # 确保 final_answer 不为 None
+        if final_answer is None:
+            final_answer = "抱歉,无法生成答案"
+
+        # 构建来源信息
         sources = []
-        for doc, score in results:
-            sources.append({
-                "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
-                "source": doc.metadata.get("source", "unknown"),
-                "score": float(score)
-            })
+        if retrieved_docs:
+            for doc in retrieved_docs[:request.top_k]:
+                # 处理不同的文档格式
+                if isinstance(doc, dict):
+                    content = doc.get("content", "")
+                    metadata = doc.get("metadata", {})
+                    score = doc.get("score", 0.0)
+                else:
+                    # 如果是 LangChain Document 对象
+                    content = getattr(doc, 'page_content', str(doc))
+                    metadata = getattr(doc, 'metadata', {})
+                    score = metadata.get('score', 0.0)
 
-        # 生成答案 (目前使用简单逻辑,后续集成 QA Agent)
-        if sources:
-            answer = f"根据检索到的 {len(sources)} 个相关文档,{request.question}\n\n"
-            answer += "相关内容:\n"
-            for i, source in enumerate(sources, 1):
-                answer += f"{i}. {source['content']}\n"
-        else:
-            answer = f"抱歉,没有找到与 '{request.question}' 相关的文档。请尝试上传相关文档或换个问法。"
+                source_info = {
+                    "content": content[:200] + "..." if len(content) > 200 else content,
+                    "source": metadata.get("source", "unknown"),
+                    "score": float(score)
+                }
+                sources.append(source_info)
 
-        session_id = request.session_id or f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
+        # 返回响应
         return AnswerResponse(
-            answer=answer,
+            answer=final_answer,
             sources=sources,
-            confidence=0.8 if sources else 0.0,
+            confidence=confidence_score,
             session_id=session_id,
             timestamp=datetime.now().isoformat()
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"问答处理失败: {str(e)}")
+        # 记录错误并返回友好的错误信息
+        import traceback
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"问答处理失败: {str(e)}"
+        )
 
 
 @app.get("/api/documents", tags=["文档管理"])
