@@ -312,25 +312,22 @@ def retrieval_node(state: AgentState, retriever=None, top_k: int = 3) -> Dict[st
 
     try:
         # 使用混合检索器检索文档
-        # HybridRetriever.retrieve() 返回 List[Tuple[Document, float]]
+        # HybridRetriever.retrieve() 返回 List[Document]
         results = retriever.retrieve(question, k=top_k)
 
         # 转换为字典格式便于序列化
         retrieved_docs = []
-        scores = []
 
-        for doc, score in results:
+        for doc in results:
             doc_dict = {
                 "content": doc.page_content,
-                "metadata": doc.metadata,
-                "score": float(score)
+                "metadata": doc.metadata
             }
             retrieved_docs.append(doc_dict)
-            scores.append(float(score))
 
-        # 计算平均置信度分数
-        if scores:
-            avg_confidence = sum(scores) / len(scores)
+        # 基于检索结果数量计算置信度
+        if retrieved_docs:
+            avg_confidence = min(len(retrieved_docs) / top_k, 1.0)
         else:
             avg_confidence = 0.0
 

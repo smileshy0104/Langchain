@@ -34,19 +34,21 @@ class HybridRetriever:
     def __init__(
         self,
         vector_store: Milvus,
-        documents: List[Document],
+        documents: Optional[List[Document]] = None,
         vector_weight: float = 0.6,
         bm25_weight: float = 0.4,
-        top_k: int = 10
+        top_k: int = 10,
+        use_bm25: bool = True
     ):
         """初始化混合检索器
 
         Args:
             vector_store: Milvus 向量存储实例
-            documents: BM25 检索器使用的文档列表
+            documents: BM25 检索器使用的文档列表(可选,如果为None则仅使用向量检索)
             vector_weight: 向量检索权重(默认 0.6)
             bm25_weight: BM25 检索权重(默认 0.4)
             top_k: 初步检索数量(默认 10)
+            use_bm25: 是否使用 BM25 检索(默认 True)
 
         Raises:
             ValueError: 如果权重之和不为 1.0
@@ -64,9 +66,11 @@ class HybridRetriever:
                 f"bm25_weight={bm25_weight}, sum={vector_weight + bm25_weight}"
             )
 
+        self.vector_store = vector_store
         self.vector_weight = vector_weight
         self.bm25_weight = bm25_weight
         self.top_k = top_k
+        self.use_bm25 = use_bm25
 
         # 初始化向量检索器
         self.vector_retriever = vector_store.as_retriever(
@@ -75,17 +79,23 @@ class HybridRetriever:
         )
 
         # 初始化 BM25 关键词检索器
-        if not documents:
-            raise ValueError("documents 列表不能为空,BM25 检索器需要文档集合")
-
-        self.bm25_retriever = BM25Retriever.from_documents(documents)
-        self.bm25_retriever.k = top_k
-
-        print(f"✅ HybridRetriever 初始化成功")
-        print(f"   - 向量权重: {vector_weight}")
-        print(f"   - BM25 权重: {bm25_weight}")
-        print(f"   - Top-K: {top_k}")
-        print(f"   - BM25 文档数: {len(documents)}")
+        self.bm25_retriever = None
+        if use_bm25 and documents and len(documents) > 0:
+            try:
+                self.bm25_retriever = BM25Retriever.from_documents(documents)
+                self.bm25_retriever.k = top_k
+                print(f"✅ HybridRetriever 初始化成功(混合模式)")
+                print(f"   - 向量权重: {vector_weight}")
+                print(f"   - BM25 权重: {bm25_weight}")
+                print(f"   - Top-K: {top_k}")
+                print(f"   - BM25 文档数: {len(documents)}")
+            except Exception as e:
+                print(f"⚠️  BM25 检索器初始化失败: {e}")
+                print(f"   降级为纯向量检索模式")
+                self.bm25_retriever = None
+        else:
+            print(f"✅ HybridRetriever 初始化成功(纯向量模式)")
+            print(f"   - Top-K: {top_k}")
 
     def retrieve(
         self,
@@ -116,15 +126,20 @@ class HybridRetriever:
         try:
             # 1. 分别获取向量检索和 BM25 检索结果
             vector_results = self._safe_retrieve(self.vector_retriever, query)
-            bm25_results = self._safe_retrieve(self.bm25_retriever, query)
 
-            # 2. 使用 RRF (Reciprocal Rank Fusion) 融合结果
-            results = self._fuse_results(
-                vector_results,
-                bm25_results,
-                self.vector_weight,
-                self.bm25_weight
-            )
+            # 如果 BM25 检索器可用,使用混合检索
+            if self.bm25_retriever is not None:
+                bm25_results = self._safe_retrieve(self.bm25_retriever, query)
+                # 2. 使用 RRF (Reciprocal Rank Fusion) 融合结果
+                results = self._fuse_results(
+                    vector_results,
+                    bm25_results,
+                    self.vector_weight,
+                    self.bm25_weight
+                )
+            else:
+                # 纯向量检索模式
+                results = vector_results
 
         except Exception as e:
             print(f"⚠️  混合检索失败: {e}")
@@ -382,6 +397,35 @@ class HybridRetriever:
 
         # 返回排序后的文档列表
         return [doc_objects[doc_hash] for doc_hash, score in sorted_docs]
+
+    def reload(self, documents: Optional[List[Document]] = None):
+        """重新加载检索器，更新文档列表
+
+        Args:
+            documents: 新的文档列表。如果为None，从Milvus加载所有文档
+        """
+        if not self.use_bm25:
+            print("⚠️  纯向量模式，无需重新加载")
+            return
+
+        if documents is None:
+            # 从 Milvus 加载所有文档 (使用通用查询词)
+            try:
+                results = self.vector_store.similarity_search("document", k=10000)
+                documents = results
+                print(f"✅ 从 Milvus 加载了 {len(documents)} 个文档")
+            except Exception as e:
+                print(f"⚠️  从 Milvus 加载文档失败: {e}")
+                return
+
+        if documents and len(documents) > 0:
+            try:
+                self.bm25_retriever = BM25Retriever.from_documents(documents)
+                self.bm25_retriever.k = self.top_k
+                print(f"✅ BM25 检索器已重新加载 ({len(documents)} 个文档)")
+            except Exception as e:
+                print(f"⚠️  BM25 检索器重新加载失败: {e}")
+                self.bm25_retriever = None
 
     def update_weights(self, vector_weight: float, bm25_weight: float):
         """动态更新检索权重

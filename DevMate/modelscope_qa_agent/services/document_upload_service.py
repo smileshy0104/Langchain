@@ -66,8 +66,8 @@ class DocumentUploadService:
         print("\n2. 初始化文档处理器")
         print("-" * 70)
         self.doc_processor = DocumentProcessor(
-            chunk_size=self.config.agent.context_window_size,
-            chunk_overlap=200
+            chunk_size=800,
+            chunk_overlap=150
         )
 
         # 3. 初始化向量存储管理器

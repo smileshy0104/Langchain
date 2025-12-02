@@ -64,6 +64,7 @@ doc_service: Optional[DocumentUploadService] = None
 session_manager: Optional[SessionManager] = None
 qa_agent: Optional[Any] = None
 llm_client: Optional[Any] = None
+retriever: Optional[Any] = None  # 存储 retriever 以便动态重新加载
 
 
 # ========== Pydantic Models ==========
@@ -187,22 +188,33 @@ async def startup_event():
             # 获取检索器
             vector_store = doc_service.vector_store.get_vector_store()
 
-            # 加载文档用于 BM25 (简化版本:使用向量存储中的文档)
-            # 注意:生产环境应该维护一个专门的文档集合
+            # 加载文档用于 BM25 (从 Milvus 加载现有文档)
             try:
                 from retrievers.hybrid_retriever import HybridRetriever
-                # 暂时使用空列表,实际应该从向量库加载
+
+                # 从 Milvus 加载现有文档用于 BM25
+                print("📚 从 Milvus 加载文档用于 BM25...")
+                try:
+                    documents = vector_store.similarity_search("document", k=10000)
+                    print(f"✅ 从 Milvus 加载了 {len(documents)} 个文档")
+                except Exception as e:
+                    print(f"⚠️  从 Milvus 加载文档失败: {e}, 使用纯向量模式")
+                    documents = []
+
                 retriever = HybridRetriever(
                     vector_store=vector_store,
-                    documents=[],  # TODO: 加载文档
+                    documents=documents,
                     vector_weight=config.retrieval.vector_weight,
                     bm25_weight=config.retrieval.bm25_weight,
                     top_k=config.retrieval.top_k
                 )
+                # 存储到全局变量以便后续重新加载
+                globals()['retriever'] = retriever
                 print(f"✅ 混合检索器初始化成功")
             except Exception as e:
                 print(f"⚠️  混合检索器初始化失败: {e}, 使用向量检索")
                 retriever = None
+                globals()['retriever'] = None
 
             # 创建 Agent
             qa_agent = create_agent(retriever=retriever, llm=llm_client)
@@ -351,6 +363,15 @@ async def upload_document(
             calculate_score=True,
             store_to_vector_db=store_to_db
         )
+
+        # 如果文档存储到向量数据库,重新加载 retriever
+        if store_to_db and globals().get('retriever'):
+            try:
+                print("🔄 重新加载 Retriever...")
+                globals()['retriever'].reload()
+                print("✅ Retriever 重新加载成功")
+            except Exception as e:
+                print(f"⚠️  Retriever 重新加载失败: {e}")
 
         return {
             "message": "文档上传成功",
