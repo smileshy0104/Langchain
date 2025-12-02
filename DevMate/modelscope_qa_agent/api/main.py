@@ -120,12 +120,16 @@ async def startup_event():
                 print(f"✅ Redis 连接成功")
                 print(f"   - TTL: {config.session.ttl}秒")
                 print(f"   - 最大会话数/用户: {config.session.max_sessions_per_user}")
+                # 存储到 app.state 以便路由访问
+                app.state.session_manager = session_manager
             else:
                 print(f"⚠️  Redis 连接失败,会话功能将不可用")
                 session_manager = None
+                app.state.session_manager = None
         except Exception as e:
             print(f"⚠️  Redis 初始化失败: {e}")
             session_manager = None
+            app.state.session_manager = None
 
         # 初始化文档上传服务
         doc_service = DocumentUploadService(config)

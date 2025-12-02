@@ -38,11 +38,12 @@ def create_agent(retriever=None, llm=None):
     workflow = StateGraph(AgentState)
 
     # 使用 partial 绑定 retriever 和 llm 参数到节点函数
+    question_analysis_node_with_deps = partial(question_analysis_node, llm=llm)
     retrieval_node_with_deps = partial(retrieval_node, retriever=retriever)
     answer_generation_node_with_deps = partial(answer_generation_node, llm=llm)
 
     # 添加节点
-    workflow.add_node("analyze", question_analysis_node)
+    workflow.add_node("analyze", question_analysis_node_with_deps)
     workflow.add_node("retrieve", retrieval_node_with_deps)
     workflow.add_node("generate", answer_generation_node_with_deps)
     workflow.add_node("clarify", clarify_node)
@@ -73,9 +74,14 @@ def create_agent(retriever=None, llm=None):
     return app
 
 
-def invoke_agent(agent, question: str, session_id: Optional[str] = None):
+def invoke_agent(
+    agent,
+    question: str,
+    session_id: Optional[str] = None,
+    conversation_history: Optional[list] = None
+):
     """
-    调用 Agent 进行问答
+    调用 Agent 进行问答 (支持多轮对话)
 
     便捷函数,用于调用编译后的 Agent
 
@@ -83,6 +89,7 @@ def invoke_agent(agent, question: str, session_id: Optional[str] = None):
         agent: 编译后的 Agent 工作流
         question: 用户问题
         session_id: 会话ID (可选)
+        conversation_history: 对话历史消息列表 (用于多轮对话)
 
     Returns:
         dict: Agent 执行结果,包含 final_answer, confidence_score 等
@@ -94,7 +101,7 @@ def invoke_agent(agent, question: str, session_id: Optional[str] = None):
     """
     # 初始化状态
     initial_state = {
-        "messages": [],
+        "messages": conversation_history or [],
         "question": question,
         "retrieved_docs": None,
         "need_clarification": False,
@@ -102,7 +109,8 @@ def invoke_agent(agent, question: str, session_id: Optional[str] = None):
         "final_answer": None,
         "confidence_score": None,
         "session_id": session_id,
-        "turn_count": 0
+        "turn_count": len(conversation_history) // 2 if conversation_history else 0,
+        "conversation_summary": None
     }
 
     # 调用 Agent

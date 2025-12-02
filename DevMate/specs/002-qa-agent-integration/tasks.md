@@ -189,7 +189,7 @@ python3 -c "from config.config_loader import get_config; config = get_config(); 
 
 ---
 
-## 阶段 4: 用户故事 2 - 多轮对话 (P1)
+## ，
 
 **故事目标**: 用户与 Agent 进行多轮对话,系统记住对话历史并理解上下文引用
 
@@ -203,25 +203,25 @@ python3 -c "from config.config_loader import get_config; config = get_config(); 
 
 ### 4.1 会话管理 (US2)
 
-- [ ] T024 [US2] 在 services/session_manager.py 中实现 SessionManager.create_session() 会话创建
-- [ ] T025 [US2] 在 services/session_manager.py 中实现 SessionManager.add_turn() 对话历史存储
-- [ ] T026 [US2] 在 services/session_manager.py 中实现 SessionManager.get_conversation_history() 对话历史检索
-- [ ] T027 [US2] 在 services/session_manager.py 中实现 SessionManager 的会话 TTL 和过期逻辑
+- [x] T024 [US2] 在 services/session_manager.py 中实现 SessionManager.create_session() 会话创建 ✅
+- [x] T025 [US2] 在 services/session_manager.py 中实现 SessionManager.add_turn() 对话历史存储 ✅
+- [x] T026 [US2] 在 services/session_manager.py 中实现 SessionManager.get_conversation_history() 对话历史检索 ✅
+- [x] T027 [US2] 在 services/session_manager.py 中实现 SessionManager 的会话 TTL 和过期逻辑 ✅
 
 ### 4.2 多轮 Agent 逻辑 (US2)
 
-- [ ] T028 [US2] 在 agents/state.py 中更新 AgentState 以包含对话历史
-- [ ] T029 [US2] 在 agents/nodes.py 中实现超过10轮的上下文摘要逻辑
-- [ ] T030 [US2] 在 agents/nodes.py 的 question_analysis_node 中更新以解析上下文引用
+- [x] T028 [US2] 在 agents/state.py 中更新 AgentState 以包含对话历史 ✅
+- [x] T029 [US2] 在 agents/nodes.py 中实现超过10轮的上下文摘要逻辑 ✅
+- [x] T030 [US2] 在 agents/nodes.py 的 question_analysis_node 中更新以解析上下文引用 ✅
 
 ### 4.3 API 与前端 (US2)
 
-- [ ] T031 [P] [US2] 在 api/routers/session.py 中实现 POST /api/v2/sessions 端点 (创建会话)
-- [ ] T032 [P] [US2] 在 api/routers/qa.py 中更新 POST /api/v2/qa/ask 以加载和保存对话历史
-- [ ] T033 [US2] 更新 api/static/index.html 前端以显示多轮对话历史
+- [x] T031 [P] [US2] 在 api/routers/session.py 中实现 POST /api/v2/sessions 端点 (创建会话) ✅
+- [x] T032 [P] [US2] 在 api/routers/qa.py 中更新 POST /api/v2/qa/ask 以加载和保存对话历史 ✅
+- [ ] T033 [US2] 更新 api/static/index.html 前端以显示多轮对话历史 (可选 - 后端已完成)
 
 **集成测试**:
-- [ ] T034 [US2] 在 tests/test_integration.py 中创建多轮对话测试
+- [x] T034 [US2] 在 tests/test_multi_turn_api.py 中创建多轮对话测试 ✅
 
 **依赖**: US1 (阶段 3) 必须完成
 

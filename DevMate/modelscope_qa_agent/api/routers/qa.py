@@ -37,12 +37,14 @@ class AnswerResponse(BaseModel):
 @router.post("/ask", response_model=AnswerResponse)
 async def ask_question(request: QuestionRequest, app_request: Request):
     """
-    提交问题并获取答案
+    提交问题并获取答案 (支持多轮对话 - T032)
 
     功能流程:
     1. 验证问题有效性
-    2. 调用 QA Agent 进行问答
-    3. 返回答案、来源和置信度
+    2. 加载对话历史 (如果是多轮对话)
+    3. 调用 QA Agent 进行问答
+    4. 保存对话轮次到会话历史
+    5. 返回答案、来源和置信度
 
     Args:
         request: 问题请求
@@ -51,8 +53,9 @@ async def ask_question(request: QuestionRequest, app_request: Request):
     Returns:
         答案响应,包含答案、来源文档和置信度
     """
-    # 从 app state 获取 qa_agent
+    # 从 app state 获取 qa_agent 和 session_manager
     qa_agent = getattr(app_request.app.state, 'qa_agent', None)
+    session_manager = getattr(app_request.app.state, 'session_manager', None)
 
     if qa_agent is None:
         raise HTTPException(
@@ -71,12 +74,37 @@ async def ask_question(request: QuestionRequest, app_request: Request):
         # 生成或使用提供的 session_id
         session_id = request.session_id or str(uuid.uuid4())
 
-        # 调用 Agent
+        # T032: 加载对话历史 (如果有 session_manager 且会话存在)
+        conversation_history = []
+        if session_manager:
+            try:
+                # 检查会话是否存在
+                session_data = session_manager.get_session(session_id)
+                if session_data:
+                    # 获取对话历史
+                    history_turns = session_manager.get_conversation_history(session_id)
+                    # 转换为 LangChain 消息格式
+                    from langchain_core.messages import HumanMessage, AIMessage
+                    for turn in history_turns:
+                        conversation_history.append(HumanMessage(content=turn.question))
+                        conversation_history.append(AIMessage(content=turn.answer))
+                else:
+                    # 会话不存在,创建新会话
+                    session_id = session_manager.create_session()
+            except Exception as e:
+                # 如果加载历史失败,继续执行但记录警告
+                print(f"⚠️  加载对话历史失败 (session_id={session_id}): {e}")
+                # 创建新会话
+                if session_manager:
+                    session_id = session_manager.create_session()
+
+        # 调用 Agent (传入对话历史)
         from agents.simple_agent import invoke_agent
         result = invoke_agent(
             agent=qa_agent,
             question=request.question.strip(),
-            session_id=session_id
+            session_id=session_id,
+            conversation_history=conversation_history
         )
 
         # 提取结果
@@ -99,6 +127,26 @@ async def ask_question(request: QuestionRequest, app_request: Request):
         # 确保final_answer不为None
         if final_answer is None:
             final_answer = "抱歉,无法生成答案"
+
+        # T032: 保存对话轮次到会话历史
+        if session_manager and not result.get("need_clarification"):
+            try:
+                from services.session_manager import ConversationTurn
+                turn = ConversationTurn(
+                    question=request.question.strip(),
+                    answer=final_answer,
+                    timestamp=datetime.now(),
+                    sources=[{
+                        "content": doc.get("content", "")[:200],
+                        "source": doc.get("metadata", {}).get("source", "unknown"),
+                        "score": doc.get("score", 0.0)
+                    } for doc in retrieved_docs[:request.top_k]],
+                    confidence=confidence_score
+                )
+                session_manager.add_conversation_turn(session_id, turn)
+            except Exception as e:
+                # 保存失败不影响返回结果,但记录警告
+                print(f"⚠️  保存对话轮次失败 (session_id={session_id}): {e}")
 
         # 构建来源信息
         sources = []

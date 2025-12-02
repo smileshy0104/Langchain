@@ -38,3 +38,6 @@ class AgentState(TypedDict):
 
     # 当前对话轮数
     turn_count: int
+
+    # 对话历史摘要 (T029 - 用于长对话压缩)
+    conversation_summary: Optional[str]
