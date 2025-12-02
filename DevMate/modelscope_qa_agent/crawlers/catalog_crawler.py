@@ -133,6 +133,12 @@ class CatalogCrawler(BaseCrawler):
                 'items': items
             }, filename)
 
+            # 为每个目录项保存Markdown
+            for i, item in enumerate(items, 1):
+                md_content = self.convert_to_markdown(item)
+                md_filename = f"{catalog_type}_{i}"
+                self.save_markdown(md_content, md_filename)
+
         return items
 
     def crawl(self) -> List[Dict]:

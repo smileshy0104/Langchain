@@ -147,9 +147,14 @@ class DocsCrawler(BaseCrawler):
         doc_data = self.extract_doc_content(soup, url)
         if doc_data:
             documents.append(doc_data)
-            # 保存单个文档
+            # 保存JSON格式
             filename = f"doc_{len(self.visited_urls)}.json"
             self.save_json(doc_data, filename)
+
+            # 保存Markdown格式
+            md_content = self.convert_to_markdown(doc_data)
+            md_filename = f"doc_{len(self.visited_urls)}"
+            self.save_markdown(md_content, md_filename)
 
         # 递归爬取链接
         if depth < self.max_depth:

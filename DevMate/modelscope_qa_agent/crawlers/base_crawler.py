@@ -28,6 +28,11 @@ class BaseCrawler(ABC):
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # 创建markdown子目录
+        self.markdown_dir = self.output_dir / "markdown"
+        self.markdown_dir.mkdir(parents=True, exist_ok=True)
+
         self.rate_limit = rate_limit
         self.last_request_time = 0
 
@@ -119,6 +124,88 @@ class BaseCrawler(ABC):
             f.write(content)
 
         print(f"✅ 已保存: {filepath}")
+
+    def save_markdown(self, content: str, filename: str):
+        """
+        保存Markdown文档
+
+        Args:
+            content: Markdown内容
+            filename: 文件名 (自动添加.md后缀)
+        """
+        if not filename.endswith('.md'):
+            filename = filename + '.md'
+
+        filepath = self.markdown_dir / filename
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        print(f"📝 已保存Markdown: {filepath}")
+
+    def convert_to_markdown(self, data: Dict) -> str:
+        """
+        将数据转换为Markdown格式
+
+        Args:
+            data: 文档数据字典
+
+        Returns:
+            Markdown格式文本
+        """
+        md_lines = []
+
+        # 标题
+        title = data.get('title', 'Untitled')
+        md_lines.append(f"# {title}\n")
+
+        # 元数据
+        md_lines.append("---\n")
+        if 'url' in data and data['url']:
+            md_lines.append(f"**URL**: {data['url']}\n")
+        if 'author' in data and data['author']:
+            md_lines.append(f"**作者**: {data['author']}\n")
+        if 'date' in data and data['date']:
+            md_lines.append(f"**日期**: {data['date']}\n")
+        if 'source' in data:
+            md_lines.append(f"**来源**: {data['source']}\n")
+        if 'tags' in data and data['tags']:
+            tags = ', '.join(data['tags']) if isinstance(data['tags'], list) else data['tags']
+            md_lines.append(f"**标签**: {tags}\n")
+        if 'language' in data and data['language']:
+            md_lines.append(f"**语言**: {data['language']}\n")
+        if 'stars' in data:
+            md_lines.append(f"**Stars**: ⭐ {data['stars']}\n")
+        if 'forks' in data:
+            md_lines.append(f"**Forks**: 🍴 {data['forks']}\n")
+        md_lines.append("---\n\n")
+
+        # 描述
+        if 'description' in data and data['description']:
+            md_lines.append("## 描述\n\n")
+            md_lines.append(f"{data['description']}\n\n")
+
+        # 主要内容
+        if 'content' in data and data['content']:
+            md_lines.append("## 内容\n\n")
+            md_lines.append(f"{data['content']}\n\n")
+
+        # README内容
+        if 'readme' in data and data['readme']:
+            md_lines.append("## README\n\n")
+            md_lines.append(f"{data['readme']}\n\n")
+
+        # 代码块
+        if 'code_blocks' in data and data['code_blocks']:
+            md_lines.append("## 代码示例\n\n")
+            for i, code in enumerate(data['code_blocks'], 1):
+                md_lines.append(f"### 示例 {i}\n\n")
+                md_lines.append("```\n")
+                md_lines.append(f"{code}\n")
+                md_lines.append("```\n\n")
+
+        return ''.join(md_lines)
 
     def load_checkpoint(self, checkpoint_file: str = "checkpoint.json") -> Dict:
         """

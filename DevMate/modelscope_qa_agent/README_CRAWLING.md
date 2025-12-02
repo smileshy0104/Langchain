@@ -4,6 +4,8 @@
 
 根据需求文档 (`need.md`) 中"4. 官方指定数据资源"的要求,本系统实现了完整的数据爬取、处理和导入流程。
 
+**✨ 新功能**: 所有爬取的数据现在会自动转换为**Markdown格式**并保存在独立的`markdown/`文件夹中,方便阅读和管理!
+
 ## 快速开始
 
 ### 1. 爬取所有数据源
@@ -48,14 +50,21 @@ scripts/
 data/
 ├── crawled/                    # 原始数据
 │   ├── docs/
+│   │   ├── doc_1.json         # JSON格式
+│   │   └── markdown/          # ✨ Markdown格式
+│   │       └── doc_1.md
 │   ├── learn/
+│   │   └── markdown/
 │   ├── github/
+│   │   └── markdown/
 │   └── catalog/
+│       └── markdown/
 └── processed/                  # 处理后数据
     └── all_documents.jsonl
 
 docs/
-└── DATA_CRAWLING.md            # 详细文档
+├── DATA_CRAWLING.md            # 详细文档
+└── MARKDOWN_EXPORT.md          # ✨ Markdown导出功能文档
 ```
 
 ## 使用指南
@@ -103,7 +112,14 @@ python scripts/ingest_crawled_data.py --dry-run
 - ✅ 元数据提取和增强
 - ✅ JSONL格式导出
 
-### 3. 断点续爬
+### 3. ✨ Markdown导出 (新功能)
+- ✅ 自动转换为Markdown格式
+- ✅ 保存在独立的`markdown/`文件夹
+- ✅ 保留元数据(URL、作者、标签等)
+- ✅ 格式化代码块
+- ✅ 支持所有数据源类型
+
+### 4. 断点续爬
 - ✅ 自动保存检查点
 - ✅ 中断后可继续
 - ✅ 避免重复爬取
@@ -221,6 +237,9 @@ pytest tests/test_crawlers.py -v
 
 # 测试单个功能
 pytest tests/test_crawlers.py::TestDocsCrawler -v
+
+# ✨ 测试Markdown导出功能
+python scripts/test_markdown_export.py
 ```
 
 ## 最佳实践
@@ -281,6 +300,7 @@ with open('data/processed/summary.json') as f:
 ## 相关文档
 
 - 📘 [详细爬取文档](docs/DATA_CRAWLING.md) - 完整的技术文档
+- ✨ [Markdown导出文档](docs/MARKDOWN_EXPORT.md) - Markdown导出功能详解
 - 📋 [需求文档](../need.md) - 竞赛需求
 - 🏗️ [项目README](README.md) - 项目总览
 

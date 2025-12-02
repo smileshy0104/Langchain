@@ -138,9 +138,14 @@ class GitHubCrawler(BaseCrawler):
                 repo_data = self.extract_repo_info(repo)
                 repo_data_list.append(repo_data)
 
-                # 保存单个仓库信息
+                # 保存JSON格式
                 filename = f"repo_{repo['name']}.json"
                 self.save_json(repo_data, filename)
+
+                # 保存Markdown格式
+                md_content = self.convert_to_markdown(repo_data)
+                md_filename = f"repo_{repo['name']}"
+                self.save_markdown(md_content, md_filename)
 
             # 保存汇总
             summary = {

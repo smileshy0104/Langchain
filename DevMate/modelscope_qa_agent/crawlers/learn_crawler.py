@@ -175,9 +175,15 @@ class LearnCrawler(BaseCrawler):
 
                 if article_data:
                     articles.append(article_data)
-                    # 保存单篇文章
+                    # 保存JSON格式
                     filename = f"article_{len(articles)}.json"
                     self.save_json(article_data, filename)
+
+                    # 保存Markdown格式
+                    md_content = self.convert_to_markdown(article_data)
+                    md_filename = f"article_{len(articles)}"
+                    self.save_markdown(md_content, md_filename)
+
                     self.visited_articles.add(url)
 
                 # 每10篇保存一次检查点
