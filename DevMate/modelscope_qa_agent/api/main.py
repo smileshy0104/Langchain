@@ -30,6 +30,7 @@ from services.session_manager import SessionManager
 from agents.simple_agent import create_agent
 from core.llm_client import TongyiLLMClient
 from api.routers import qa_router, session_router, admin_router
+from api.routers import milvus_admin
 
 # 初始化 FastAPI 应用
 app = FastAPI(
@@ -56,6 +57,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.include_router(qa_router)
 app.include_router(session_router)
 app.include_router(admin_router)
+app.include_router(milvus_admin.router)
 
 # 全局服务实例
 doc_service: Optional[DocumentUploadService] = None

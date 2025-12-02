@@ -265,8 +265,6 @@ python3 -c "from config.config_loader import get_config; config = get_config(); 
 - T035-T038 顺序执行 (工作流变更)
 - T039, T040, T041 可并行执行
 
----
-
 ## 阶段 6: 用户故事 4 - 会话管理与多用户支持 (P2)
 
 **故事目标**: 多用户并发使用,会话隔离,支持会话切换和恢复

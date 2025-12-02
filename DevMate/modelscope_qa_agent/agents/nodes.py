@@ -167,27 +167,31 @@ def detect_ambiguous_question(question: str, conversation_history: List) -> bool
             return True
 
     # 2. 检查是否包含模糊词汇
+    # 只检测真正模糊的词汇，排除可能在正常问题中出现的词
     ambiguous_keywords = [
-        "报错", "错误", "问题", "怎么办", "不行", "失败",
-        "出问题", "有问题", "不对", "异常", "bug",
-        "这个", "那个", "它", "不好用", "用不了"
+        "报错了", "怎么办", "不行", "出问题", "有问题", "问题了",
+        "不对", "不好用", "用不了", "这个", "那个", "失败"
     ]
     if any(keyword in question_lower for keyword in ambiguous_keywords):
         # 包含模糊词但没有具体信息
+        # 真正的具体信息应该是:错误消息、具体型号等
         specific_info_keywords = [
             "错误信息", "报错信息", "具体", "详细",
             "traceback", "error:", "exception:",
             "'", '"',  # 包含引号说明有具体错误信息
-            "no module", "cannot", "failed to"  # 具体错误模式
+            "no module", "cannot", "failed to",  # 具体错误模式
+            "qwen", "modelscope", "transformers",  # 具体产品名
+            "-", "v1", "v2", "版本"  # 版本号相关
         ]
         has_specific_info = any(keyword in question_lower for keyword in specific_info_keywords)
 
-        # 如果问题很短 (<10个汉字或<8个词) 且包含模糊词,认为需要澄清
+        # 如果问题包含模糊词但不够长也没有具体信息,需要澄清
+        # 中文: < 12个汉字, 英文: < 10个词
         if chinese_chars > 0:
-            if chinese_chars < 10 and not has_specific_info:
+            if chinese_chars < 2 and not has_specific_info:
                 return True
         else:
-            if len(question.split()) < 8 and not has_specific_info:
+            if len(question.split()) < 2 and not has_specific_info:
                 return True
 
     # 3. 检查是否缺少关键上下文 (仅当没有对话历史时)
@@ -573,18 +577,12 @@ def should_clarify(state: AgentState) -> str:
     Returns:
         下一个节点名称 ("clarify" 或 "generate")
     """
-    # 检查是否已经标记需要澄清
+    # 只在明确检测到模糊问题时才澄清
+    # 其他情况（如知识库没有相关文档）应该尝试生成答案，让LLM根据通用知识回答
     if state.get("need_clarification", False):
         return "clarify"
 
-    # 基于置信度决定
-    confidence = state.get("confidence_score", 0.0)
-    threshold = 0.4  # 置信度阈值
-
-    # 检查检索结果
-    retrieved_docs = state.get("retrieved_docs", [])
-
-    if not retrieved_docs or confidence < threshold:
-        return "clarify"
-
+    # 对于其他所有情况，都尝试生成答案
+    # 即使没有检索到文档，LLM也可能根据通用知识给出有用的回答
+    # 或者明确告诉用户知识库中没有相关信息
     return "generate"
