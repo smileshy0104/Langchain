@@ -17,6 +17,10 @@ pydantic-settings==2.1.0
 beautifulsoup4==4.12.0
 markdownify==0.11.6
 
+# Document Loading (unstructured)
+unstructured[md,docx,xlsx,pptx]==0.18.21
+pypandoc==1.16.2
+
 # Retrieval Enhancement
 rank-bm25==0.2.2
 
