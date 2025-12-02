@@ -1,11 +1,11 @@
 # AI服务配置
 ai:
-  provider: "volcengine"  # volcengine, openai, dashscope
-  api_key: "d0666bb8-8a41-42f4-bd06-94ca6ba08457"  # 请替换为您的API密钥
-  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  provider: "zhipu"  # volcengine, openai, dashscope, zhipu
+  api_key: "cebecc013a4a4d97a03fabd0def06cc7.3PXHNVR9VywSgjji"  # 智谱AI API密钥
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
   models:
-    embedding: "doubao-embedding-text-240715"  # 向量化模型
-    chat: "doubao-seed-1-6-250615"           # 聊天模型
+    embedding: "embedding-3"  # 智谱向量化模型
+    chat: "glm-4.5v"          # GLM-4.5v 聊天模型
   parameters:
     temperature: 0.3      # 温度参数 (0.0-2.0)
     top_p: 0.8           # Top-P 参数 (0.0-1.0)
@@ -30,7 +30,7 @@ milvus:
   host: "localhost"
   port: 19530
   collection_name: "modelscope_docs"
-  vector_dim: 2560  # doubao-embedding-text-240715 维度 (实际测试为2560维)
+  vector_dim: 2048  # zhipu embedding-3 维度 (2048维)
 
 # Redis 缓存配置
 redis:

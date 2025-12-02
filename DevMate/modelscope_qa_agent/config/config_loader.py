@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class AIConfig(BaseModel):
     """AI 服务配置"""
-    provider: str = Field(description="AI 服务提供商: volcengine, openai, dashscope")
+    provider: str = Field(description="AI 服务提供商: volcengine, openai, dashscope, zhipu")
     api_key: str = Field(description="API 密钥")
     base_url: Optional[str] = Field(default=None, description="API 基础 URL")
     models: Dict[str, str] = Field(description="模型配置 (embedding, chat)")
@@ -31,7 +31,7 @@ class AIConfig(BaseModel):
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """验证 provider"""
-        allowed = ["volcengine", "openai", "dashscope"]
+        allowed = ["volcengine", "openai", "dashscope", "zhipu"]
         if v not in allowed:
             raise ValueError(f"provider 必须是 {allowed} 之一, 收到: {v}")
         return v

@@ -141,14 +141,12 @@ async def startup_event():
         # 初始化 LLM 客户端
         try:
             # 根据配置创建对应的 LLM 客户端
-            if config.ai.provider == "volcengine":
-                # 使用豆包 (VolcEngine) - 需要导入相应的客户端
-                from langchain_community.chat_models import ChatTongyi
-                # 创建一个简单的 wrapper
-                class VolcEngineLLM:
+            if config.ai.provider in ["volcengine", "zhipu"]:
+                # 使用兼容 OpenAI API 的提供商 (豆包/智谱AI)
+                from langchain_openai import ChatOpenAI
+
+                class OpenAICompatibleLLM:
                     def __init__(self, api_key, base_url, model_name, temperature, top_p):
-                        # VolcEngine 使用兼容 OpenAI 的 API
-                        from langchain_openai import ChatOpenAI
                         self.llm = ChatOpenAI(
                             api_key=api_key,
                             base_url=base_url,
@@ -160,7 +158,7 @@ async def startup_event():
                     def invoke(self, messages):
                         return self.llm.invoke(messages)
 
-                llm_client = VolcEngineLLM(
+                llm_client = OpenAICompatibleLLM(
                     api_key=config.ai.api_key,
                     base_url=config.ai.base_url,
                     model_name=config.ai.models["chat"],

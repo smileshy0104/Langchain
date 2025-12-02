@@ -5,6 +5,7 @@
 - VolcEngine (火山引擎豆包)
 - OpenAI
 - DashScope (通义千问)
+- Zhipu AI (智谱AI)
 """
 
 from typing import List, Optional
@@ -27,7 +28,8 @@ class VolcEngineEmbeddings(Embeddings):
         self,
         api_key: str,
         model: str = "doubao-embedding-text-240715",
-        base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
+        base_url: str = "https://ark.cn-beijing.volces.com/api/v3",
+        batch_size: int = 100
     ):
         """初始化 VolcEngine Embeddings
 
@@ -35,10 +37,12 @@ class VolcEngineEmbeddings(Embeddings):
             api_key: API 密钥
             model: 模型名称
             base_url: API 基础 URL
+            batch_size: 批处理大小 (默认 100，智谱 AI 建议使用 64)
         """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
+        self.batch_size = batch_size
 
         # 使用 OpenAI 兼容的客户端
         try:
@@ -50,6 +54,7 @@ class VolcEngineEmbeddings(Embeddings):
             print(f"✅ VolcEngine Embeddings 初始化成功")
             print(f"   - 模型: {model}")
             print(f"   - Base URL: {base_url}")
+            print(f"   - 批处理大小: {batch_size}")
         except ImportError:
             raise ImportError(
                 "VolcEngine Embeddings 需要安装 openai 包:\n"
@@ -67,10 +72,9 @@ class VolcEngineEmbeddings(Embeddings):
         """
         embeddings = []
 
-        # 批处理 (每批最多 100 个)
-        batch_size = 100
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+        # 批处理 (使用配置的批处理大小)
+        for i in range(0, len(texts), self.batch_size):
+            batch = texts[i:i + self.batch_size]
 
             try:
                 response = self.client.embeddings.create(
@@ -155,10 +159,20 @@ def get_embeddings(config: AIConfig) -> Embeddings:
                 "  pip install langchain-openai"
             )
 
+    elif provider == "zhipu":
+        # 使用智谱 AI Embeddings (OpenAI 兼容)
+        # 智谱 AI 限制每次最多 64 条
+        return VolcEngineEmbeddings(
+            api_key=config.api_key,
+            model=embedding_model or "embedding-3",
+            base_url=config.base_url or "https://open.bigmodel.cn/api/paas/v4",
+            batch_size=64
+        )
+
     else:
         raise ValueError(
             f"不支持的 Embedding provider: {provider}\n"
-            f"支持的 providers: volcengine, dashscope, openai"
+            f"支持的 providers: volcengine, dashscope, openai, zhipu"
         )
 
 
