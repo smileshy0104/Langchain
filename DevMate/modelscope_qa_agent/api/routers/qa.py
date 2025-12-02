@@ -52,7 +52,7 @@ async def ask_question(request: QuestionRequest, app_request: Request):
         答案响应,包含答案、来源文档和置信度
     """
     # 从 app state 获取 qa_agent
-    qa_agent = app_request.app.state.__dict__.get('qa_agent')
+    qa_agent = getattr(app_request.app.state, 'qa_agent', None)
 
     if qa_agent is None:
         raise HTTPException(
@@ -80,19 +80,36 @@ async def ask_question(request: QuestionRequest, app_request: Request):
         )
 
         # 提取结果
-        final_answer = result.get("final_answer", "抱歉,无法生成答案")
+        final_answer = result.get("final_answer")
         confidence_score = result.get("confidence_score", 0.0)
         retrieved_docs = result.get("retrieved_docs", [])
 
+        # 检查是否需要澄清
+        if result.get("need_clarification") or final_answer is None:
+            # 如果需要澄清,返回澄清问题作为答案
+            clarification_questions = result.get("clarification_questions", [])
+            if clarification_questions:
+                final_answer = "需要更多信息来回答您的问题:\n" + "\n".join(
+                    f"{i+1}. {q}" for i, q in enumerate(clarification_questions)
+                )
+            else:
+                final_answer = "抱歉,我需要更多信息才能回答您的问题。请提供更多详细信息。"
+            confidence_score = 0.0
+
+        # 确保final_answer不为None
+        if final_answer is None:
+            final_answer = "抱歉,无法生成答案"
+
         # 构建来源信息
         sources = []
-        for doc in retrieved_docs[:request.top_k]:
-            source_info = SourceInfo(
-                content=doc.get("content", "")[:200] + "..." if len(doc.get("content", "")) > 200 else doc.get("content", ""),
-                source=doc.get("metadata", {}).get("source", "unknown"),
-                score=doc.get("score", 0.0)
-            )
-            sources.append(source_info)
+        if retrieved_docs:
+            for doc in retrieved_docs[:request.top_k]:
+                source_info = SourceInfo(
+                    content=doc.get("content", "")[:200] + "..." if len(doc.get("content", "")) > 200 else doc.get("content", ""),
+                    source=doc.get("metadata", {}).get("source", "unknown"),
+                    score=doc.get("score", 0.0)
+                )
+                sources.append(source_info)
 
         # 返回响应
         return AnswerResponse(

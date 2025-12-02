@@ -177,8 +177,8 @@ python3 -c "from config.config_loader import get_config; config = get_config(); 
 
 ### 3.4 集成与测试 (US1)
 
-- [ ] T022 [US1] 在 tests/test_integration.py 中创建单轮问答集成测试
-- [ ] T023 [US1] 验证端到端流程: 问题 → 检索 → 答案 → 展示
+- [x] T022 [US1] 在 tests/test_integration.py 中创建单轮问答集成测试
+- [x] T023 [US1] 验证端到端流程: 问题 → 检索 → 答案 → 展示
 
 **依赖**: 阶段 2 必须完成
 
