@@ -300,6 +300,39 @@
             font-size: 0.9em;
             opacity: 0.9;
         }
+
+        /* T041: Clarification message styles */
+        .message.clarification {
+            background: linear-gradient(135deg, #fff5e6 0%, #ffe6cc 100%);
+            border-left: 4px solid #ff9800;
+        }
+
+        .clarification-header {
+            font-weight: bold;
+            color: #e65100;
+            margin-bottom: 12px;
+            font-size: 1.05em;
+        }
+
+        .clarification-list {
+            margin: 15px 0;
+            padding-left: 25px;
+            line-height: 1.8;
+        }
+
+        .clarification-list li {
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .clarification-footer {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            font-size: 0.9em;
+            color: #666;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -603,8 +636,13 @@
 
                 const result = await response.json();
 
-                // Add assistant message with sources
-                addMessage('assistant', result.answer, result.sources, result.confidence);
+                // T040: Check if this is a clarification response
+                if (result.is_clarification && result.clarification_questions) {
+                    addClarificationMessage(result.clarification_questions);
+                } else {
+                    // Add assistant message with sources
+                    addMessage('assistant', result.answer, result.sources, result.confidence);
+                }
 
             } catch (error) {
                 addMessage('assistant', `抱歉,处理您的问题时出错: ${error.message}`, [], 0);
@@ -634,6 +672,34 @@
                 });
                 html += '</div>';
             }
+
+            messageDiv.innerHTML = html;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // T040: Add clarification message to chat
+        function addClarificationMessage(clarificationQuestions) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant clarification';
+
+            let html = `
+                <div class="message-header">AI 助手</div>
+                <div class="message-content">
+                    <div class="clarification-header">🤔 需要更多信息来回答您的问题:</div>
+                    <ul class="clarification-list">
+            `;
+
+            clarificationQuestions.forEach((question, index) => {
+                html += `<li>${question}</li>`;
+            });
+
+            html += `
+                    </ul>
+                    <div class="clarification-footer">请提供以上信息,我会给您更准确的答案。</div>
+                </div>
+            `;
 
             messageDiv.innerHTML = html;
             chatMessages.appendChild(messageDiv);

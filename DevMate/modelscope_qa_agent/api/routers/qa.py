@@ -32,6 +32,8 @@ class AnswerResponse(BaseModel):
     confidence: float
     session_id: str
     timestamp: str
+    is_clarification: bool = False
+    clarification_questions: Optional[List[str]] = None
 
 
 @router.post("/ask", response_model=AnswerResponse)
@@ -159,13 +161,15 @@ async def ask_question(request: QuestionRequest, app_request: Request):
                 )
                 sources.append(source_info)
 
-        # 返回响应
+        # 返回响应 (T039: 包含澄清字段)
         return AnswerResponse(
             answer=final_answer,
             sources=sources,
             confidence=confidence_score,
             session_id=session_id,
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
+            is_clarification=result.get("need_clarification", False),
+            clarification_questions=result.get("clarification_questions", None)
         )
 
     except Exception as e:

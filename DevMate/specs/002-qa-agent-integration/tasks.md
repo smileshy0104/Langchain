@@ -242,21 +242,22 @@ python3 -c "from config.config_loader import get_config; config = get_config(); 
 
 **任务清单**:
 
+
 ### 5.1 澄清逻辑 (US3)
 
-- [ ] T035 [US3] 在 agents/nodes.py 的 question_analysis_node 中实现澄清检测逻辑
-- [ ] T036 [US3] 在 agents/nodes.py 中创建 clarification_generation_node (澄清问题生成节点)
-- [ ] T037 [US3] 在 agents/prompts.py 中定义澄清提示词模板
-- [ ] T038 [US3] 在 agents/qa_agent.py 中更新 LangGraph 工作流以包含澄清路径
+- [x] T035 [US3] 在 agents/nodes.py 的 question_analysis_node 中实现澄清检测逻辑
+- [x] T036 [US3] 在 agents/nodes.py 中创建 clarification_generation_node (澄清问题生成节点)
+- [x] T037 [US3] 在 agents/prompts.py 中定义澄清提示词模板
+- [x] T038 [US3] 在 agents/simple_agent.py 中更新 LangGraph 工作流以包含澄清路径
 
 ### 5.2 API 与前端 (US3)
 
-- [ ] T039 [P] [US3] 在 api/routers/qa.py 中更新 AgentResponse 模型以包含 is_clarification 字段
-- [ ] T040 [P] [US3] 在 api/static/index.html 中实现澄清问题显示
-- [ ] T041 [US3] 在 api/static/index.html 中为澄清消息添加 CSS 样式
+- [x] T039 [P] [US3] 在 api/routers/qa.py 中更新 AgentResponse 模型以包含 is_clarification 字段
+- [x] T040 [P] [US3] 在 api/static/index.html 中实现澄清问题显示
+- [x] T041 [US3] 在 api/static/index.html 中为澄清消息添加 CSS 样式
 
 **集成测试**:
-- [ ] T042 [US3] 在 tests/test_agent.py 中创建澄清测试场景
+- [x] T042 [US3] 在 tests/test_clarification_phase5.py 中创建澄清测试场景
 
 **依赖**: US1 (阶段 3) 必须完成
 

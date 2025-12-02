@@ -41,12 +41,13 @@ def create_agent(retriever=None, llm=None):
     question_analysis_node_with_deps = partial(question_analysis_node, llm=llm)
     retrieval_node_with_deps = partial(retrieval_node, retriever=retriever)
     answer_generation_node_with_deps = partial(answer_generation_node, llm=llm)
+    clarify_node_with_deps = partial(clarify_node, llm=llm)
 
     # 添加节点
     workflow.add_node("analyze", question_analysis_node_with_deps)
     workflow.add_node("retrieve", retrieval_node_with_deps)
     workflow.add_node("generate", answer_generation_node_with_deps)
-    workflow.add_node("clarify", clarify_node)
+    workflow.add_node("clarify", clarify_node_with_deps)
 
     # 设置入口点
     workflow.set_entry_point("analyze")
