@@ -509,72 +509,157 @@ for name, param in model_1.named_parameters():
 
 ```python
 def model_info(model):
-    """打印模型的详细信息"""
+    """
+    打印模型的详细信息
+    
+    这个工具函数用于检查模型的结构、参数和状态
+    在调试和理解模型时非常有用
+    
+    参数:
+        model: PyTorch 模型实例 (nn.Module)
+    """
     print("=" * 70)
     print("模型信息")
     print("=" * 70)
 
-    # 1. 模型结构
+    # ==================== 1. 模型结构 ====================
+    # 打印模型的层次结构和组成
+    # 会显示模型类名和所有子模块
     print(f"\n模型结构:\n{model}\n")
 
-    # 2. 参数列表
+    # ==================== 2. 参数详情 ====================
     print("参数详情:")
-    total_params = 0
+    total_params = 0  # 用于累计总参数数量
+    
+    # named_parameters() 返回 (参数名, 参数张量) 的迭代器
+    # 只包含 requires_grad=True 的参数
     for name, param in model.named_parameters():
-        print(f"  {name}:")
+        print(f"  {name}:")  # 参数名称，如 'linear_layer.weight'
+        
+        # param.shape: 参数张量的形状，如 torch.Size([1, 1])
         print(f"    形状: {param.shape}")
+        
+        # param.numel(): 参数中元素的总数 (number of elements)
+        # 例如 [3, 4] 形状的张量有 12 个元素
         print(f"    数量: {param.numel()}")
+        
+        # param.requires_grad: 是否需要计算梯度
+        # True 表示这个参数会在训练中被更新
         print(f"    需要梯度: {param.requires_grad}")
+        
+        # param.data: 参数的实际数值（不带梯度信息）
+        # 直接访问张量的值，不会构建计算图
         print(f"    当前值: {param.data}\n")
+        
+        # 累加参数数量
         total_params += param.numel()
 
+    # 打印总参数量
+    # 对于复杂模型，这个数字可能达到数百万甚至数十亿
     print(f"总参数量: {total_params}")
 
-    # 3. 状态字典
+    # ==================== 3. 状态字典 ====================
+    # state_dict() 返回模型所有参数的字典
+    # 键是参数名（字符串），值是参数张量
+    # 这是保存和加载模型的标准方式
     print(f"\n状态字典:\n{model.state_dict()}")
+    # 输出示例: OrderedDict([('linear_layer.weight', tensor([[...]]), 
+    #                         ('linear_layer.bias', tensor([...]))])
 
     print("=" * 70)
 
-# 使用示例
+# ==================== 使用示例 ====================
+# 调用函数查看 model_1 的详细信息
+# 这会显示 LinearRegressionModelV2 的所有参数和结构
 model_info(model_1)
 ```
 
 ### 2.5 使用未训练模型进行预测
 
 ```python
-# 查看模型在训练前的预测
-model_1.eval()  # 设置为评估模式
+# ==================== 使用未训练模型进行预测 ====================
+# 目的: 查看随机初始化的模型预测效果（作为基线对比）
 
+# 将模型设置为评估模式
+# eval() 会关闭某些训练时才需要的功能（如 Dropout、BatchNorm）
+# 虽然这个简单模型没有这些层，但养成好习惯很重要
+model_1.eval()
+
+# 使用推理模式进行预测
+# torch.inference_mode() 是推荐的推理上下文管理器
+# 作用:
+#   1. 禁用梯度计算，节省内存和计算资源
+#   2. 比 torch.no_grad() 更快，因为它完全禁用了自动求导引擎
+#   3. 适用于不需要反向传播的场景（如预测、验证）
+#   4. 以加快前向传播 （数据通过 forward() 方法）的速度
 with torch.inference_mode():
+    # 将测试数据传入模型进行预测
+    # model_1(X_test) 会自动调用 forward() 方法
     y_preds = model_1(X_test)
 
+# 打印前 5 个预测值
+# 由于模型未训练，参数是随机的，预测结果会很差
 print(f"预测值 (前5个):\n{y_preds[:5]}")
+
+# 打印前 5 个真实值，用于对比
 print(f"\n真实值 (前5个):\n{y_test[:5]}")
 
-# 可视化未训练模型的预测
+# ==================== 可视化预测结果 ====================
+# 调用之前定义的绘图函数，可视化预测效果
+# 未训练的模型预测应该是一条随机的直线，与真实数据相差很远
 plot_predictions(predictions=y_preds)
 plt.title("未训练模型的预测 (应该很差)")
 plt.show()
+
+# 注意: 这个可视化展示了训练的必要性
+# 通过对比训练前后的预测，可以直观看到模型学习的效果
 ```
 
 ### 2.6 模型设备管理
 
 ```python
-# 检查是否有 GPU 可用
+# ==================== 设备检测 ====================
+# 检查是否有 NVIDIA GPU 可用
+# torch.cuda.is_available() 返回 True 表示系统有可用的 CUDA GPU
+# GPU 可以大幅加速深度学习训练（通常快 10-100 倍）
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"使用设备: {device}")
 
-# 将模型移动到设备
+# 其他设备选项:
+# - "mps": Apple Silicon (M1/M2) 的 Metal Performance Shaders
+# - "cpu": CPU（所有系统都支持，但速度较慢）
+
+# ==================== 将模型移动到设备 ====================
+# .to(device) 方法将模型的所有参数和缓冲区移动到指定设备
+# 这是一个就地操作（in-place），但通常习惯重新赋值
+# 注意: 模型和数据必须在同一设备上才能进行计算
 model_1 = model_1.to(device)
 
-# 将数据移动到设备
+# ==================== 将数据移动到设备 ====================
+# 同样需要将训练和测试数据移动到相同设备
+# 如果模型在 GPU 上，数据也必须在 GPU 上
+# .to() 会创建数据的副本并移动到目标设备
+
+# 移动训练数据
 X_train = X_train.to(device)
 y_train = y_train.to(device)
+
+# 移动测试数据
 X_test = X_test.to(device)
 y_test = y_test.to(device)
 
+# ==================== 验证设备位置 ====================
+# 检查模型参数所在的设备
+# next(model_1.parameters()) 获取模型的第一个参数
+# .device 属性显示张量所在的设备
 print(f"模型设备: {next(model_1.parameters()).device}")
+
+# 检查数据所在的设备
+# 确保模型和数据在同一设备上，否则会报错
 print(f"数据设备: {X_train.device}")
+
+# 常见错误: RuntimeError: Expected all tensors to be on the same device
+# 解决方法: 确保模型和所有输入数据都在同一设备上
 ```
 
 ---
