@@ -2581,15 +2581,80 @@ print(f"R²: {r2_metric.compute():.4f}")
 ```python
 from torch.profiler import profile, ProfilerActivity
 
-with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            record_shapes=True) as prof:
-    for _ in range(10):
-        y_pred = model(X_train)
-        loss = loss_fn(y_pred, y_train)
-        loss.backward()
+# ==================== PyTorch Profiler ====================
+# PyTorch 内置的性能分析工具
+# 
+# 用途：
+# - 找出训练中的性能瓶颈
+# - 分析 CPU 和 GPU 时间占用
+# - 优化模型性能
+# - 检测内存泄漏
+#
+# 参数说明：
+# - activities: 要分析的活动类型
+#   * ProfilerActivity.CPU: 分析 CPU 操作
+#   * ProfilerActivity.CUDA: 分析 GPU 操作
+# - record_shapes: 是否记录张量形状（有助于调试）
 
-# 打印统计信息
+with profile(
+    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+    record_shapes=True  # 记录张量形状，帮助定位问题
+) as prof:
+    # 运行 10 次迭代进行性能分析
+    # 注意：不要运行太多次，会产生大量数据
+    for _ in range(10):
+        # 前向传播
+        y_pred = model(X_train)
+        
+        # 计算损失
+        loss = loss_fn(y_pred, y_train)
+        
+        # 反向传播
+        loss.backward()
+        
+        # profiler 会自动记录每个操作的时间
+
+# ==================== 打印性能统计信息 ====================
+# key_averages() 计算每个操作的平均时间
+# table() 生成格式化的表格
+# 
+# 参数：
+# - sort_by: 排序依据
+#   * "cpu_time_total": 按 CPU 总时间排序
+#   * "cuda_time_total": 按 GPU 总时间排序
+#   * "self_cpu_time_total": 按 CPU 自身时间排序（不包括子操作）
+# - row_limit: 显示前 N 行
 print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+
+# 输出示例：
+# ---------------------------------  ------------  ------------  ------------
+# Name                               Self CPU %   Self CPU      Total CPU
+# ---------------------------------  ------------  ------------  ------------
+# aten::addmm                        45.23%       123.45ms      123.45ms
+# aten::mm                           23.12%       63.21ms       63.21ms
+# aten::copy_                        12.34%       33.76ms       33.76ms
+# ...
+#
+# 解读：
+# - Self CPU %: 该操作占总 CPU 时间的百分比
+# - Self CPU: 该操作本身的 CPU 时间
+# - Total CPU: 该操作及其子操作的总 CPU 时间
+#
+# 优化建议：
+# 1. 如果某个操作占用时间过多，考虑优化
+# 2. 检查是否有不必要的数据传输（CPU ↔ GPU）
+# 3. 使用更高效的操作（如 in-place 操作）
+
+# ==================== 导出到 Chrome Trace ====================
+# 可以导出为 Chrome 可视化格式
+# prof.export_chrome_trace("trace.json")
+# 然后在 Chrome 浏览器中打开 chrome://tracing 加载文件
+
+# ==================== 使用场景 ====================
+# ✅ 模型训练速度慢，需要找出瓶颈
+# ✅ GPU 利用率低，需要分析原因
+# ✅ 内存使用过高，需要定位问题
+# ✅ 对比不同实现的性能
 ```
 
 ### 9.2 使用 TensorBoard
@@ -2597,58 +2662,272 @@ print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 ```python
 from torch.utils.tensorboard import SummaryWriter
 
-# 创建 writer
+# ==================== 创建 TensorBoard Writer ====================
+# TensorBoard 是 TensorFlow 的可视化工具，PyTorch 也支持
+# 
+# 优势：
+# ✅ 实时可视化训练过程
+# ✅ 对比多次实验
+# ✅ 查看模型结构
+# ✅ 分析参数分布
+# ✅ 完全免费，本地运行
+#
+# 参数：
+# - log_dir: 日志保存目录
+#   建议格式: 'runs/实验名称_时间戳'
 writer = SummaryWriter('runs/linear_regression')
 
+# ==================== 训练循环中记录数据 ====================
 for epoch in range(epochs):
-    # ... 训练 ...
+    # ---------- 训练代码 ----------
+    # model.train()
+    # ... 前向传播、计算损失、反向传播、更新参数 ...
+    # train_loss = ...
+    
+    # ---------- 验证代码 ----------
+    # model.eval()
+    # ... 计算验证损失 ...
+    # test_loss = ...
 
-    # 记录损失
+    # ==================== 记录标量值（损失、准确率等）====================
+    # add_scalar(tag, scalar_value, global_step)
+    # 
+    # 参数：
+    # - tag: 标签名称（支持分组，用 / 分隔）
+    # - scalar_value: 要记录的值
+    # - global_step: 步数（通常是 epoch 或 iteration）
+    
+    # 记录训练损失和测试损失
+    # 使用 'Loss/' 前缀将它们分组显示
     writer.add_scalar('Loss/train', train_loss, epoch)
     writer.add_scalar('Loss/test', test_loss, epoch)
 
-    # 记录学习率
-    writer.add_scalar('Learning Rate',
-                     optimizer.param_groups[0]['lr'], epoch)
+    # ==================== 记录学习率 ====================
+    # 监控学习率变化（特别是使用学习率调度器时）
+    current_lr = optimizer.param_groups[0]['lr']
+    writer.add_scalar('Learning Rate', current_lr, epoch)
 
-    # 记录参数直方图
+    # ==================== 记录参数分布（直方图）====================
+    # 可视化模型参数的分布变化
+    # 有助于：
+    # - 检测梯度消失/爆炸
+    # - 观察参数更新情况
+    # - 诊断训练问题
     for name, param in model.named_parameters():
+        # add_histogram(tag, values, global_step)
+        # 记录参数的直方图
         writer.add_histogram(name, param, epoch)
+        
+        # 也可以记录梯度的直方图（如果需要）
+        # if param.grad is not None:
+        #     writer.add_histogram(f'{name}.grad', param.grad, epoch)
 
+# ==================== 关闭 Writer ====================
+# 确保所有数据都被写入磁盘
 writer.close()
 
-# 在终端运行: tensorboard --logdir=runs
+# ==================== 启动 TensorBoard ====================
+# 在终端运行以下命令：
+# tensorboard --logdir=runs
+# 
+# 然后在浏览器中打开: http://localhost:6006
+#
+# TensorBoard 界面功能：
+# - SCALARS: 查看损失、准确率等曲线
+# - GRAPHS: 查看模型计算图
+# - DISTRIBUTIONS: 查看参数分布
+# - HISTOGRAMS: 查看参数直方图
+# - IMAGES: 查看图像（如果记录了）
+
+# ==================== 其他有用的记录方法 ====================
+#
+# 1. 记录图像：
+#    writer.add_image('predictions', img_tensor, epoch)
+#
+# 2. 记录模型结构：
+#    writer.add_graph(model, input_tensor)
+#
+# 3. 记录文本：
+#    writer.add_text('notes', 'This is a note', epoch)
+#
+# 4. 记录超参数和指标：
+#    writer.add_hparams(
+#        {'lr': 0.01, 'batch_size': 32},
+#        {'hparam/accuracy': 0.95, 'hparam/loss': 0.05}
+#    )
+#
+# 5. 记录 PR 曲线（分类问题）：
+#    writer.add_pr_curve('pr_curve', labels, predictions, epoch)
+
+# ==================== 最佳实践 ====================
+# 1. 使用有意义的标签名称（如 'Loss/train' 而不是 'loss1'）
+# 2. 使用 / 分隔符创建层次结构
+# 3. 定期记录（每个 epoch 或每 N 个 batch）
+# 4. 记录多个指标以全面了解训练情况
+# 5. 对比实验时使用不同的 log_dir
 ```
 
 ### 9.3 使用 Weights & Biases (推荐)
 
 ```python
-# 安装: pip install wandb
+# ==================== 安装 Weights & Biases ====================
+# W&B 是现代化的实验跟踪和可视化平台
+# 
+# 优势（相比 TensorBoard）：
+# ✅ 云端存储，随时随地访问
+# ✅ 自动对比多次实验
+# ✅ 团队协作功能
+# ✅ 超参数搜索（Sweeps）
+# ✅ 模型版本管理
+# ✅ 更美观的界面
+# ✅ 免费版功能已经很强大
+#
+# 安装命令:
+# pip install wandb
+#
+# 首次使用需要登录:
+# wandb login
+# 然后输入 API key（在 wandb.ai 网站获取）
 
 import wandb
 
-# 初始化
-wandb.init(project="pytorch-linear-regression",
-          config={
-              "learning_rate": 0.01,
-              "epochs": 100,
-              "batch_size": 8
-          })
+# ==================== 初始化 W&B ====================
+# wandb.init() 开始一个新的实验运行
+# 
+# 参数：
+# - project: 项目名称（将实验组织在一起）
+# - name: 运行名称（可选，默认自动生成）
+# - config: 超参数配置（字典）
+# - tags: 标签列表（可选，用于过滤）
+# - notes: 实验备注（可选）
+wandb.init(
+    project="pytorch-linear-regression",  # 项目名称
+    name="baseline-experiment",            # 运行名称（可选）
+    config={                                # 超参数配置
+        "learning_rate": 0.01,
+        "epochs": 100,
+        "batch_size": 8,
+        "optimizer": "SGD",
+        "loss_function": "L1Loss"
+    },
+    tags=["baseline", "linear-regression"]  # 标签（可选）
+)
 
-# 训练循环
+# 也可以通过 wandb.config 访问配置
+# lr = wandb.config.learning_rate
+
+# ==================== 训练循环 ====================
 for epoch in range(epochs):
-    # ... 训练 ...
+    # ---------- 训练阶段 ----------
+    # model.train()
+    # for X, y in train_loader:
+    #     ... 前向传播、计算损失、反向传播、更新参数 ...
+    # train_loss = ...
+    
+    # ---------- 验证阶段 ----------
+    # model.eval()
+    # with torch.inference_mode():
+    #     ... 计算验证损失 ...
+    # test_loss = ...
 
-    # 记录指标
+    # ==================== 记录指标 ====================
+    # wandb.log() 记录指标到云端
+    # 
+    # 特点：
+    # - 自动创建图表
+    # - 支持嵌套字典
+    # - 自动处理时间步
+    # - 实时同步到云端
     wandb.log({
         "epoch": epoch,
         "train_loss": train_loss,
         "test_loss": test_loss,
         "learning_rate": optimizer.param_groups[0]['lr']
     })
+    
+    # 也可以记录更多信息：
+    # wandb.log({
+    #     "metrics/train_loss": train_loss,
+    #     "metrics/test_loss": test_loss,
+    #     "metrics/mae": mae,
+    #     "metrics/r2": r2,
+    #     "system/gpu_memory": torch.cuda.memory_allocated(),
+    #     "gradients/mean": grad_mean,
+    #     "gradients/max": grad_max
+    # })
 
-# 保存模型到 W&B
+# ==================== 保存模型到 W&B ====================
+# wandb.save() 将文件上传到 W&B
+# 支持模型文件、配置文件、代码等
+torch.save(model.state_dict(), "model.pth")
 wandb.save("model.pth")
+
+# 也可以保存整个模型目录
+# wandb.save("models/*.pth")
+
+# ==================== 结束运行 ====================
+# 标记实验完成（可选，脚本结束时会自动调用）
+wandb.finish()
+
+# ==================== W&B 高级功能 ====================
+#
+# 1. 记录图像：
+#    wandb.log({"predictions": wandb.Image(img)})
+#
+# 2. 记录表格：
+#    table = wandb.Table(columns=["epoch", "loss"], data=[[1, 0.5], [2, 0.3]])
+#    wandb.log({"results": table})
+#
+# 3. 记录模型（Artifacts）：
+#    artifact = wandb.Artifact('model', type='model')
+#    artifact.add_file('model.pth')
+#    wandb.log_artifact(artifact)
+#
+# 4. 监控系统资源：
+#    wandb.init(monitor_gym=True)  # 自动记录 CPU、GPU、内存
+#
+# 5. 超参数搜索（Sweeps）：
+#    sweep_config = {
+#        'method': 'random',
+#        'parameters': {
+#            'learning_rate': {'values': [0.001, 0.01, 0.1]},
+#            'batch_size': {'values': [8, 16, 32]}
+#        }
+#    }
+#    sweep_id = wandb.sweep(sweep_config, project="my-project")
+#    wandb.agent(sweep_id, function=train)
+#
+# 6. 对比实验：
+#    在 W&B 网页界面可以轻松对比多次运行
+#    - 并排查看图表
+#    - 对比超参数
+#    - 查看差异
+
+# ==================== W&B vs TensorBoard ====================
+#
+# | 特性 | W&B | TensorBoard |
+# |------|-----|-------------|
+# | 存储 | 云端 | 本地 |
+# | 访问 | 随时随地 | 需要运行服务 |
+# | 协作 | 支持 | 不支持 |
+# | 超参数搜索 | 内置 | 需要额外工具 |
+# | 模型管理 | 支持 | 不支持 |
+# | 免费版 | 功能丰富 | 完全免费 |
+# | 学习曲线 | 简单 | 简单 |
+#
+# 选择建议：
+# - 个人项目、离线环境 → TensorBoard
+# - 团队项目、需要协作 → W&B
+# - 需要超参数搜索 → W&B
+# - 需要模型版本管理 → W&B
+
+# ==================== 最佳实践 ====================
+# 1. 为每次实验设置有意义的名称和标签
+# 2. 记录所有重要的超参数到 config
+# 3. 定期记录指标（每个 epoch 或每 N 个 batch）
+# 4. 使用 Artifacts 管理模型版本
+# 5. 添加实验备注，记录想法和发现
+# 6. 使用 Sweeps 进行系统化的超参数搜索
 ```
 
 ---
@@ -2658,71 +2937,484 @@ wandb.save("model.pth")
 ### 10.1 模型导出为 ONNX
 
 ```python
-# 导出模型为 ONNX 格式 (跨平台推理)
+# ==================== ONNX 导出 ====================
+# ONNX (Open Neural Network Exchange) 是一个开放的模型格式
+# 
+# 优势：
+# ✅ 跨平台：可以在不同框架间转换（PyTorch → TensorFlow → ONNX Runtime）
+# ✅ 跨语言：支持 Python、C++、Java、C# 等
+# ✅ 优化推理：ONNX Runtime 针对推理进行了优化
+# ✅ 部署灵活：可以部署到移动端、嵌入式设备、云端
+# ✅ 硬件加速：支持 CPU、GPU、NPU 等多种硬件
+#
+# 使用场景：
+# - 生产环境部署（特别是非 Python 环境）
+# - 移动端/边缘设备部署
+# - 需要跨框架兼容性
+# - 需要最优推理性能
+
+# ==================== 创建示例输入 ====================
+# ONNX 导出需要一个示例输入来追踪模型的计算图
+# 形状必须与实际输入一致
+# 
+# 参数说明：
+# - (1, 1): batch_size=1, features=1
+# - 对于图像模型可能是 (1, 3, 224, 224)
 dummy_input = torch.randn(1, 1)
 
+# ==================== 导出模型为 ONNX ====================
+# torch.onnx.export() 将 PyTorch 模型转换为 ONNX 格式
+# 
+# 参数详解：
 torch.onnx.export(
-    model,
-    dummy_input,
-    "model.onnx",
-    export_params=True,
-    opset_version=11,
-    input_names=['input'],
-    output_names=['output']
+    model,                    # 要导出的 PyTorch 模型
+    dummy_input,              # 示例输入（用于追踪计算图）
+    "model.onnx",            # 输出文件路径
+    
+    # ==================== 导出选项 ====================
+    export_params=True,       # 是否导出模型参数（权重和偏置）
+                              # True: 导出完整模型（推荐）
+                              # False: 只导出模型结构
+    
+    opset_version=11,         # ONNX 算子集版本
+                              # 版本越高，支持的操作越多
+                              # 推荐使用 11 或更高（兼容性好）
+                              # 最新版本可以到 17+
+    
+    # ==================== 输入输出命名 ====================
+    input_names=['input'],    # 输入节点名称（列表）
+                              # 多输入模型: ['input1', 'input2']
+                              # 有助于在其他框架中识别输入
+    
+    output_names=['output'],  # 输出节点名称（列表）
+                              # 多输出模型: ['output1', 'output2']
+    
+    # ==================== 其他有用的参数 ====================
+    # dynamic_axes={          # 动态维度（支持可变 batch size）
+    #     'input': {0: 'batch_size'},
+    #     'output': {0: 'batch_size'}
+    # },
+    # do_constant_folding=True,  # 常量折叠优化（推荐）
+    # verbose=False,             # 是否打印详细信息
 )
 
-print("模型已导出为 ONNX 格式")
+print("✅ 模型已导出为 ONNX 格式")
+
+# ==================== 验证 ONNX 模型 ====================
+# 导出后应该验证模型是否正确
+import onnx
+
+# 加载 ONNX 模型
+onnx_model = onnx.load("model.onnx")
+
+# 检查模型格式是否正确
+onnx.checker.check_model(onnx_model)
+print("✅ ONNX 模型验证通过")
+
+# ==================== 使用 ONNX Runtime 推理 ====================
+# 安装: pip install onnxruntime
+# import onnxruntime as ort
+# 
+# # 创建推理会话
+# ort_session = ort.InferenceSession("model.onnx")
+# 
+# # 准备输入
+# ort_inputs = {"input": dummy_input.numpy()}
+# 
+# # 运行推理
+# ort_outputs = ort_session.run(None, ort_inputs)
+# 
+# print(f"ONNX Runtime 输出: {ort_outputs[0]}")
+
+# ==================== ONNX 导出最佳实践 ====================
+# 1. 使用 model.eval() 确保模型处于评估模式
+# 2. 使用代表性的 dummy_input（形状和数据类型要正确）
+# 3. 设置 dynamic_axes 支持可变 batch size
+# 4. 导出后验证模型（使用 onnx.checker）
+# 5. 测试 ONNX 模型的输出是否与 PyTorch 一致
+# 6. 使用较新的 opset_version 以获得更好的支持
 ```
 
 ### 10.2 模型量化 (加速推理)
 
 ```python
-# 动态量化
+import os
+
+# ==================== 模型量化 ====================
+# 量化是将模型参数从 FP32（32位浮点数）转换为 INT8（8位整数）
+# 
+# 优势：
+# ✅ 模型大小减少 4 倍（32位 → 8位）
+# ✅ 推理速度提升 2-4 倍（取决于硬件）
+# ✅ 内存占用减少 4 倍
+# ✅ 精度损失很小（通常 <1%）
+# ✅ 适合移动端和边缘设备部署
+#
+# 三种量化方式：
+# 1. 动态量化（Dynamic Quantization）- 最简单，推荐
+# 2. 静态量化（Static Quantization）- 需要校准数据
+# 3. 量化感知训练（QAT）- 训练时就考虑量化
+
+# ==================== 动态量化 ====================
+# 动态量化：在推理时动态计算量化参数
+# 适用于：RNN、LSTM、Transformer 等模型
+# 
+# torch.quantization.quantize_dynamic() 参数：
 quantized_model = torch.quantization.quantize_dynamic(
-    model,
-    {nn.Linear},  # 要量化的层类型
-    dtype=torch.qint8
+    model,                # 要量化的模型
+    {nn.Linear},          # 要量化的层类型（集合）
+                          # 常见选项：
+                          # - {nn.Linear}: 只量化全连接层
+                          # - {nn.Linear, nn.Conv2d}: 量化全连接和卷积层
+                          # - {nn.LSTM, nn.Linear}: 量化 LSTM 和全连接层
+    dtype=torch.qint8     # 量化后的数据类型
+                          # torch.qint8: 8位整数（推荐）
+                          # torch.float16: 16位浮点数（半精度）
 )
 
-# 测试量化模型
+# 量化后的模型可以直接使用，API 与原模型相同
+
+# ==================== 测试量化模型 ====================
+# 验证量化模型的输出是否正确
 with torch.inference_mode():
+    # 使用量化模型进行预测
     quantized_pred = quantized_model(X_test)
 
-print(f"原始模型大小: {os.path.getsize('model.pth') / 1024:.2f} KB")
+# 对比原始模型和量化模型的输出
+# with torch.inference_mode():
+#     original_pred = model(X_test)
+# 
+# # 计算差异
+# diff = torch.abs(original_pred - quantized_pred).mean()
+# print(f"平均预测差异: {diff:.6f}")
+
+# ==================== 对比模型大小 ====================
+# 保存原始模型
+torch.save(model.state_dict(), 'model.pth')
+
+# 保存量化模型
 torch.save(quantized_model.state_dict(), 'quantized_model.pth')
-print(f"量化模型大小: {os.path.getsize('quantized_model.pth') / 1024:.2f} KB")
+
+# 计算文件大小
+original_size = os.path.getsize('model.pth') / 1024  # KB
+quantized_size = os.path.getsize('quantized_model.pth') / 1024  # KB
+
+print(f"原始模型大小: {original_size:.2f} KB")
+print(f"量化模型大小: {quantized_size:.2f} KB")
+print(f"压缩比例: {original_size / quantized_size:.2f}x")
+print(f"大小减少: {(1 - quantized_size / original_size) * 100:.1f}%")
+
+# 预期结果：
+# - 模型大小减少约 75%（4倍压缩）
+# - 推理速度提升 2-4 倍
+# - 精度损失 <1%
+
+# ==================== 静态量化示例 ====================
+# 静态量化需要校准数据来确定量化参数
+# 
+# # 1. 准备模型
+# model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
+# model_prepared = torch.quantization.prepare(model)
+# 
+# # 2. 校准（使用代表性数据）
+# with torch.inference_mode():
+#     for X, y in calibration_loader:
+#         model_prepared(X)
+# 
+# # 3. 转换为量化模型
+# quantized_model = torch.quantization.convert(model_prepared)
+
+# ==================== 量化感知训练（QAT）示例 ====================
+# 在训练过程中模拟量化，获得更好的精度
+# 
+# # 1. 准备模型
+# model.qconfig = torch.quantization.get_default_qat_qconfig('fbgemm')
+# model_prepared = torch.quantization.prepare_qat(model)
+# 
+# # 2. 训练（正常训练流程）
+# for epoch in range(epochs):
+#     for X, y in train_loader:
+#         optimizer.zero_grad()
+#         output = model_prepared(X)
+#         loss = loss_fn(output, y)
+#         loss.backward()
+#         optimizer.step()
+# 
+# # 3. 转换为量化模型
+# model_prepared.eval()
+# quantized_model = torch.quantization.convert(model_prepared)
+
+# ==================== 量化最佳实践 ====================
+# 1. 优先使用动态量化（最简单，效果好）
+# 2. 如果精度下降明显，尝试静态量化或 QAT
+# 3. 量化后务必验证模型精度
+# 4. 在目标设备上测试推理速度
+# 5. 对比量化前后的性能和精度
+# 6. 不是所有层都需要量化（如 BatchNorm 通常不量化）
+# 7. 移动端部署时量化效果最明显
+
+# ==================== 使用场景 ====================
+# ✅ 移动端部署（Android、iOS）
+# ✅ 边缘设备（树莓派、Jetson Nano）
+# ✅ CPU 推理（量化对 CPU 加速明显）
+# ✅ 内存受限的环境
+# ❌ GPU 推理（量化对 GPU 加速不明显）
+# ❌ 对精度要求极高的场景
 ```
 
 ### 10.3 模型服务化 (使用 FastAPI)
 
 ```python
-# api.py
-from fastapi import FastAPI
-from pydantic import BaseModel
+# ==================== 文件名: api.py ====================
+# FastAPI 是现代、快速的 Web 框架，用于构建 API
+# 
+# 优势：
+# ✅ 高性能（基于 Starlette 和 Pydantic）
+# ✅ 自动生成 API 文档（Swagger UI）
+# ✅ 类型验证（使用 Pydantic）
+# ✅ 异步支持（async/await）
+# ✅ 易于部署和扩展
+#
+# 安装：
+# pip install fastapi uvicorn
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 import torch
+import logging
 
-app = FastAPI()
+# ==================== 配置日志 ====================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# 加载模型
-model = LinearRegressionModelV2()
-model.load_state_dict(torch.load('model.pth'))
-model.eval()
+# ==================== 创建 FastAPI 应用 ====================
+app = FastAPI(
+    title="PyTorch 线性回归 API",           # API 标题
+    description="使用 PyTorch 模型进行预测",  # API 描述
+    version="1.0.0"                         # API 版本
+)
+
+# ==================== 加载模型（启动时执行一次）====================
+# 在应用启动时加载模型，避免每次请求都加载
+try:
+    # 创建模型实例
+    model = LinearRegressionModelV2()
+    
+    # 加载训练好的参数
+    model.load_state_dict(torch.load('model.pth', map_location='cpu'))
+    # map_location='cpu': 即使模型在 GPU 上训练，也加载到 CPU
+    # 生产环境通常使用 CPU 推理（成本低）
+    
+    # 设置为评估模式（重要！）
+    model.eval()
+    
+    logger.info("✅ 模型加载成功")
+except Exception as e:
+    logger.error(f"❌ 模型加载失败: {e}")
+    raise
+
+# ==================== 定义请求和响应模型 ====================
+# 使用 Pydantic 进行数据验证
 
 class PredictionRequest(BaseModel):
-    value: float
+    """
+    预测请求模型
+    
+    Pydantic 会自动验证输入数据：
+    - 类型检查（必须是 float）
+    - 范围检查（使用 Field）
+    - 自动生成 API 文档
+    """
+    value: float = Field(
+        ...,  # ... 表示必填字段
+        description="输入值",
+        example=0.5,  # 示例值（显示在 API 文档中）
+        ge=0.0,       # 大于等于 0（可选的验证）
+        le=1.0        # 小于等于 1（可选的验证）
+    )
 
 class PredictionResponse(BaseModel):
-    prediction: float
+    """
+    预测响应模型
+    
+    定义 API 返回的数据结构
+    """
+    prediction: float = Field(
+        ...,
+        description="预测结果"
+    )
+    input_value: float = Field(
+        ...,
+        description="输入值（用于验证）"
+    )
 
+# ==================== 健康检查端点 ====================
+@app.get("/health")
+def health_check():
+    """
+    健康检查端点
+    
+    用途：
+    - 监控服务是否正常运行
+    - 负载均衡器健康检查
+    - 容器编排（Kubernetes）健康探针
+    """
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None
+    }
+
+# ==================== 预测端点 ====================
 @app.post("/predict", response_model=PredictionResponse)
 def predict(request: PredictionRequest):
-    with torch.inference_mode():
-        X = torch.tensor([[request.value]])
-        pred = model(X)
+    """
+    预测端点
+    
+    接收输入值，返回模型预测结果
+    
+    参数：
+        request: PredictionRequest - 包含输入值的请求
+    
+    返回：
+        PredictionResponse - 包含预测结果的响应
+    
+    异常：
+        HTTPException - 如果预测失败
+    """
+    try:
+        # ==================== 预处理 ====================
+        # 将输入转换为张量
+        # [[request.value]]: 形状为 (1, 1) 的二维张量
+        X = torch.tensor([[request.value]], dtype=torch.float32)
+        
+        # ==================== 推理 ====================
+        # 使用推理模式（不计算梯度，节省内存）
+        with torch.inference_mode():
+            # 模型预测
+            pred = model(X)
+        
+        # ==================== 后处理 ====================
+        # 将张量转换为 Python 标量
+        prediction_value = pred.item()
+        
+        # 记录日志
+        logger.info(f"预测成功: 输入={request.value}, 输出={prediction_value:.4f}")
+        
+        # 返回响应
+        return PredictionResponse(
+            prediction=prediction_value,
+            input_value=request.value
+        )
+        
+    except Exception as e:
+        # 记录错误
+        logger.error(f"预测失败: {e}")
+        # 返回 HTTP 500 错误
+        raise HTTPException(
+            status_code=500,
+            detail=f"预测失败: {str(e)}"
+        )
 
-    return PredictionResponse(prediction=pred.item())
+# ==================== 批量预测端点（可选）====================
+class BatchPredictionRequest(BaseModel):
+    values: list[float] = Field(
+        ...,
+        description="输入值列表",
+        example=[0.1, 0.2, 0.3]
+    )
 
-# 运行: uvicorn api:app --reload
+class BatchPredictionResponse(BaseModel):
+    predictions: list[float] = Field(
+        ...,
+        description="预测结果列表"
+    )
+
+@app.post("/predict/batch", response_model=BatchPredictionResponse)
+def predict_batch(request: BatchPredictionRequest):
+    """
+    批量预测端点
+    
+    一次处理多个输入，提高效率
+    """
+    try:
+        # 转换为张量 (batch_size, 1)
+        X = torch.tensor([[v] for v in request.values], dtype=torch.float32)
+        
+        with torch.inference_mode():
+            preds = model(X)
+        
+        # 转换为列表
+        predictions = preds.squeeze().tolist()
+        
+        return BatchPredictionResponse(predictions=predictions)
+        
+    except Exception as e:
+        logger.error(f"批量预测失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== 运行说明 ====================
+# 
+# 1. 启动服务（开发模式）：
+#    uvicorn api:app --reload
+#    
+#    参数说明：
+#    - api: 文件名（api.py）
+#    - app: FastAPI 应用实例
+#    - --reload: 代码修改后自动重启（仅开发时使用）
+#
+# 2. 启动服务（生产模式）：
+#    uvicorn api:app --host 0.0.0.0 --port 8000 --workers 4
+#    
+#    参数说明：
+#    - --host 0.0.0.0: 监听所有网络接口
+#    - --port 8000: 端口号
+#    - --workers 4: 工作进程数（根据 CPU 核心数调整）
+#
+# 3. 访问 API 文档：
+#    - Swagger UI: http://localhost:8000/docs
+#    - ReDoc: http://localhost:8000/redoc
+#
+# 4. 测试 API（使用 curl）：
+#    curl -X POST "http://localhost:8000/predict" \
+#         -H "Content-Type: application/json" \
+#         -d '{"value": 0.5}'
+#
+# 5. 测试 API（使用 Python）：
+#    import requests
+#    response = requests.post(
+#        "http://localhost:8000/predict",
+#        json={"value": 0.5}
+#    )
+#    print(response.json())
+
+# ==================== 部署最佳实践 ====================
+# 1. 使用环境变量管理配置（模型路径、端口等）
+# 2. 添加认证和授权（API Key、JWT）
+# 3. 实现请求限流（防止滥用）
+# 4. 添加监控和日志（Prometheus、ELK）
+# 5. 使用 Docker 容器化部署
+# 6. 使用负载均衡器（Nginx、HAProxy）
+# 7. 实现优雅关闭（处理完当前请求再关闭）
+# 8. 添加缓存（Redis）提高性能
+# 9. 使用 HTTPS 加密通信
+# 10. 定期更新模型版本
+
+# ==================== Docker 部署示例 ====================
+# Dockerfile:
+# 
+# FROM python:3.9-slim
+# WORKDIR /app
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir -r requirements.txt
+# COPY api.py model.pth .
+# EXPOSE 8000
+# CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+#
+# 构建镜像:
+# docker build -t pytorch-api .
+#
+# 运行容器:
+# docker run -p 8000:8000 pytorch-api
 ```
 
 ---
