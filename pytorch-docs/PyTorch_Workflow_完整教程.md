@@ -1148,30 +1148,65 @@ with torch.no_grad():
 ### 4.2 评估模型性能
 
 ```python
-# 设置为评估模式
+# ==================== 设置评估模式 ====================
+# 将模型设置为评估模式
+# eval() 会关闭 Dropout、BatchNorm 等训练专用层
+# 确保模型以一致的方式进行推理
 model_1.eval()
 
+# ==================== 进行预测和评估 ====================
+# 使用推理模式进行预测
+# 优点：不计算梯度，节省内存，加快速度
 with torch.inference_mode():
-    # 进行预测
+    # 使用训练好的模型对测试集进行预测
+    # 此时模型已经学习了数据的模式
     y_preds = model_1(X_test)
 
     # 计算最终测试损失
+    # 这个损失值反映了模型在未见过的数据上的表现
     final_loss = loss_fn(y_preds, y_test)
+    
+    # 打印最终损失，保留 4 位小数
+    # 与训练前的损失对比，可以看到训练效果
     print(f"最终测试损失: {final_loss:.4f}")
 
-# 查看学到的参数
+# ==================== 检查学到的参数 ====================
+# 查看模型通过训练学到的参数
 print(f"\n学到的参数:")
+
+# 从状态字典中获取权重参数
+# state_dict() 返回所有参数的字典
+# ['linear_layer.weight'] 访问线性层的权重
+# .item() 将单元素张量转换为 Python 标量
 print(f"  权重: {model_1.state_dict()['linear_layer.weight'].item():.4f}")
+
+# 获取偏置参数
 print(f"  偏置: {model_1.state_dict()['linear_layer.bias'].item():.4f}")
 
+# ==================== 对比真实参数 ====================
+# 打印用于生成数据的真实参数
+# 理想情况下，学到的参数应该接近这些真实值
 print(f"\n真实参数:")
 print(f"  权重: {weight}")
 print(f"  偏置: {bias}")
 
-# 可视化预测结果
+# 注意：
+# - 如果学到的参数接近真实参数，说明模型训练成功
+# - 如果差距较大，可能需要：
+#   1. 更多训练轮数
+#   2. 调整学习率
+#   3. 更多训练数据
+
+# ==================== 可视化预测结果 ====================
+# 绘制训练后的预测结果
+# 与训练前的预测对比，应该能看到明显改善
 plot_predictions(predictions=y_preds)
 plt.title("训练后的预测结果")
 plt.show()
+
+# 预期结果：
+# - 预测线应该与真实数据点非常接近
+# - 与训练前的随机预测相比有显著改善
 ```
 
 ---
@@ -1180,48 +1215,96 @@ plt.show()
 
 ### 5.1 PyTorch 模型保存方法
 
-PyTorch 提供三种主要方法:
+PyTorch 提供三种主要方法：
 
-1. **`torch.save()`** - 保存对象到磁盘
-2. **`torch.load()`** - 从磁盘加载对象
-3. **`model.load_state_dict()`** - 加载模型参数字典
+| 方法 | 说明 | 用途 |
+|------|------|------|
+| **`torch.save()`** | 将 Python 对象序列化并保存到磁盘 | 保存模型、参数、优化器状态等 |
+| **`torch.load()`** | 从磁盘加载序列化的对象 | 加载之前保存的对象 |
+| **`model.load_state_dict()`** | 将参数字典加载到模型中 | 恢复模型的参数值 |
+
+**两种保存方式对比：**
+
+| 保存方式 | 保存内容 | 优点 | 缺点 | 推荐度 |
+|---------|---------|------|------|--------|
+| **保存 state_dict** | 只保存参数（权重和偏置） | 文件小、灵活、兼容性好 | 需要先创建模型实例 | ⭐⭐⭐⭐⭐ 推荐 |
+| **保存整个模型** | 保存模型结构和参数 | 加载方便，不需要模型定义 | 文件大、可能有兼容性问题 | ⭐⭐⭐ 不推荐 |
+
+**最佳实践：**
+- ✅ **推荐**：保存 `state_dict()`（只保存参数）
+- ❌ **不推荐**：保存整个模型（使用 pickle）
+- 💡 **原因**：state_dict 更灵活、文件更小、更容易调试
 
 ### 5.2 保存和加载 state_dict (推荐)
 
 ```python
 from pathlib import Path
 
-# 1. 创建模型目录
+# ==================== 步骤 1: 创建模型目录 ====================
+# 使用 pathlib.Path 创建路径对象（推荐方式，跨平台兼容）
 MODEL_PATH = Path("models")
+
+# 创建目录
+# parents=True: 如果父目录不存在，也会创建
+# exist_ok=True: 如果目录已存在，不会报错
 MODEL_PATH.mkdir(parents=True, exist_ok=True)
 
-# 2. 定义保存路径
+# ==================== 步骤 2: 定义保存路径 ====================
+# 定义模型文件名
+# 约定：使用 .pth 或 .pt 扩展名表示 PyTorch 模型文件
 MODEL_NAME = "01_pytorch_workflow_model.pth"
+
+# 使用 / 运算符拼接路径（pathlib 的便捷特性）
+# 等价于: MODEL_PATH / MODEL_NAME
 MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
 
-# 3. 保存模型 state_dict
+# ==================== 步骤 3: 保存模型参数 ====================
 print(f"保存模型到: {MODEL_SAVE_PATH}")
-torch.save(obj=model_1.state_dict(),  # 只保存参数
+
+# torch.save() 将对象序列化并保存到磁盘
+# obj: 要保存的对象，这里是 state_dict（参数字典）
+# f: 文件路径
+# state_dict() 只包含模型参数（权重和偏置），不包含模型结构
+torch.save(obj=model_1.state_dict(),  # 只保存参数，不保存模型结构
            f=MODEL_SAVE_PATH)
 
-# 4. 加载模型
-# 首先创建模型实例
+# 注意：state_dict 是一个 OrderedDict，键是参数名，值是参数张量
+
+# ==================== 步骤 4: 加载模型 ====================
+# 重要：加载 state_dict 需要先创建相同结构的模型实例
+# 这就是为什么推荐保存 state_dict 而不是整个模型
+# 因为你需要有模型的定义代码
 loaded_model = LinearRegressionModelV2()
 
-# 加载保存的参数
+# 加载保存的参数到模型中
+# torch.load() 从磁盘加载对象
+# load_state_dict() 将参数字典加载到模型中
 loaded_model.load_state_dict(torch.load(f=MODEL_SAVE_PATH))
 
-# 5. 设置为评估模式
+# 此时 loaded_model 的参数与 model_1 完全相同
+
+# ==================== 步骤 5: 设置为评估模式 ====================
+# 加载后务必设置为评估模式
+# 这会关闭 Dropout、BatchNorm 等训练专用层
 loaded_model.eval()
 
-# 6. 验证加载的模型
+# ==================== 步骤 6: 验证加载的模型 ====================
+# 使用推理模式进行预测
 with torch.inference_mode():
+    # 使用加载的模型进行预测
     loaded_preds = loaded_model(X_test)
 
-# 检查预测是否一致
+# ==================== 检查预测是否一致 ====================
+# 打印前 3 个预测值进行对比
 print(f"原始模型预测: {y_preds[:3]}")
 print(f"加载模型预测: {loaded_preds[:3]}")
+
+# torch.allclose() 检查两个张量是否在数值上接近
+# 考虑浮点数精度问题，使用 allclose 而不是 ==
+# 返回 True 表示加载成功，模型参数完全一致
 print(f"预测是否相同: {torch.allclose(y_preds, loaded_preds)}")
+
+# 如果输出 True，说明模型保存和加载成功！
 ```
 
 ### 5.3 保存完整模型 (不推荐但有时有用)
@@ -1240,35 +1323,119 @@ loaded_full_model.eval()
 
 ```python
 def save_checkpoint(model, optimizer, epoch, loss, filepath):
-    """保存训练检查点"""
+    """
+    保存训练检查点（Checkpoint）
+    
+    检查点包含恢复训练所需的所有信息：
+    - 模型参数
+    - 优化器状态（包括动量等）
+    - 当前 epoch
+    - 当前损失
+    
+    用途：
+    - 长时间训练时定期保存，防止意外中断
+    - 实验对比和模型版本管理
+    - 从最佳性能点恢复训练
+    
+    参数：
+        model: PyTorch 模型
+        optimizer: 优化器
+        epoch: 当前训练轮数
+        loss: 当前损失值
+        filepath: 保存路径
+    """
+    # 创建检查点字典，包含所有训练状态
     checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'loss': loss,
+        'epoch': epoch,  # 当前训练到第几轮
+        'model_state_dict': model.state_dict(),  # 模型参数
+        'optimizer_state_dict': optimizer.state_dict(),  # 优化器状态
+        # 优化器状态包括：学习率、动量缓存、Adam 的一阶和二阶矩估计等
+        'loss': loss,  # 当前损失值，用于监控训练进度
     }
+    
+    # 可以添加更多信息，例如：
+    # 'learning_rate': optimizer.param_groups[0]['lr'],
+    # 'best_loss': best_loss,
+    # 'train_history': train_loss_values,
+    # 'test_history': test_loss_values,
+    
+    # 保存检查点到磁盘
     torch.save(checkpoint, filepath)
     print(f"检查点已保存到 {filepath}")
 
+
 def load_checkpoint(filepath, model, optimizer):
-    """加载训练检查点"""
+    """
+    加载训练检查点
+    
+    从检查点恢复训练状态，可以继续之前的训练
+    
+    参数：
+        filepath: 检查点文件路径
+        model: 要加载参数的模型实例
+        optimizer: 要加载状态的优化器实例
+        
+    返回：
+        model: 加载了参数的模型
+        optimizer: 加载了状态的优化器
+        epoch: 保存时的 epoch
+        loss: 保存时的损失值
+    """
+    # 从磁盘加载检查点字典
     checkpoint = torch.load(filepath)
+    
+    # 恢复模型参数
+    # 将保存的权重和偏置加载到模型中
     model.load_state_dict(checkpoint['model_state_dict'])
+    
+    # 恢复优化器状态
+    # 这很重要！优化器的内部状态（如动量）也需要恢复
+    # 否则训练可能不稳定或效果变差
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    # 获取保存时的 epoch 和 loss
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
 
+    # 返回恢复后的对象和训练状态
     return model, optimizer, epoch, loss
 
-# 使用示例
-# 保存
-save_checkpoint(model_1, optimizer, epoch=100, loss=final_loss,
-                filepath=MODEL_PATH / "checkpoint.pth")
 
-# 加载
-model_1, optimizer, start_epoch, loss = load_checkpoint(
-    MODEL_PATH / "checkpoint.pth", model_1, optimizer
+# ==================== 使用示例 ====================
+
+# ---------- 保存检查点 ----------
+# 在训练过程中定期保存检查点
+# 例如：每 10 个 epoch 或当验证损失改善时保存
+save_checkpoint(
+    model=model_1,
+    optimizer=optimizer,
+    epoch=100,  # 当前训练到第 100 轮
+    loss=final_loss,  # 当前损失值
+    filepath=MODEL_PATH / "checkpoint.pth"
 )
+
+# ---------- 加载检查点 ----------
+# 从检查点恢复训练
+# 适用场景：
+# 1. 训练被中断，需要继续
+# 2. 想从某个检查点开始微调
+# 3. 加载最佳模型进行评估
+model_1, optimizer, start_epoch, loss = load_checkpoint(
+    filepath=MODEL_PATH / "checkpoint.pth",
+    model=model_1,
+    optimizer=optimizer
+)
+
+# 继续训练示例：
+# for epoch in range(start_epoch + 1, total_epochs):
+#     # 继续训练...
+#     pass
+
+# 注意事项：
+# 1. 检查点文件比只保存 state_dict 大，因为包含更多信息
+# 2. 定期保存检查点可以防止训练中断导致的损失
+# 3. 建议保存多个检查点（如 checkpoint_epoch_10.pth）
+# 4. 可以只保留最近的 N 个检查点，节省磁盘空间
 ```
 
 ### 5.5 最佳实践总结
