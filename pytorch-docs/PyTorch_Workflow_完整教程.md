@@ -1647,28 +1647,77 @@ print("\n✅ 完整流程执行完毕!")
 ```python
 from torch.cuda.amp import autocast, GradScaler
 
-# 创建梯度缩放器
+# ==================== 创建梯度缩放器 ====================
+# GradScaler 用于处理混合精度训练中的数值稳定性问题
+# 
+# 为什么需要梯度缩放？
+# - FP16（半精度）的数值范围比 FP32 小得多
+# - 小梯度在 FP16 中可能会下溢（变为 0）
+# - 缩放器会放大损失，使梯度不会下溢
 scaler = GradScaler()
 
+# ==================== 训练循环 ====================
 for epoch in range(epochs):
+    # 设置为训练模式
     model.train()
 
+    # 遍历数据批次
     for batch, (X, y) in enumerate(train_loader):
+        # 将数据移动到 GPU
         X, y = X.to(device), y.to(device)
 
-        # 使用混合精度
+        # ==================== 混合精度前向传播 ====================
+        # autocast() 自动将操作转换为合适的精度
+        # - 矩阵乘法、卷积等计算密集型操作 → FP16（快速）
+        # - 归一化、损失计算等精度敏感操作 → FP32（准确）
         with autocast():
+            # 前向传播（自动使用混合精度）
             y_pred = model(X)
+            # 计算损失
             loss = loss_fn(y_pred, y)
 
+        # ==================== 清零梯度 ====================
+        # 在反向传播前清除之前的梯度
         optimizer.zero_grad()
 
-        # 缩放损失并反向传播
+        # ==================== 缩放损失并反向传播 ====================
+        # scaler.scale(loss) 放大损失值
+        # 目的：防止 FP16 梯度下溢
+        # 例如：如果梯度是 0.0001，在 FP16 中可能变为 0
+        #       放大 1000 倍后变为 0.1，就不会下溢
         scaler.scale(loss).backward()
 
-        # 更新参数
+        # ==================== 更新参数 ====================
+        # scaler.step(optimizer) 执行以下操作：
+        # 1. 将梯度缩小回原始大小（反向缩放）
+        # 2. 检查梯度是否包含 inf 或 nan
+        # 3. 如果梯度正常，更新模型参数
+        # 4. 如果梯度异常，跳过这次更新
         scaler.step(optimizer)
+        
+        # scaler.update() 更新缩放因子
+        # - 如果最近的梯度都正常，增加缩放因子（更激进）
+        # - 如果出现 inf/nan，减小缩放因子（更保守）
+        # 这是一个自适应过程，无需手动调整
         scaler.update()
+
+# ==================== AMP 工作原理总结 ====================
+# 1. autocast(): 自动选择 FP16 或 FP32 精度
+# 2. scaler.scale(): 放大损失，防止梯度下溢
+# 3. scaler.step(): 缩小梯度并更新参数
+# 4. scaler.update(): 动态调整缩放因子
+#
+# 性能提升：
+# - 训练速度：1.5-3倍（取决于模型和硬件）
+# - 内存使用：减少约 50%
+# - 精度影响：几乎没有（通常 <0.1% 差异）
+#
+# 适用场景：
+# ✅ 大型模型（ResNet、Transformer 等）
+# ✅ GPU 内存不足时
+# ✅ 需要更大 batch size 时
+# ❌ 小模型（收益不明显）
+# ❌ CPU 训练（AMP 仅支持 CUDA）
 ```
 
 ### 7.2 梯度累积 (Gradient Accumulation)
@@ -1676,62 +1725,212 @@ for epoch in range(epochs):
 **用途:** 模拟更大的 batch size (当 GPU 内存不足时)
 
 ```python
-# 模拟 batch size = 32 (实际 batch size = 8)
-ACCUMULATION_STEPS = 4
+# ==================== 设置梯度累积步数 ====================
+# 梯度累积的核心思想：
+# - 实际 batch size = 8（受 GPU 内存限制）
+# - 累积 4 个 batch 的梯度
+# - 有效 batch size = 8 × 4 = 32
+# 
+# 为什么需要梯度累积？
+# - GPU 内存不足，无法使用大 batch size
+# - 大 batch size 通常能提高训练稳定性和收敛速度
+# - 梯度累积可以在不增加内存的情况下模拟大 batch
+ACCUMULATION_STEPS = 4  # 累积 4 个 batch 后再更新参数
 
+# ==================== 初始化梯度 ====================
+# 在训练开始前清零梯度
 optimizer.zero_grad()
 
+# ==================== 训练循环 ====================
 for i, (X, y) in enumerate(train_loader):
+    # 将数据移动到 GPU
     X, y = X.to(device), y.to(device)
 
-    # 前向传播
+    # ==================== 前向传播 ====================
+    # 计算预测值
     y_pred = model(X)
+    # 计算损失
     loss = loss_fn(y_pred, y)
 
-    # 归一化损失
+    # ==================== 归一化损失 ====================
+    # 关键步骤！将损失除以累积步数
+    # 
+    # 为什么要归一化？
+    # - 如果不归一化，累积的梯度会是原来的 ACCUMULATION_STEPS 倍
+    # - 归一化后，累积梯度的平均值等于单个大 batch 的梯度
+    # 
+    # 数学原理：
+    # - 4 个小 batch 的损失：L1, L2, L3, L4
+    # - 不归一化：总梯度 = ∇L1 + ∇L2 + ∇L3 + ∇L4
+    # - 归一化后：总梯度 = (∇L1 + ∇L2 + ∇L3 + ∇L4) / 4
+    # - 这等价于一个大 batch 的平均梯度
     loss = loss / ACCUMULATION_STEPS
 
-    # 反向传播
+    # ==================== 反向传播 ====================
+    # 计算梯度并累积（不清零）
+    # 梯度会自动累加到之前的梯度上
     loss.backward()
 
-    # 每 ACCUMULATION_STEPS 更新一次参数
+    # ==================== 条件更新参数 ====================
+    # 每累积 ACCUMULATION_STEPS 个 batch 后才更新一次参数
+    # 
+    # 例如：ACCUMULATION_STEPS = 4
+    # - i=0: 累积梯度，不更新
+    # - i=1: 累积梯度，不更新
+    # - i=2: 累积梯度，不更新
+    # - i=3: 累积梯度，更新参数，清零梯度
+    # - i=4: 累积梯度，不更新
+    # - ...
     if (i + 1) % ACCUMULATION_STEPS == 0:
+        # 使用累积的梯度更新参数
         optimizer.step()
+        # 清零梯度，为下一轮累积做准备
         optimizer.zero_grad()
+
+# ==================== 梯度累积总结 ====================
+# 优点：
+# ✅ 在有限的 GPU 内存下模拟大 batch size
+# ✅ 提高训练稳定性（大 batch 的优势）
+# ✅ 不需要修改模型结构
+# ✅ 实现简单，只需几行代码
+#
+# 缺点：
+# ❌ 训练时间变长（更新频率降低）
+# ❌ BatchNorm 统计量基于小 batch（可能不准确）
+#
+# 使用场景：
+# - GPU 内存不足，无法使用理想的 batch size
+# - 训练大型模型（BERT、GPT 等）
+# - 需要稳定的训练过程
+#
+# 注意事项：
+# 1. 必须归一化损失（除以 ACCUMULATION_STEPS）
+# 2. 最后可能有不足 ACCUMULATION_STEPS 的 batch，需要特殊处理
+# 3. 学习率可能需要相应调整（因为有效 batch size 变大了）
 ```
 
 ### 7.3 学习率调度器 (Learning Rate Scheduler)
 
 ```python
 from torch.optim.lr_scheduler import (
-    StepLR,
-    ReduceLROnPlateau,
-    CosineAnnealingLR
+    StepLR,              # 阶梯式学习率衰减
+    ReduceLROnPlateau,   # 基于指标的自适应学习率
+    CosineAnnealingLR    # 余弦退火学习率
 )
 
-# 方法 1: StepLR - 每 N 个 epoch 降低学习率
+# ==================== 方法 1: StepLR - 阶梯式衰减 ====================
+# 每隔固定的 epoch 数降低学习率
+# 
+# 参数说明：
+# - step_size=30: 每 30 个 epoch 降低一次学习率
+# - gamma=0.1: 学习率衰减因子（新学习率 = 旧学习率 × 0.1）
+#
+# 学习率变化示例（初始 lr=0.01）：
+# - Epoch 0-29:  lr = 0.01
+# - Epoch 30-59: lr = 0.001  (0.01 × 0.1)
+# - Epoch 60-89: lr = 0.0001 (0.001 × 0.1)
+#
+# 适用场景：
+# ✅ 训练过程比较稳定，知道大概在哪个阶段需要降低学习率
+# ✅ 简单直接，容易理解和调试
+# ❌ 不够灵活，无法根据训练情况自适应调整
 scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
 
-# 方法 2: ReduceLROnPlateau - 当指标停止改善时降低学习率
+# ==================== 方法 2: ReduceLROnPlateau - 自适应衰减 ====================
+# 当监控的指标停止改善时降低学习率
+# 这是最智能的调度器，能根据训练情况自动调整
+#
+# 参数说明：
+# - mode='min': 监控指标越小越好（如 loss）
+#               如果是准确率，应该用 mode='max'
+# - factor=0.1: 学习率衰减因子（新学习率 = 旧学习率 × 0.1）
+# - patience=10: 容忍度，如果 10 个 epoch 指标没有改善，就降低学习率
+#
+# 工作原理：
+# 1. 每个 epoch 后，检查验证损失是否改善
+# 2. 如果连续 10 个 epoch 都没有改善
+# 3. 将学习率降低为原来的 0.1 倍
+# 4. 重置计数器，继续监控
+#
+# 适用场景：
+# ✅ 不确定何时需要降低学习率
+# ✅ 训练过程不稳定，需要自适应调整
+# ✅ 最推荐的方法，适用于大多数场景
 scheduler = ReduceLROnPlateau(optimizer, mode='min',
                              factor=0.1, patience=10)
 
-# 方法 3: CosineAnnealingLR - 余弦退火
+# ==================== 方法 3: CosineAnnealingLR - 余弦退火 ====================
+# 学习率按照余弦函数曲线变化
+# 
+# 参数说明：
+# - T_max=epochs: 余弦周期的一半（通常设置为总 epoch 数）
+#
+# 学习率变化规律：
+# - 开始时学习率较高
+# - 按照余弦曲线平滑下降
+# - 最后接近 0
+# 
+# 数学公式：
+# lr = lr_min + (lr_max - lr_min) × (1 + cos(π × epoch / T_max)) / 2
+#
+# 优点：
+# ✅ 平滑的学习率变化，避免突然的跳跃
+# ✅ 在训练后期学习率接近 0，有助于收敛
+# ✅ 常用于训练 Transformer 等大型模型
+#
+# 适用场景：
+# ✅ 训练周期固定且已知
+# ✅ 需要平滑的学习率衰减
+# ❌ 不适合需要中途调整训练周期的情况
 scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
 
-# 在训练循环中使用
+# ==================== 在训练循环中使用调度器 ====================
 for epoch in range(epochs):
-    # ... 训练代码 ...
+    # ---------- 训练代码 ----------
+    # model.train()
+    # ... 前向传播、计算损失、反向传播、更新参数 ...
+    
+    # ---------- 评估代码 ----------
+    # model.eval()
+    # ... 计算验证损失 val_loss ...
 
-    # StepLR / CosineAnnealingLR
+    # ==================== 更新学习率 ====================
+    # 不同的调度器有不同的调用方式：
+    
+    # 方式 1: StepLR / CosineAnnealingLR
+    # 这些调度器只需要知道当前 epoch，不需要额外参数
     scheduler.step()
 
-    # ReduceLROnPlateau (需要监控指标)
+    # 方式 2: ReduceLROnPlateau
+    # 这个调度器需要监控指标（如验证损失）
+    # 根据指标的变化来决定是否降低学习率
     # scheduler.step(val_loss)
 
-    # 打印当前学习率
+    # ==================== 打印当前学习率 ====================
+    # optimizer.param_groups 是一个列表，包含所有参数组
+    # 通常只有一个参数组，所以用 [0]
+    # 'lr' 键存储当前的学习率
     current_lr = optimizer.param_groups[0]['lr']
     print(f"Epoch {epoch}, LR: {current_lr}")
+
+# ==================== 学习率调度器对比总结 ====================
+# 
+# | 调度器 | 调整方式 | 优点 | 缺点 | 推荐场景 |
+# |--------|---------|------|------|---------|
+# | **StepLR** | 固定步长衰减 | 简单、可预测 | 不够灵活 | 训练过程稳定 |
+# | **ReduceLROnPlateau** | 基于指标自适应 | 智能、灵活 | 需要监控指标 | 大多数场景（推荐）|
+# | **CosineAnnealingLR** | 余弦曲线衰减 | 平滑、优雅 | 需要固定周期 | Transformer 等大模型 |
+#
+# 其他常用调度器：
+# - ExponentialLR: 指数衰减（lr = lr × gamma^epoch）
+# - MultiStepLR: 多阶梯衰减（在指定的 epoch 降低学习率）
+# - OneCycleLR: 单周期学习率（先增后减，适合快速训练）
+# - CyclicLR: 循环学习率（在最小值和最大值之间循环）
+#
+# 选择建议：
+# 1. 不确定用哪个？→ 使用 ReduceLROnPlateau（最智能）
+# 2. 训练 Transformer？→ 使用 CosineAnnealingLR 或 OneCycleLR
+# 3. 需要简单可控？→ 使用 StepLR 或 MultiStepLR
 ```
 
 ### 7.4 梯度裁剪 (Gradient Clipping)
@@ -1741,62 +1940,304 @@ for epoch in range(epochs):
 ```python
 import torch.nn.utils as nn_utils
 
-MAX_GRAD_NORM = 1.0
+# ==================== 设置梯度裁剪阈值 ====================
+# 梯度裁剪的目的：防止梯度爆炸
+# 
+# 什么是梯度爆炸？
+# - 在深度网络中，梯度在反向传播时可能会指数级增长
+# - 导致参数更新过大，模型无法收敛，甚至出现 NaN
+# 
+# 梯度裁剪的原理：
+# - 计算所有参数梯度的 L2 范数（总梯度大小）
+# - 如果范数超过阈值，按比例缩小所有梯度
+# - 保持梯度方向不变，只限制梯度大小
+MAX_GRAD_NORM = 1.0  # 梯度范数的最大值
 
+# ==================== 训练循环 ====================
 for epoch in range(epochs):
     for X, y in train_loader:
+        # 1. 清零梯度
         optimizer.zero_grad()
 
+        # 2. 前向传播
         y_pred = model(X)
+        
+        # 3. 计算损失
         loss = loss_fn(y_pred, y)
+        
+        # 4. 反向传播（计算梯度）
         loss.backward()
 
-        # 梯度裁剪
+        # ==================== 5. 梯度裁剪（关键步骤）====================
+        # clip_grad_norm_() 执行以下操作：
+        # 
+        # 步骤 1: 计算所有参数梯度的 L2 范数
+        # total_norm = sqrt(sum(grad^2 for all parameters))
+        # 
+        # 步骤 2: 如果 total_norm > MAX_GRAD_NORM
+        # 缩放因子 = MAX_GRAD_NORM / total_norm
+        # 所有梯度 *= 缩放因子
+        # 
+        # 例如：
+        # - 如果 total_norm = 5.0, MAX_GRAD_NORM = 1.0
+        # - 缩放因子 = 1.0 / 5.0 = 0.2
+        # - 所有梯度都乘以 0.2，使总范数变为 1.0
+        # 
+        # 参数说明：
+        # - model.parameters(): 要裁剪的参数
+        # - MAX_GRAD_NORM: 梯度范数的最大允许值
+        # - 返回值: 裁剪前的总梯度范数（可用于监控）
         nn_utils.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
+        
+        # 注意：clip_grad_norm_() 中的下划线表示原地操作
+        # 直接修改参数的梯度，不创建新的张量
 
+        # 6. 更新参数
         optimizer.step()
+
+# ==================== 梯度裁剪详细说明 ====================
+# 
+# 两种裁剪方法：
+# 
+# 1. clip_grad_norm_() - 按范数裁剪（推荐）
+#    - 保持梯度方向不变
+#    - 只限制梯度的总大小
+#    - 适用于大多数场景
+# 
+# 2. clip_grad_value_() - 按值裁剪
+#    - 将每个梯度限制在 [-threshold, threshold] 范围内
+#    - 可能改变梯度方向
+#    - 较少使用
+#
+# 使用示例：
+# nn_utils.clip_grad_value_(model.parameters(), clip_value=0.5)
+#
+# ==================== 如何选择阈值？====================
+# 
+# 常用阈值：
+# - RNN/LSTM: 1.0 - 5.0（容易梯度爆炸）
+# - Transformer: 1.0 - 2.0
+# - CNN: 通常不需要（较少梯度爆炸）
+# 
+# 调试方法：
+# 1. 监控梯度范数：
+#    total_norm = nn_utils.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
+#    print(f"Gradient norm: {total_norm:.4f}")
+# 
+# 2. 如果经常看到 total_norm >> MAX_GRAD_NORM，说明梯度爆炸严重
+# 3. 如果 total_norm 总是 < MAX_GRAD_NORM，可以适当增加阈值或不使用裁剪
+#
+# ==================== 梯度裁剪的优缺点 ====================
+# 
+# 优点：
+# ✅ 防止梯度爆炸，提高训练稳定性
+# ✅ 允许使用更大的学习率
+# ✅ 对 RNN/LSTM 等序列模型特别有效
+# ✅ 实现简单，只需一行代码
+#
+# 缺点：
+# ❌ 引入额外的超参数（阈值）
+# ❌ 可能减慢收敛速度（限制了梯度大小）
+# ❌ 对某些模型可能不是必需的
+#
+# 使用场景：
+# ✅ 训练 RNN、LSTM、GRU（强烈推荐）
+# ✅ 训练深度网络（如 ResNet-152）
+# ✅ 出现 NaN 或 Inf 损失时
+# ✅ 训练不稳定时
+# ❌ 浅层网络或 CNN（通常不需要）
+#
+# 最佳实践：
+# 1. 先尝试不使用梯度裁剪
+# 2. 如果出现梯度爆炸（NaN、Inf），再添加
+# 3. 从较大的阈值开始（如 5.0），逐步调小
+# 4. 监控裁剪前的梯度范数，了解是否真的需要裁剪
 ```
 
 ### 7.5 早停 (Early Stopping)
 
 ```python
 class EarlyStopping:
-    """早停机制"""
+    """
+    早停机制（Early Stopping）
+    
+    目的：
+    - 防止过拟合：当验证损失不再改善时停止训练
+    - 节省时间：避免无意义的训练
+    - 自动选择最佳模型：在验证损失最低时停止
+    
+    工作原理：
+    - 监控验证损失
+    - 如果连续 N 个 epoch 没有改善，触发早停
+    - 保存验证损失最低时的模型
+    """
+    
     def __init__(self, patience=7, min_delta=0):
         """
+        初始化早停机制
+        
         参数:
-            patience: 容忍多少个 epoch 没有改善
-            min_delta: 最小改善量
+            patience (int): 容忍度，允许多少个 epoch 没有改善
+                           例如 patience=10，表示如果连续 10 个 epoch
+                           验证损失都没有改善，就触发早停
+                           
+            min_delta (float): 最小改善量，只有改善超过这个值才算真正改善
+                              例如 min_delta=0.001，表示验证损失必须降低
+                              至少 0.001 才算改善，避免微小波动导致误判
+        
+        示例：
+            # 宽松的早停（更多训练机会）
+            early_stopping = EarlyStopping(patience=20, min_delta=0.0001)
+            
+            # 严格的早停（更快停止）
+            early_stopping = EarlyStopping(patience=5, min_delta=0.01)
         """
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.best_loss = None
-        self.early_stop = False
+        self.patience = patience          # 容忍度
+        self.min_delta = min_delta        # 最小改善量
+        self.counter = 0                  # 计数器：记录连续多少个 epoch 没有改善
+        self.best_loss = None             # 记录目前最好的验证损失
+        self.early_stop = False           # 早停标志：是否应该停止训练
 
     def __call__(self, val_loss):
+        """
+        每个 epoch 后调用此方法，检查是否应该早停
+        
+        参数:
+            val_loss (float): 当前 epoch 的验证损失
+        
+        逻辑流程：
+        1. 如果是第一次调用，记录当前损失为最佳损失
+        2. 如果当前损失没有改善（或改善不足 min_delta）：
+           - 计数器 +1
+           - 如果计数器达到 patience，触发早停
+        3. 如果当前损失有明显改善：
+           - 更新最佳损失
+           - 重置计数器为 0
+        """
+        # ==================== 情况 1: 第一次调用 ====================
         if self.best_loss is None:
+            # 第一个 epoch，直接记录为最佳损失
             self.best_loss = val_loss
+            
+        # ==================== 情况 2: 没有改善 ====================
+        # 判断条件：val_loss > self.best_loss - self.min_delta
+        # 
+        # 数学解释：
+        # - 如果 val_loss = 0.5, best_loss = 0.4, min_delta = 0.01
+        # - 需要改善到 0.4 - 0.01 = 0.39 才算真正改善
+        # - 0.5 > 0.39，所以没有改善
+        #
+        # 为什么要减去 min_delta？
+        # - 避免因为微小的随机波动而重置计数器
+        # - 例如从 0.400 到 0.399，改善太小，可能只是噪声
         elif val_loss > self.best_loss - self.min_delta:
+            # 损失没有改善（或改善不够），计数器 +1
             self.counter += 1
             print(f"EarlyStopping counter: {self.counter}/{self.patience}")
+            
+            # 检查是否达到容忍度上限
             if self.counter >= self.patience:
+                # 连续 patience 个 epoch 都没有改善，触发早停
                 self.early_stop = True
+                
+        # ==================== 情况 3: 有明显改善 ====================
         else:
+            # 损失有明显改善（降低超过 min_delta）
+            # 更新最佳损失
             self.best_loss = val_loss
+            # 重置计数器，重新开始计数
             self.counter = 0
+            # 这时通常应该保存模型（在外部实现）
 
-# 使用示例
+
+# ==================== 使用示例 ====================
+# 创建早停对象
+# patience=10: 允许 10 个 epoch 没有改善
+# min_delta=0.001: 损失必须降低至少 0.001 才算改善
 early_stopping = EarlyStopping(patience=10, min_delta=0.001)
 
+# 训练循环
 for epoch in range(epochs):
-    # ... 训练和验证 ...
+    # ---------- 训练阶段 ----------
+    # model.train()
+    # ... 前向传播、计算损失、反向传播、更新参数 ...
+    
+    # ---------- 验证阶段 ----------
+    # model.eval()
+    # with torch.inference_mode():
+    #     ... 计算验证损失 val_loss ...
 
+    # ==================== 检查早停 ====================
+    # 将当前验证损失传递给早停对象
     early_stopping(val_loss)
 
+    # 检查是否应该停止训练
     if early_stopping.early_stop:
         print("Early stopping triggered!")
+        print(f"最佳验证损失: {early_stopping.best_loss:.4f}")
+        print(f"在 epoch {epoch} 停止训练")
         break
+    
+    # 如果验证损失改善了，保存模型（可选）
+    # if val_loss == early_stopping.best_loss:
+    #     torch.save(model.state_dict(), 'best_model.pth')
+
+
+# ==================== 早停机制详细说明 ====================
+#
+# 工作流程示例（patience=3, min_delta=0.01）：
+#
+# Epoch | Val Loss | Best Loss | Counter | Action
+# ------|----------|-----------|---------|------------------
+#   1   |  1.000   |  1.000    |    0    | 初始化最佳损失
+#   2   |  0.800   |  0.800    |    0    | 改善！更新最佳损失
+#   3   |  0.750   |  0.750    |    0    | 改善！更新最佳损失
+#   4   |  0.755   |  0.750    |    1    | 没改善，计数器+1
+#   5   |  0.760   |  0.750    |    2    | 没改善，计数器+1
+#   6   |  0.765   |  0.750    |    3    | 没改善，触发早停！
+#
+# ==================== 早停的优缺点 ====================
+#
+# 优点：
+# ✅ 防止过拟合（在泛化性能最好时停止）
+# ✅ 节省训练时间（不需要训练完所有 epoch）
+# ✅ 自动化（不需要手动判断何时停止）
+# ✅ 简单易用（只需几行代码）
+#
+# 缺点：
+# ❌ 可能过早停止（验证集可能有噪声）
+# ❌ 需要调整超参数（patience 和 min_delta）
+# ❌ 需要验证集（增加数据划分复杂度）
+#
+# ==================== 参数选择建议 ====================
+#
+# patience 的选择：
+# - 小数据集：5-10（训练快，可以早点停）
+# - 大数据集：10-20（训练慢，需要更多耐心）
+# - 不稳定的训练：15-30（给模型更多机会）
+#
+# min_delta 的选择：
+# - 损失量级大（>1.0）：0.01-0.1
+# - 损失量级中（0.1-1.0）：0.001-0.01
+# - 损失量级小（<0.1）：0.0001-0.001
+#
+# ==================== 最佳实践 ====================
+#
+# 1. 结合模型保存：
+#    if val_loss < best_loss:
+#        torch.save(model.state_dict(), 'best_model.pth')
+#
+# 2. 监控多个指标：
+#    可以扩展类来同时监控损失和准确率
+#
+# 3. 使用验证集：
+#    早停应该基于验证集，而不是训练集
+#
+# 4. 记录训练历史：
+#    保存每个 epoch 的损失，用于后续分析
+#
+# 5. 先不用早停：
+#    先完整训练一次，观察损失曲线，再决定 patience
 ```
 
 ---
