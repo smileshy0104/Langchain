@@ -2248,69 +2248,328 @@ for epoch in range(epochs):
 
 ```python
 def regression_metrics(y_true, y_pred):
-    """计算回归问题的常用指标"""
-    # 转换为 numpy 数组
+    """
+    计算回归问题的常用评估指标
+    
+    回归问题的目标是预测连续值，需要衡量预测值与真实值的接近程度
+    常用的四个指标：MAE, MSE, RMSE, R²
+    """
+    # ==================== 数据准备 ====================
+    # 将 PyTorch 张量转换为 NumPy 数组
+    # .cpu() 将数据从 GPU 移动到 CPU（如果在 GPU 上）
+    # .numpy() 转换为 NumPy 数组，方便计算
     y_true = y_true.cpu().numpy()
     y_pred = y_pred.cpu().numpy()
 
-    # MAE (Mean Absolute Error)
+    # ==================== 指标 1: MAE (Mean Absolute Error) ====================
+    # 平均绝对误差
+    # 
+    # 公式: MAE = (1/n) × Σ|y_true - y_pred|
+    # 
+    # 含义：
+    # - 预测值与真实值的平均绝对差距
+    # - 所有误差的绝对值的平均
+    # 
+    # 特点：
+    # ✅ 容易理解（平均误差多少）
+    # ✅ 单位与原始数据相同（如预测房价，MAE 单位是元）
+    # ✅ 对异常值不敏感（因为不平方）
+    # 
+    # 解释：
+    # - MAE = 5 表示平均每个预测偏差 5 个单位
+    # - 越小越好，0 表示完美预测
     mae = np.mean(np.abs(y_true - y_pred))
 
-    # MSE (Mean Squared Error)
+    # ==================== 指标 2: MSE (Mean Squared Error) ====================
+    # 均方误差
+    # 
+    # 公式: MSE = (1/n) × Σ(y_true - y_pred)²
+    # 
+    # 含义：
+    # - 预测值与真实值的平方差的平均
+    # - 误差的平方的平均
+    # 
+    # 特点：
+    # ✅ 数学性质好（可微分，凸函数）
+    # ✅ 常用作损失函数（nn.MSELoss）
+    # ❌ 单位是原始数据的平方（不直观）
+    # ❌ 对异常值敏感（因为平方会放大大误差）
+    # 
+    # 解释：
+    # - MSE = 25 表示平均平方误差为 25
+    # - 越小越好，0 表示完美预测
     mse = np.mean((y_true - y_pred) ** 2)
 
-    # RMSE (Root Mean Squared Error)
+    # ==================== 指标 3: RMSE (Root Mean Squared Error) ====================
+    # 均方根误差
+    # 
+    # 公式: RMSE = √MSE = √[(1/n) × Σ(y_true - y_pred)²]
+    # 
+    # 含义：
+    # - MSE 的平方根
+    # - 恢复到原始数据的单位
+    # 
+    # 特点：
+    # ✅ 单位与原始数据相同（比 MSE 更直观）
+    # ✅ 对大误差有惩罚（因为先平方再开方）
+    # ✅ 最常用的回归评估指标之一
+    # 
+    # 解释：
+    # - RMSE = 5 表示预测值平均偏离真实值 5 个单位
+    # - 越小越好，0 表示完美预测
+    # - RMSE 总是 ≥ MAE（因为平方会放大大误差）
     rmse = np.sqrt(mse)
 
-    # R² Score
+    # ==================== 指标 4: R² Score (决定系数) ====================
+    # R² (R-squared) 或称为决定系数
+    # 
+    # 公式: R² = 1 - (SS_res / SS_tot)
+    # 其中:
+    # - SS_res = Σ(y_true - y_pred)²  (残差平方和)
+    # - SS_tot = Σ(y_true - ȳ)²       (总平方和)
+    # 
+    # 含义：
+    # - 模型解释了多少数据的变异性
+    # - 模型相对于"平均值预测"的改进程度
+    # 
+    # 计算步骤：
+    
+    # 步骤 1: 计算残差平方和（模型的预测误差）
     ss_res = np.sum((y_true - y_pred) ** 2)
+    
+    # 步骤 2: 计算总平方和（数据本身的变异性）
+    # np.mean(y_true) 是真实值的平均值
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    
+    # 步骤 3: 计算 R²
+    # R² = 1 - (残差平方和 / 总平方和)
     r2 = 1 - (ss_res / ss_tot)
+    
+    # R² 的解释：
+    # - R² = 1.0:  完美预测，模型解释了 100% 的变异性
+    # - R² = 0.8:  良好，模型解释了 80% 的变异性
+    # - R² = 0.5:  一般，模型解释了 50% 的变异性
+    # - R² = 0.0:  模型和预测平均值一样好（没有用）
+    # - R² < 0.0:  模型比预测平均值还差（很糟糕）
+    # 
+    # 特点：
+    # ✅ 无量纲（0-1 之间，容易比较不同数据集）
+    # ✅ 直观（百分比形式，易于理解）
+    # ✅ 衡量模型的整体拟合优度
+    # ❌ 可能为负（当模型很差时）
 
+    # ==================== 返回所有指标 ====================
     return {
-        'MAE': mae,
-        'MSE': mse,
-        'RMSE': rmse,
-        'R²': r2
+        'MAE': mae,      # 平均绝对误差
+        'MSE': mse,      # 均方误差
+        'RMSE': rmse,    # 均方根误差
+        'R²': r2         # 决定系数
     }
 
-# 使用示例
+
+# ==================== 使用示例 ====================
+# 设置模型为评估模式
 model.eval()
+
+# 使用推理模式进行预测（不计算梯度）
 with torch.inference_mode():
+    # 在测试集上进行预测
     y_pred = model(X_test)
 
+# 计算所有评估指标
 metrics = regression_metrics(y_test, y_pred)
+
+# 打印评估结果
 print("模型评估指标:")
 for name, value in metrics.items():
     print(f"  {name}: {value:.4f}")
+
+# ==================== 指标选择建议 ====================
+#
+# 根据不同场景选择合适的指标：
+#
+# 1. 需要直观理解误差大小？
+#    → 使用 MAE 或 RMSE（单位与原始数据相同）
+#
+# 2. 需要惩罚大误差？
+#    → 使用 RMSE 或 MSE（平方会放大大误差）
+#
+# 3. 需要比较不同数据集的模型？
+#    → 使用 R²（无量纲，0-1 之间）
+#
+# 4. 作为损失函数训练？
+#    → 使用 MSE（数学性质好，可微分）
+#
+# 5. 数据有异常值？
+#    → 使用 MAE（对异常值不敏感）
+#
+# ==================== 指标对比总结 ====================
+#
+# | 指标 | 单位 | 范围 | 对异常值 | 常用场景 |
+# |------|------|------|----------|----------|
+# | MAE  | 原始单位 | [0, ∞) | 不敏感 | 日常报告、有异常值 |
+# | MSE  | 单位² | [0, ∞) | 敏感 | 损失函数、理论分析 |
+# | RMSE | 原始单位 | [0, ∞) | 敏感 | 最常用、需要惩罚大误差 |
+# | R²   | 无量纲 | (-∞, 1] | 中等 | 模型比较、整体评估 |
+#
+# 最佳实践：
+# - 同时报告多个指标（如 RMSE + R²）
+# - MAE 和 RMSE 一起看可以了解误差分布
+# - 如果 RMSE >> MAE，说明有较大的异常误差
 ```
 
 ### 8.2 使用 torchmetrics 库
 
 ```python
-# 安装: pip install torchmetrics
+# ==================== 安装 torchmetrics ====================
+# torchmetrics 是 PyTorch 官方推荐的指标计算库
+# 
+# 优势：
+# ✅ 自动处理批次累积（不需要手动平均）
+# ✅ 支持分布式训练（多 GPU）
+# ✅ GPU 加速（直接在 GPU 上计算）
+# ✅ 类型安全（自动处理张量类型）
+# ✅ 丰富的指标（100+ 种指标）
+#
+# 安装命令:
+# pip install torchmetrics
 
 from torchmetrics import MeanAbsoluteError, MeanSquaredError, R2Score
 
-# 创建指标
-mae_metric = MeanAbsoluteError()
-mse_metric = MeanSquaredError()
-r2_metric = R2Score()
+# ==================== 创建指标对象 ====================
+# torchmetrics 使用面向对象的方式管理指标
+# 每个指标都是一个可调用的对象，维护内部状态
+#
+# 创建指标对象（只需创建一次）
+mae_metric = MeanAbsoluteError()  # 平均绝对误差
+mse_metric = MeanSquaredError()   # 均方误差
+r2_metric = R2Score()             # R² 决定系数
 
-# 在训练循环中更新
+# 注意：
+# - 指标对象会自动累积多个批次的结果
+# - 内部维护运行总和和样本计数
+# - 最后调用 compute() 计算最终平均值
+
+# ==================== 在评估循环中使用 ====================
+# 遍历测试数据加载器
 for X, y in test_loader:
+    # 使用推理模式（不计算梯度，节省内存）
     with torch.inference_mode():
+        # 前向传播，获取预测值
         y_pred = model(X)
 
-    # 更新指标
+    # ==================== 更新指标 ====================
+    # update() 方法会累积当前批次的结果
+    # 
+    # 工作原理：
+    # 1. 计算当前批次的指标值
+    # 2. 将结果累加到内部状态
+    # 3. 更新样本计数
+    # 
+    # 例如对于 MAE：
+    # - 第 1 个批次: total_error = 10, count = 32
+    # - 第 2 个批次: total_error = 10 + 8 = 18, count = 32 + 32 = 64
+    # - 第 3 个批次: total_error = 18 + 12 = 30, count = 64 + 32 = 96
+    # - 最终 MAE = 30 / 96 = 0.3125
     mae_metric.update(y_pred, y)
     mse_metric.update(y_pred, y)
     r2_metric.update(y_pred, y)
+    
+    # 注意：
+    # - update() 不返回值，只更新内部状态
+    # - 可以在训练循环中多次调用
+    # - 支持不同大小的批次（自动处理）
 
-# 计算最终值
+# ==================== 计算最终指标值 ====================
+# compute() 方法计算所有累积批次的最终指标
+# 
+# 工作原理：
+# - 使用累积的总和和计数计算平均值
+# - 返回一个标量张量
+# - 不会重置内部状态（需要手动调用 reset()）
 print(f"MAE: {mae_metric.compute():.4f}")
 print(f"MSE: {mse_metric.compute():.4f}")
 print(f"R²: {r2_metric.compute():.4f}")
+
+# ==================== 重置指标（可选）====================
+# 如果需要重新计算（例如下一个 epoch），需要重置
+# mae_metric.reset()
+# mse_metric.reset()
+# r2_metric.reset()
+
+# ==================== torchmetrics 的优势示例 ====================
+#
+# 手动计算 vs torchmetrics：
+#
+# 【手动计算】（容易出错）
+# total_mae = 0
+# total_samples = 0
+# for X, y in test_loader:
+#     y_pred = model(X)
+#     total_mae += torch.abs(y_pred - y).sum().item()
+#     total_samples += y.size(0)
+# mae = total_mae / total_samples
+#
+# 【使用 torchmetrics】（简洁、正确）
+# mae_metric = MeanAbsoluteError()
+# for X, y in test_loader:
+#     y_pred = model(X)
+#     mae_metric.update(y_pred, y)
+# mae = mae_metric.compute()
+#
+# ==================== 高级用法 ====================
+#
+# 1. 移动到 GPU：
+#    mae_metric = MeanAbsoluteError().to(device)
+#
+# 2. 分布式训练：
+#    mae_metric = MeanAbsoluteError(dist_sync_on_step=True)
+#
+# 3. 批量创建指标：
+#    from torchmetrics import MetricCollection
+#    metrics = MetricCollection([
+#        MeanAbsoluteError(),
+#        MeanSquaredError(),
+#        R2Score()
+#    ])
+#    metrics.update(y_pred, y)
+#    results = metrics.compute()  # 返回字典
+#
+# 4. 在训练循环中使用：
+#    for epoch in range(epochs):
+#        # 训练阶段
+#        train_metric.reset()
+#        for X, y in train_loader:
+#            y_pred = model(X)
+#            train_metric.update(y_pred, y)
+#        train_loss = train_metric.compute()
+#        
+#        # 验证阶段
+#        val_metric.reset()
+#        for X, y in val_loader:
+#            y_pred = model(X)
+#            val_metric.update(y_pred, y)
+#        val_loss = val_metric.compute()
+#
+# ==================== 常用回归指标 ====================
+#
+# torchmetrics 提供的回归指标：
+# - MeanAbsoluteError (MAE)
+# - MeanSquaredError (MSE)
+# - MeanAbsolutePercentageError (MAPE)
+# - R2Score (决定系数)
+# - ExplainedVariance (解释方差)
+# - PearsonCorrCoef (皮尔逊相关系数)
+# - SpearmanCorrCoef (斯皮尔曼相关系数)
+#
+# ==================== 最佳实践 ====================
+#
+# 1. 在训练开始前创建指标对象
+# 2. 每个 epoch 开始时调用 reset()
+# 3. 在批次循环中调用 update()
+# 4. 在 epoch 结束时调用 compute()
+# 5. 将指标对象移动到与模型相同的设备
+# 6. 使用 MetricCollection 管理多个指标
 ```
 
 ---
