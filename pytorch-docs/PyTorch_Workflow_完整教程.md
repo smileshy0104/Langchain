@@ -149,7 +149,7 @@ print(f"\nFirst 5 y values:\n{y[:5]}")
 ```
 
 **输出示例:**
-```
+```bash
 X shape: torch.Size([50, 1])
 y shape: torch.Size([50, 1])
 Number of samples: 50
@@ -206,28 +206,44 @@ def split_data(X, y, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     参数:
         X: 特征数据
         y: 标签数据
-        train_ratio: 训练集比例
-        val_ratio: 验证集比例
-        test_ratio: 测试集比例
+        train_ratio: 训练集比例 (默认 0.7, 即 70%)
+        val_ratio: 验证集比例 (默认 0.15, 即 15%)
+        test_ratio: 测试集比例 (默认 0.15, 即 15%)
 
     返回:
         X_train, y_train, X_val, y_val, X_test, y_test
     """
+    # 验证三个比例之和是否等于 1.0
+    # 使用 1e-6 作为容差值来处理浮点数精度问题
     assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6, \
         "比例之和必须等于 1"
 
+    # 获取数据集的总样本数
     n = len(X)
+    
+    # 计算训练集的结束索引 (例如: 1000 * 0.7 = 700)
     train_end = int(n * train_ratio)
+    
+    # 计算验证集的结束索引 (例如: 1000 * (0.7 + 0.15) = 850)
     val_end = int(n * (train_ratio + val_ratio))
 
+    # 划分训练集: 从开始到 train_end
     X_train, y_train = X[:train_end], y[:train_end]
+    
+    # 划分验证集: 从 train_end 到 val_end
     X_val, y_val = X[train_end:val_end], y[train_end:val_end]
+    
+    # 划分测试集: 从 val_end 到结束
     X_test, y_test = X[val_end:], y[val_end:]
 
+    # 返回划分后的六个数据集
     return X_train, y_train, X_val, y_val, X_test, y_test
 
-# 使用示例
+
+# 使用示例: 调用函数进行数据划分
 X_train, y_train, X_val, y_val, X_test, y_test = split_data(X, y)
+
+# 打印各数据集的样本数量,验证划分结果
 print(f"训练: {len(X_train)}, 验证: {len(X_val)}, 测试: {len(X_test)}")
 ```
 
@@ -238,7 +254,11 @@ print(f"训练: {len(X_train)}, 验证: {len(X_val)}, 测试: {len(X_test)}")
 ```python
 # 导入 matplotlib 并设置中文字体 解决中文乱码问题
 import matplotlib.pyplot as plt
+
+# 设置默认字体为黑体,用于正确显示中文字符
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 黑体
+
+# 解决坐标轴负号 '-' 显示为方块的问题
 plt.rcParams['axes.unicode_minus'] = False    # 解决负号显示问题
 
 def plot_predictions(train_data=X_train,
@@ -254,32 +274,43 @@ def plot_predictions(train_data=X_train,
         train_labels: 训练标签
         test_data: 测试特征
         test_labels: 测试标签
-        predictions: 模型预测 (可选)
+        predictions: 模型预测 (可选,默认为 None)
     """
-    # 创建图形
+    # 创建图形,设置画布大小为 10x7 英寸
     plt.figure(figsize=(10, 7))
 
-    # 绘制训练数据 (蓝色)
+    # 绘制训练数据散点图
+    # c="b": 蓝色, s=4: 点的大小, label: 图例标签
     plt.scatter(train_data, train_labels, c="b", s=4, label="训练数据")
 
-    # 绘制测试数据 (绿色)
+    # 绘制测试数据散点图 (绿色)
     plt.scatter(test_data, test_labels, c="g", s=4, label="测试数据")
 
-    # 如果有预测结果,绘制预测 (红色)
+    # 如果提供了预测结果,则绘制预测散点图
     if predictions is not None:
+        # 绘制预测结果 (红色),用于对比真实测试数据
         plt.scatter(test_data, predictions, c="r", s=4, label="预测")
 
-    # 添加图例、标签和标题
+    # 添加图例,设置字体大小为 14
     plt.legend(prop={"size": 14})
-    # 添加网格
+    
+    # 设置 X 轴标签
     plt.xlabel("X")
+    
+    # 设置 Y 轴标签
     plt.ylabel("y")
-    # 添加标题
+    
+    # 设置图表标题
     plt.title("数据和预测可视化")
+    
+    # 添加网格线,alpha=0.3 设置透明度使网格不会过于突出
     plt.grid(True, alpha=0.3)
 
-# 可视化原始数据
+
+# 调用函数可视化原始数据 (不包含预测结果)
 plot_predictions()
+
+# 显示图形
 plt.show()
 ```
 
@@ -288,34 +319,39 @@ plt.show()
 #### 使用 DataLoader 处理大型数据集
 
 ```python
+# 导入 PyTorch 数据加载工具
 from torch.utils.data import TensorDataset, DataLoader
 
-# 创建 Dataset
+# 创建 Dataset 对象,将特征和标签封装在一起
+# TensorDataset 会自动将 X 和 y 配对,方便批量加载
 train_dataset = TensorDataset(X_train, y_train)
 test_dataset = TensorDataset(X_test, y_test)
 
-# 创建 DataLoader
+# 设置批次大小 (每次训练使用的样本数量)
 BATCH_SIZE = 8
 
+# 创建训练数据加载器
 train_loader = DataLoader(
-    train_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=True,  # 训练时打乱数据
-    num_workers=2,  # 并行加载
-    pin_memory=True  # 加快 CPU 到 GPU 的传输
+    train_dataset,              # 要加载的数据集
+    batch_size=BATCH_SIZE,      # 每个批次的样本数量
+    shuffle=True,               # 每个 epoch 开始时打乱数据,避免模型记住数据顺序
+    num_workers=2,              # 使用 2 个子进程并行加载数据,加快速度
+    pin_memory=True             # 将数据固定在内存中,加快 CPU 到 GPU 的传输速度
 )
 
+# 创建测试数据加载器
 test_loader = DataLoader(
     test_dataset,
     batch_size=BATCH_SIZE,
-    shuffle=False  # 测试时不打乱
+    shuffle=False               # 测试时不打乱数据,保持评估的一致性
 )
 
-# 查看一个 batch
+# 查看一个 batch 的数据形状
+# 使用 break 只查看第一个批次
 for batch_X, batch_y in train_loader:
-    print(f"Batch X shape: {batch_X.shape}")
-    print(f"Batch y shape: {batch_y.shape}")
-    break
+    print(f"Batch X shape: {batch_X.shape}")  # 输出: torch.Size([8, 1])
+    print(f"Batch y shape: {batch_y.shape}")  # 输出: torch.Size([8, 1])
+    break  # 只查看第一个批次后退出循环
 ```
 
 ---
@@ -337,48 +373,75 @@ for batch_X, batch_y in train_loader:
 ```python
 import torch
 from torch import nn
+
 class LinearRegressionModel(nn.Module):
     """
     简单的线性回归模型: y = wx + b
+    
+    这是手动定义参数的版本，用于理解 PyTorch 模型的基本构建方式
+    继承自 nn.Module，这是所有 PyTorch 神经网络的基类
     """
     def __init__(self):
+        # 调用父类的初始化方法，这是必须的
+        # 它会设置模型的基础功能（如参数追踪、设备管理等）
         super().__init__()
 
-        # 初始化权重 (随机值,训练过程中会调整)
+        # 初始化权重参数 (斜率 w)
+        # nn.Parameter: 将张量注册为模型的可学习参数
+        # torch.randn(1): 从标准正态分布中随机初始化一个值
+        # requires_grad=True: 告诉 PyTorch 在反向传播时计算此参数的梯度
         self.weight = nn.Parameter(
-            torch.randn(1, dtype=torch.float), # 形状为 [1]
-            requires_grad=True  # 启用梯度计算
+            torch.randn(1, dtype=torch.float),  # 形状为 [1]，单个浮点数
+            requires_grad=True  # 启用梯度计算，使其可以通过优化器更新
         )
 
-        # 初始化偏置 (随机值,训练过程中会调整)
+        # 初始化偏置参数 (截距 b)
+        # 同样使用 nn.Parameter 包装，使其成为可学习参数
         self.bias = nn.Parameter(
-            torch.randn(1, dtype=torch.float), # 形状为 [1]
+            torch.randn(1, dtype=torch.float),  # 形状为 [1]，单个浮点数
             requires_grad=True  # 启用梯度计算
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        前向传播: 定义如何从输入计算输出
+        前向传播: 定义模型如何从输入计算输出
+        
+        这个方法在调用 model(x) 时会被自动执行
+        实现线性方程: y = weight * x + bias
 
         参数:
-            x: 输入特征
+            x: 输入特征张量，形状可以是 [batch_size, 1] 或 [n_samples]
 
         返回:
-            预测值
+            预测值张量，与输入形状相同
         """
+        # 执行线性变换: y = wx + b
+        # PyTorch 会自动进行广播 (broadcasting)
         return self.weight * x + self.bias
 
+# ==================== 使用模型 ====================
+
+# 设置随机种子，确保每次运行结果一致（可重复性）
+torch.manual_seed(42)
+
 # 创建模型实例
-torch.manual_seed(42)  # 保证可重复性
 model_0 = LinearRegressionModel()
 
+# 打印模型结构，显示模型的层次和参数
 print(f"模型结构:\n{model_0}")
+
+# 打印初始参数值（随机初始化的）
 print(f"\n初始参数:")
-print(f"  权重: {model_0.weight}")
-print(f"  偏置: {model_0.bias}")
-# 获取参数列表
+print(f"  权重 (weight): {model_0.weight}")
+print(f"  偏置 (bias): {model_0.bias}")
+
+# 获取所有可学习参数的列表
+# 返回一个迭代器，包含所有 requires_grad=True 的参数
 list(model_0.parameters())
-# 获取模型状态字典
+
+# 获取模型的状态字典
+# 返回一个字典，键是参数名，值是参数张量
+# 常用于保存和加载模型
 model_0.state_dict()
 ```
 
@@ -388,28 +451,58 @@ model_0.state_dict()
 class LinearRegressionModelV2(nn.Module):
     """
     使用 nn.Linear 的线性回归模型 (推荐方式)
+    
+    nn.Linear 是 PyTorch 内置的线性层，会自动处理权重和偏置的初始化
+    这是实际开发中的标准做法，比手动定义参数更简洁且更不容易出错
     """
     def __init__(self):
+        # 调用父类初始化
         super().__init__()
 
-        # nn.Linear 内部自动创建 weight 和 bias 参数
+        # 创建线性层
+        # nn.Linear 会自动创建并初始化 weight 和 bias 参数
+        # 内部实现: y = x @ weight.T + bias
         self.linear_layer = nn.Linear(
-            in_features=1,   # 输入特征数
-            out_features=1   # 输出特征数
+            in_features=1,   # 输入特征的维度（每个样本有 1 个特征）
+            out_features=1   # 输出特征的维度（预测 1 个值）
         )
+        # 注意: nn.Linear 的 weight 形状是 [out_features, in_features]
+        # 这里是 [1, 1]，bias 形状是 [out_features]，这里是 [1]
 
-    # 定义前向传播
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        前向传播: 将输入传递给线性层
+        
+        参数:
+            x: 输入特征张量
+            
+        返回:
+            线性层的输出（预测值）
+        """
+        # 直接调用线性层进行计算
+        # 等价于: weight * x + bias
         return self.linear_layer(x)
 
-# 创建模型
+# ==================== 使用模型 ====================
+
+# 设置随机种子以保证可重复性
 torch.manual_seed(42)
+
+# 创建模型实例
 model_1 = LinearRegressionModelV2()
 
+# 打印模型结构
+# 会显示 LinearRegressionModelV2 包含一个 Linear 层
 print(f"模型结构:\n{model_1}")
+
+# 打印线性层的参数信息
 print(f"\nLinear 层参数:")
+# named_parameters() 返回参数名称和参数张量的迭代器
 for name, param in model_1.named_parameters():
     print(f"  {name}: {param.shape}")
+    # 输出示例:
+    # linear_layer.weight: torch.Size([1, 1])
+    # linear_layer.bias: torch.Size([1])
 ```
 
 ### 2.4 查看模型信息
