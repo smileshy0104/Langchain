@@ -6,6 +6,13 @@
 - 编排整个训练流程
 - 协调各模块之间的调用
 """
+import os
+import sys
+
+# 禁用输出缓冲，确保实时显示
+os.environ['PYTHONUNBUFFERED'] = '1'
+sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
+
 import torch
 import yaml
 from pathlib import Path
