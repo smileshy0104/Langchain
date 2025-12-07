@@ -3486,101 +3486,294 @@ save:
 import torch
 from torch.utils.data import TensorDataset, DataLoader, random_split
 
+# ==================== 数据生成函数 ====================
 def create_linear_data(weight=0.7, bias=0.3, num_samples=1000):
-    """创建线性数据"""
+    """
+    创建线性回归数据
+    
+    生成符合 y = weight * x + bias + noise 的数据
+    用于测试和演示线性回归模型
+    
+    参数:
+        weight (float): 线性关系的斜率，默认 0.7
+        bias (float): 线性关系的截距，默认 0.3
+        num_samples (int): 生成的样本数量，默认 1000
+    
+    返回:
+        X (Tensor): 输入特征，形状 (num_samples, 1)
+        y (Tensor): 目标值，形状 (num_samples, 1)
+    """
+    # torch.linspace(start, end, steps): 生成等间距的数值
+    # 在 [0, 1] 区间生成 num_samples 个均匀分布的点
+    # .unsqueeze(1): 增加一个维度，从 (1000,) 变为 (1000, 1)
+    # 这是因为 PyTorch 模型期望输入是 2D 张量 (batch_size, features)
     X = torch.linspace(0, 1, num_samples).unsqueeze(1)
+    
+    # 根据线性公式计算目标值: y = wx + b
     y = weight * X + bias
-    # 添加一些噪声
+    
+    # 添加高斯噪声，模拟真实世界数据的随机性
+    # torch.randn_like(y): 生成与 y 形状相同的标准正态分布随机数
+    # * 0.02: 控制噪声强度（标准差为 0.02）
     y = y + torch.randn_like(y) * 0.02
+    
     return X, y
 
+
+# ==================== 数据加载器准备函数 ====================
 def prepare_dataloaders(X, y, train_ratio=0.7, val_ratio=0.15,
                        batch_size=32, num_workers=2):
-    """准备数据加载器"""
-    # 创建 dataset
+    """
+    准备训练、验证、测试数据加载器
+    
+    将原始数据按比例分割，并创建 PyTorch DataLoader
+    用于批量训练和评估模型
+    
+    参数:
+        X (Tensor): 输入特征
+        y (Tensor): 目标值
+        train_ratio (float): 训练集比例，默认 0.7 (70%)
+        val_ratio (float): 验证集比例，默认 0.15 (15%)
+                          测试集比例自动计算为 1 - train_ratio - val_ratio
+        batch_size (int): 每个批次的样本数，默认 32
+        num_workers (int): 数据加载的并行进程数，默认 2
+                          设为 0 表示在主进程中加载（调试时有用）
+    
+    返回:
+        train_loader: 训练数据加载器
+        val_loader: 验证数据加载器
+        test_loader: 测试数据加载器
+    """
+    # ========== 步骤 1: 创建 Dataset ==========
+    # TensorDataset: 将多个张量打包成数据集
+    # 每个样本是 (X[i], y[i]) 的元组
+    # 支持索引访问: dataset[0] 返回第一个样本
     dataset = TensorDataset(X, y)
 
-    # 计算分割大小
-    n = len(dataset)
-    train_size = int(n * train_ratio)
-    val_size = int(n * val_ratio)
-    test_size = n - train_size - val_size
+    # ========== 步骤 2: 计算分割大小 ==========
+    n = len(dataset)  # 总样本数
+    train_size = int(n * train_ratio)  # 训练集大小: 1000 * 0.7 = 700
+    val_size = int(n * val_ratio)      # 验证集大小: 1000 * 0.15 = 150
+    test_size = n - train_size - val_size  # 测试集大小: 1000 - 700 - 150 = 150
+    
+    # 注意: 使用减法计算 test_size 确保总数正确
+    # 避免因 int() 截断导致的样本丢失
 
-    # 分割数据集
+    # ========== 步骤 3: 随机分割数据集 ==========
+    # random_split: 随机将数据集分割成多个子集
+    # 参数: (dataset, [size1, size2, size3])
+    # 返回: 三个 Subset 对象，保持对原数据集的引用
     train_ds, val_ds, test_ds = random_split(
         dataset,
         [train_size, val_size, test_size]
     )
 
-    # 创建 DataLoader
-    train_loader = DataLoader(train_ds, batch_size=batch_size,
-                            shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_ds, batch_size=batch_size,
-                          shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(test_ds, batch_size=batch_size,
-                           shuffle=False, num_workers=num_workers)
+    # ========== 步骤 4: 创建 DataLoader ==========
+    # DataLoader: 提供批量数据迭代、打乱、多进程加载等功能
+    
+    # 训练集 DataLoader
+    # shuffle=True: 每个 epoch 开始时打乱数据顺序
+    #              这有助于模型泛化，避免学习到数据顺序的模式
+    train_loader = DataLoader(
+        train_ds, 
+        batch_size=batch_size,
+        shuffle=True,           # 训练时打乱数据
+        num_workers=num_workers # 多进程加载，加速数据准备
+    )
+    
+    # 验证集 DataLoader
+    # shuffle=False: 验证时不需要打乱，保证每次评估结果一致
+    val_loader = DataLoader(
+        val_ds, 
+        batch_size=batch_size,
+        shuffle=False,          # 验证时不打乱
+        num_workers=num_workers
+    )
+    
+    # 测试集 DataLoader
+    # 与验证集相同，不打乱数据
+    test_loader = DataLoader(
+        test_ds, 
+        batch_size=batch_size,
+        shuffle=False,          # 测试时不打乱
+        num_workers=num_workers
+    )
 
     return train_loader, val_loader, test_loader
+
+# ==================== 使用示例 ====================
+# X, y = create_linear_data(weight=0.7, bias=0.3, num_samples=1000)
+# train_loader, val_loader, test_loader = prepare_dataloaders(X, y)
+# 
+# # 迭代训练数据
+# for batch_X, batch_y in train_loader:
+#     print(f"批次形状: X={batch_X.shape}, y={batch_y.shape}")
+#     # 输出: 批次形状: X=torch.Size([32, 1]), y=torch.Size([32, 1])
 ```
 
 #### src/model.py
 
 ```python
-"""模型定义模块"""
+"""
+模型定义模块
+
+职责：
+- 定义神经网络架构
+- 提供模型创建工厂函数
+"""
 import torch
 from torch import nn
 
+
+# ==================== 模型类定义 ====================
 class LinearRegressionModel(nn.Module):
-    """线性回归模型"""
+    """
+    线性回归模型
+    
+    实现简单的线性变换: y = Wx + b
+    
+    参数:
+        input_features (int): 输入特征数量，默认 1
+        output_features (int): 输出特征数量，默认 1
+    
+    示例:
+        model = LinearRegressionModel(input_features=2, output_features=1)
+        output = model(torch.randn(32, 2))  # 输出形状: (32, 1)
+    """
     def __init__(self, input_features=1, output_features=1):
+        # 必须调用父类的 __init__
+        # 这会初始化 nn.Module 的内部状态（参数注册、钩子等）
         super().__init__()
+        
+        # nn.Linear: 全连接层（线性层）
+        # 内部包含:
+        #   - weight: 形状 (output_features, input_features) 的权重矩阵
+        #   - bias: 形状 (output_features,) 的偏置向量
+        # 计算: output = input @ weight.T + bias
         self.linear = nn.Linear(input_features, output_features)
 
     def forward(self, x):
+        """
+        前向传播
+        
+        参数:
+            x (Tensor): 输入张量，形状 (batch_size, input_features)
+        
+        返回:
+            Tensor: 输出张量，形状 (batch_size, output_features)
+        """
         return self.linear(x)
 
+
+# ==================== 模型工厂函数 ====================
 def create_model(config, device="cpu"):
-    """根据配置创建模型"""
+    """
+    根据配置创建模型
+    
+    工厂模式：将模型创建逻辑封装，便于统一管理
+    
+    参数:
+        config (dict): 配置字典，需包含 config['model']['input_features'] 等
+        device (str): 目标设备，"cpu" 或 "cuda"
+    
+    返回:
+        nn.Module: 已移动到指定设备的模型实例
+    """
     model = LinearRegressionModel(
         input_features=config['model']['input_features'],
         output_features=config['model']['output_features']
     )
+    # .to(device): 将模型的所有参数移动到指定设备
+    # 必须在训练前完成，确保模型和数据在同一设备上
     return model.to(device)
 ```
 
 #### src/train.py
 
 ```python
-"""训练模块"""
-import torch
-from tqdm.auto import tqdm
+"""
+训练模块
 
+职责：
+- 单个 epoch 的训练逻辑
+- 验证逻辑
+- 完整训练流程编排
+"""
+import torch
+from torch import nn
+from tqdm.auto import tqdm  # 进度条库，auto 版本自动适配环境（notebook/终端）
+
+
+# ==================== 单 Epoch 训练函数 ====================
 def train_epoch(model, dataloader, loss_fn, optimizer, device):
-    """训练一个 epoch"""
+    """
+    训练一个 epoch
+    
+    执行完整的训练循环：遍历所有批次，更新模型参数
+    
+    参数:
+        model: 要训练的模型
+        dataloader: 训练数据加载器
+        loss_fn: 损失函数
+        optimizer: 优化器
+        device: 计算设备
+    
+    返回:
+        float: 该 epoch 的平均损失
+    """
+    # 设置为训练模式
+    # 启用 Dropout、BatchNorm 的训练行为
     model.train()
     total_loss = 0
 
+    # 遍历所有批次
     for X, y in dataloader:
+        # ========== 数据移动到设备 ==========
+        # 确保数据和模型在同一设备上
         X, y = X.to(device), y.to(device)
 
-        # 前向传播
-        y_pred = model(X)
-        loss = loss_fn(y_pred, y)
+        # ========== 前向传播 ==========
+        y_pred = model(X)           # 模型预测
+        loss = loss_fn(y_pred, y)   # 计算损失
 
-        # 反向传播
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        # ========== 反向传播 ==========
+        optimizer.zero_grad()  # 清零梯度（PyTorch 默认累积梯度）
+        loss.backward()        # 计算梯度
+        optimizer.step()       # 更新参数
 
+        # 累积损失
+        # .item(): 将单元素张量转换为 Python 数值
+        # 这会将数据从 GPU 复制到 CPU，所以只在需要时使用
         total_loss += loss.item()
 
+    # 返回平均损失
     return total_loss / len(dataloader)
 
+
+# ==================== 验证函数 ====================
 def validate(model, dataloader, loss_fn, device):
-    """验证函数"""
+    """
+    验证函数
+    
+    在验证集上评估模型性能，不更新参数
+    
+    参数:
+        model: 要验证的模型
+        dataloader: 验证数据加载器
+        loss_fn: 损失函数
+        device: 计算设备
+    
+    返回:
+        float: 验证集的平均损失
+    """
+    # 设置为评估模式
+    # 禁用 Dropout，BatchNorm 使用运行时统计量
     model.eval()
     total_loss = 0
 
+    # torch.inference_mode(): 禁用梯度计算
+    # 比 torch.no_grad() 更高效
+    # 用于推理/评估，节省内存和计算
     with torch.inference_mode():
         for X, y in dataloader:
             X, y = X.to(device), y.to(device)
@@ -3590,27 +3783,55 @@ def validate(model, dataloader, loss_fn, device):
 
     return total_loss / len(dataloader)
 
+
+# ==================== 完整训练流程 ====================
 def train(model, train_loader, val_loader, config, device):
-    """完整训练流程"""
-    # 设置损失函数和优化器
+    """
+    完整训练流程
+    
+    编排整个训练过程：设置优化器、执行训练循环、记录历史
+    
+    参数:
+        model: 要训练的模型
+        train_loader: 训练数据加载器
+        val_loader: 验证数据加载器
+        config: 配置字典
+        device: 计算设备
+    
+    返回:
+        dict: 训练历史，包含 'train_loss' 和 'val_loss' 列表
+    """
+    # ========== 设置损失函数和优化器 ==========
+    # MSELoss: 均方误差，适用于回归问题
+    # 公式: MSE = (1/n) * Σ(y_pred - y_true)²
     loss_fn = nn.MSELoss()
+    
+    # Adam 优化器: 自适应学习率，通常效果好
+    # 从配置文件读取学习率，便于调参
     optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=config['training']['learning_rate']
+        model.parameters(),                      # 要优化的参数
+        lr=config['training']['learning_rate']   # 学习率
     )
 
-    # 训练循环
+    # ========== 训练循环 ==========
     epochs = config['training']['epochs']
+    
+    # 记录训练历史，用于后续可视化和分析
     history = {'train_loss': [], 'val_loss': []}
 
+    # tqdm: 显示进度条
     for epoch in tqdm(range(epochs), desc="Training"):
+        # 训练一个 epoch
         train_loss = train_epoch(model, train_loader, loss_fn,
                                 optimizer, device)
+        # 验证
         val_loss = validate(model, val_loader, loss_fn, device)
 
+        # 记录历史
         history['train_loss'].append(train_loss)
         history['val_loss'].append(val_loss)
 
+        # 每 10 个 epoch 打印一次进度
         if epoch % 10 == 0:
             print(f"Epoch {epoch}: Train Loss = {train_loss:.4f}, "
                   f"Val Loss = {val_loss:.4f}")
@@ -3621,34 +3842,79 @@ def train(model, train_loader, val_loader, config, device):
 #### src/evaluate.py
 
 ```python
-"""评估模块"""
+"""
+评估模块
+
+职责：
+- 在测试集上评估模型
+- 计算各种评估指标
+"""
 import torch
 import numpy as np
 
+
+# ==================== 模型评估函数 ====================
 def evaluate_model(model, dataloader, device):
-    """评估模型"""
+    """
+    评估模型
+    
+    在测试集上运行模型，计算回归评估指标
+    
+    参数:
+        model: 要评估的模型
+        dataloader: 测试数据加载器
+        device: 计算设备
+    
+    返回:
+        dict: 包含各种评估指标的字典
+            - MAE: 平均绝对误差
+            - MSE: 均方误差
+            - RMSE: 均方根误差
+    """
+    # 设置为评估模式
     model.eval()
 
+    # 存储所有批次的预测和目标值
     all_preds = []
     all_targets = []
 
+    # 禁用梯度计算
     with torch.inference_mode():
         for X, y in dataloader:
+            # 只需要将输入移动到设备
             X = X.to(device)
             y_pred = model(X)
 
+            # 将预测结果移回 CPU 并存储
+            # .cpu(): 将张量从 GPU 移动到 CPU
+            # 这是必要的，因为最终需要在 CPU 上合并所有结果
             all_preds.append(y_pred.cpu())
-            all_targets.append(y)
+            all_targets.append(y)  # y 本来就在 CPU 上
 
-    # 合并所有批次
+    # ========== 合并所有批次 ==========
+    # torch.cat: 沿指定维度拼接张量列表
+    # 将多个 (batch_size, 1) 的张量合并为 (total_samples, 1)
     predictions = torch.cat(all_preds)
     targets = torch.cat(all_targets)
 
-    # 计算指标
+    # ========== 计算评估指标 ==========
+    
+    # MAE (Mean Absolute Error) - 平均绝对误差
+    # 公式: MAE = (1/n) * Σ|y_pred - y_true|
+    # 特点: 对异常值不敏感，直观易理解
     mae = torch.mean(torch.abs(predictions - targets))
+    
+    # MSE (Mean Squared Error) - 均方误差
+    # 公式: MSE = (1/n) * Σ(y_pred - y_true)²
+    # 特点: 对大误差惩罚更重，常用于优化目标
     mse = torch.mean((predictions - targets) ** 2)
+    
+    # RMSE (Root Mean Squared Error) - 均方根误差
+    # 公式: RMSE = √MSE
+    # 特点: 与原始数据单位相同，更易解释
     rmse = torch.sqrt(mse)
 
+    # .item(): 将单元素张量转换为 Python 数值
     return {
         'MAE': mae.item(),
         'MSE': mse.item(),
@@ -3659,30 +3925,55 @@ def evaluate_model(model, dataloader, device):
 #### main.py
 
 ```python
-"""主程序入口"""
+"""
+主程序入口
+
+职责：
+- 加载配置
+- 编排整个训练流程
+- 协调各模块之间的调用
+"""
 import torch
 import yaml
 from pathlib import Path
 
+# 从各模块导入函数
 from src.data import create_linear_data, prepare_dataloaders
 from src.model import create_model
 from src.train import train
 from src.evaluate import evaluate_model
 
+
 def main():
-    # 加载配置
+    """
+    主函数 - 完整的机器学习流程
+    
+    流程:
+    1. 加载配置
+    2. 设置设备
+    3. 准备数据
+    4. 创建模型
+    5. 训练模型
+    6. 评估模型
+    7. 保存模型
+    """
+    
+    # ========== 步骤 1: 加载配置 ==========
+    # 使用 YAML 配置文件管理超参数
+    # 优点: 易于修改、版本控制、实验追踪
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
-    # 设置设备
+    # ========== 步骤 2: 设置设备 ==========
+    # 优先使用 GPU（如果可用）
+    # torch.cuda.is_available(): 检查 CUDA 是否可用
     device = config['device'] if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
 
-    # 创建数据
+    # ========== 步骤 3: 准备数据 ==========
     print("Creating data...")
     X, y = create_linear_data(num_samples=1000)
 
-    # 准备数据加载器
     print("Preparing dataloaders...")
     train_loader, val_loader, test_loader = prepare_dataloaders(
         X, y,
@@ -3691,29 +3982,40 @@ def main():
         batch_size=config['data']['batch_size']
     )
 
-    # 创建模型
+    # ========== 步骤 4: 创建模型 ==========
     print("Creating model...")
     model = create_model(config, device)
 
-    # 训练模型
+    # ========== 步骤 5: 训练模型 ==========
     print("Training model...")
     history = train(model, train_loader, val_loader, config, device)
 
-    # 评估模型
+    # ========== 步骤 6: 评估模型 ==========
     print("\nEvaluating model...")
     metrics = evaluate_model(model, test_loader, device)
+    
+    # 打印测试指标
     print("Test Metrics:")
     for name, value in metrics.items():
         print(f"  {name}: {value:.4f}")
 
-    # 保存模型
+    # ========== 步骤 7: 保存模型 ==========
+    # 使用 pathlib 处理路径（跨平台兼容）
     model_dir = Path(config['save']['model_dir'])
-    model_dir.mkdir(exist_ok=True)
+    model_dir.mkdir(exist_ok=True)  # 创建目录（如果不存在）
 
     model_path = model_dir / 'final_model.pth'
+    
+    # torch.save(): 保存模型
+    # model.state_dict(): 只保存模型参数（推荐方式）
+    # 优点: 文件小、加载灵活、不依赖模型类定义的位置
     torch.save(model.state_dict(), model_path)
     print(f"\nModel saved to {model_path}")
 
+
+# ==================== 程序入口 ====================
+# 当直接运行此文件时执行 main()
+# 当被其他文件 import 时不执行
 if __name__ == "__main__":
     main()
 ```
