@@ -1462,84 +1462,173 @@ from torch import nn
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# ============ 1. 准备数据 ============
+# ============================================================
+# 步骤 1: 准备数据
+# ============================================================
 print("1. 准备数据...")
-weight = 0.7
-bias = 0.3
 
+# 定义线性关系的真实参数
+# 我们将训练模型来学习这些参数
+weight = 0.7  # 斜率（真实值）
+bias = 0.3    # 截距（真实值）
+
+# 生成训练数据
+# torch.arange(0, 1, 0.02) 生成 [0, 0.02, 0.04, ..., 0.98]
+# unsqueeze(dim=1) 将形状从 [50] 变为 [50, 1]（添加特征维度）
 X = torch.arange(0, 1, 0.02).unsqueeze(dim=1)
+
+# 根据线性方程生成标签: y = 0.7x + 0.3
 y = weight * X + bias
 
-train_split = int(0.8 * len(X))
-X_train, y_train = X[:train_split], y[:train_split]
-X_test, y_test = X[train_split:], y[train_split:]
+# 划分训练集和测试集（80% 训练，20% 测试）
+train_split = int(0.8 * len(X))  # 计算分割点（40 个样本）
+X_train, y_train = X[:train_split], y[:train_split]  # 前 80% 作为训练集
+X_test, y_test = X[train_split:], y[train_split:]    # 后 20% 作为测试集
 
 print(f"   训练样本: {len(X_train)}, 测试样本: {len(X_test)}")
 
-# ============ 2. 构建模型 ============
+# ============================================================
+# 步骤 2: 构建模型
+# ============================================================
 print("\n2. 构建模型...")
 
 class LinearRegressionModelV2(nn.Module):
+    """
+    简单的线性回归模型
+    使用 nn.Linear 层实现 y = wx + b
+    """
     def __init__(self):
         super().__init__()
+        # 创建线性层：1 个输入特征，1 个输出特征
+        # 内部会自动初始化 weight 和 bias 参数
         self.linear_layer = nn.Linear(in_features=1, out_features=1)
 
     def forward(self, x):
+        """前向传播：将输入传递给线性层"""
         return self.linear_layer(x)
 
+# 设置随机种子以确保可重复性
+# 每次运行都会得到相同的初始参数
 torch.manual_seed(42)
+
+# 创建模型实例
 model = LinearRegressionModelV2()
 print(f"   模型: {model}")
 
-# ============ 3. 设置损失和优化器 ============
+# ============================================================
+# 步骤 3: 设置损失函数和优化器
+# ============================================================
 print("\n3. 设置损失函数和优化器...")
+
+# 损失函数：平均绝对误差（MAE / L1Loss）
+# 用于衡量预测值与真实值之间的差距
+# 公式: MAE = (1/n) * Σ|y_pred - y_true|
 loss_fn = nn.L1Loss()
+
+# 优化器：随机梯度下降（SGD）
+# 用于根据梯度更新模型参数
+# lr=0.01 是学习率，控制参数更新的步长
 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
 print(f"   损失函数: {loss_fn}")
 print(f"   优化器: {optimizer.__class__.__name__}")
 
-# ============ 4. 训练模型 ============
+# ============================================================
+# 步骤 4: 训练模型
+# ============================================================
 print("\n4. 开始训练...")
+
+# 设置训练轮数
 epochs = 200
 
+# 主训练循环
 for epoch in range(epochs):
-    # 训练模式
+    # ---------- 训练阶段 ----------
+    # 设置为训练模式（启用 Dropout、BatchNorm 等）
     model.train()
+    
+    # 1. 前向传播：计算预测值
     y_pred = model(X_train)
+    
+    # 2. 计算损失：比较预测值和真实值
     loss = loss_fn(y_pred, y_train)
+    
+    # 3. 清零梯度：防止梯度累积（重要！）
     optimizer.zero_grad()
+    
+    # 4. 反向传播：计算梯度
     loss.backward()
+    
+    # 5. 更新参数：使用梯度更新模型参数
     optimizer.step()
 
-    # 评估模式
+    # ---------- 评估阶段 ----------
+    # 设置为评估模式（关闭 Dropout、BatchNorm 等）
     model.eval()
+    
+    # 使用推理模式（不计算梯度，节省内存）
     with torch.inference_mode():
+        # 在测试集上进行预测
         test_pred = model(X_test)
+        # 计算测试损失
         test_loss = loss_fn(test_pred, y_test)
 
+    # 每 50 个 epoch 打印一次训练进度
     if epoch % 50 == 0:
         print(f"   Epoch {epoch}: Train Loss = {loss:.4f}, Test Loss = {test_loss:.4f}")
 
-# ============ 5. 评估模型 ============
+# ============================================================
+# 步骤 5: 评估模型
+# ============================================================
 print("\n5. 评估模型...")
+
+# 设置为评估模式
 model.eval()
+
+# 使用推理模式进行最终评估
 with torch.inference_mode():
+    # 在测试集上进行预测
     y_preds = model(X_test)
+    # 计算最终测试损失
     final_loss = loss_fn(y_preds, y_test)
 
+# 打印评估结果
 print(f"   最终测试损失: {final_loss:.4f}")
+
+# 打印学到的参数
+# 理想情况下应该接近真实参数（weight=0.7, bias=0.3）
 print(f"   学到的权重: {model.state_dict()['linear_layer.weight'].item():.4f}")
 print(f"   学到的偏置: {model.state_dict()['linear_layer.bias'].item():.4f}")
 
-# ============ 6. 保存模型 ============
+# ============================================================
+# 步骤 6: 保存模型
+# ============================================================
 print("\n6. 保存模型...")
+
+# 创建模型保存目录
 MODEL_PATH = Path("models")
-MODEL_PATH.mkdir(exist_ok=True)
+MODEL_PATH.mkdir(exist_ok=True)  # 如果目录已存在，不会报错
+
+# 定义保存路径
 SAVE_PATH = MODEL_PATH / "linear_model.pth"
+
+# 保存模型参数（推荐方式）
+# 只保存 state_dict，不保存整个模型
 torch.save(model.state_dict(), SAVE_PATH)
 print(f"   模型已保存到: {SAVE_PATH}")
 
 print("\n✅ 完整流程执行完毕!")
+
+# ============================================================
+# 总结：PyTorch 工作流程的 6 个关键步骤
+# ============================================================
+# 1. 准备数据：生成或加载数据，划分训练集和测试集
+# 2. 构建模型：定义神经网络结构（继承 nn.Module）
+# 3. 设置损失和优化器：选择合适的损失函数和优化算法
+# 4. 训练模型：循环执行前向传播、计算损失、反向传播、更新参数
+# 5. 评估模型：在测试集上评估模型性能
+# 6. 保存模型：保存训练好的模型参数供后续使用
+# ============================================================
 ```
 
 ---
