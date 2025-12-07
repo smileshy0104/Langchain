@@ -670,143 +670,308 @@ print(f"数据设备: {X_train.device}")
 
 **损失函数 (Loss Function):** 衡量模型预测与真实值之间的差距
 
-#### 常用损失函数
+#### 常用损失函数（torch.nn 中内置了许多损失函数）
 
-| 损失函数 | PyTorch 实现 | 适用场景 |
-|---------|-------------|---------|
-| **均方误差 (MSE)** | `nn.MSELoss()` | 回归问题 (对异常值敏感) |
-| **平均绝对误差 (MAE)** | `nn.L1Loss()` | 回归问题 (对异常值鲁棒) |
-| **交叉熵损失** | `nn.CrossEntropyLoss()` | 多分类问题 |
-| **二元交叉熵** | `nn.BCELoss()` | 二分类问题 |
-| **二元交叉熵 (带 logits)** | `nn.BCEWithLogitsLoss()` | 二分类 (更稳定) |
+| 损失函数 | PyTorch 实现 | 数学公式 | 适用场景 | 特点 |
+|---------|-------------|---------|---------|------|
+| **均方误差 (MSE)** | `nn.MSELoss()` | `(1/n)Σ(ŷ-y)²` | 回归问题 | 对异常值敏感、梯度平滑 |
+| **平均绝对误差 (MAE)** | `nn.L1Loss()` | `(1/n)Σ\|ŷ-y\|` | 回归问题 | 对异常值鲁棒、梯度恒定 |
+| **Huber 损失** | `nn.HuberLoss()` | MSE+MAE 结合 | 回归（有异常值） | 结合 MSE 和 MAE 优点 |
+| **交叉熵损失** | `nn.CrossEntropyLoss()` | `-Σy·log(ŷ)` | 多分类问题 | 包含 Softmax，输入为 logits |
+| **负对数似然** | `nn.NLLLoss()` | `-log(ŷ)` | 多分类（已 Softmax） | 需要先手动 Softmax |
+| **二元交叉熵** | `nn.BCELoss()` | `-[y·log(ŷ)+(1-y)·log(1-ŷ)]` | 二分类（已 Sigmoid） | 输入需在 [0,1] 范围 |
+| **二元交叉熵 (带 logits)** | `nn.BCEWithLogitsLoss()` | BCE + Sigmoid | 二分类 | 更稳定（数值稳定性） |
+| **平滑 L1 损失** | `nn.SmoothL1Loss()` | Huber 变体 | 目标检测、回归 | 用于 Faster R-CNN 等 |
+
+**选择建议：**
+- **回归任务（无异常值）**：`nn.MSELoss()`
+- **回归任务（有异常值）**：`nn.L1Loss()` 或 `nn.HuberLoss()`
+- **多分类**：`nn.CrossEntropyLoss()`（最常用）
+- **二分类**：`nn.BCEWithLogitsLoss()`（推荐）或 `nn.BCELoss()`
 
 ```python
-# 创建损失函数
-loss_fn = nn.L1Loss()  # MAE for regression
+# ==================== 创建损失函数 ====================
+# 损失函数用于量化模型预测与真实值之间的差距
+# 训练的目标就是最小化这个损失值
 
-# 手动计算损失示例
+# nn.L1Loss() 计算平均绝对误差 (Mean Absolute Error, MAE)
+# 公式: MAE = (1/n) * Σ|y_pred - y_true|
+# 特点:
+#   - 对所有误差一视同仁（线性惩罚）
+#   - 对异常值不敏感（相比 MSE）
+#   - 适合回归问题
+loss_fn = nn.L1Loss()
+
+# 另一个常用选项: nn.MSELoss() - 均方误差
+# 公式: MSE = (1/n) * Σ(y_pred - y_true)²
+# 特点: 对大误差惩罚更重（平方惩罚），对异常值敏感
+
+# ==================== 手动计算初始损失 ====================
+# 在训练前先看看未训练模型的损失有多大（作为基线）
+
+# 使用推理模式进行预测（不需要梯度）
 with torch.inference_mode():
+    # 前向传播: 使用训练数据进行预测
     y_pred = model_1(X_train)
+    
+    # 计算损失: 比较预测值和真实值
+    # loss_fn 接收两个参数: (预测值, 真实值)
     loss = loss_fn(y_pred, y_train)
+    
+    # 打印初始损失值
+    # 这个值应该比较大，因为模型参数是随机初始化的
     print(f"初始损失: {loss}")
+    # 训练的目标就是让这个损失值尽可能小
+
+# 注意: 损失值的大小取决于:
+#   1. 数据的尺度（值的范围）
+#   2. 损失函数的类型
+#   3. 模型的初始化
 ```
 
-### 3.2 优化器
+### 3.2 优化器（torch.optim 中找到各种优化函数的实现。）
 
-**优化器 (Optimizer):** 使用梯度来更新模型参数
+**优化器 (Optimizer):** 使用梯度来更新模型参数，以降低损失值。
 
 #### 常用优化器
 
-| 优化器 | PyTorch 实现 | 特点 | 适用场景 |
-|-------|-------------|-----|---------|
-| **SGD** | `torch.optim.SGD()` | 最基础,稳定 | 简单任务 |
-| **Adam** | `torch.optim.Adam()` | 自适应学习率,最流行 | 大多数任务 (2024推荐) |
-| **AdamW** | `torch.optim.AdamW()` | Adam + 权重衰减 | NLP, Transformers (2024推荐) |
-| **RMSprop** | `torch.optim.RMSprop()` | 适应学习率 | RNN |
-| **Adagrad** | `torch.optim.Adagrad()` | 稀疏梯度 | 稀疏数据 |
+| 优化器 | PyTorch 实现 | 特点 | 适用场景 | 典型学习率 |
+|-------|-------------|-----|---------|-----------|
+| **SGD** | `torch.optim.SGD()` | 最基础、稳定、需要手动调整学习率 | 简单任务、计算机视觉 | 0.01 - 0.1 |
+| **SGD + Momentum** | `torch.optim.SGD(momentum=0.9)` | 加速收敛、减少震荡 | CV 任务、ResNet 等 | 0.01 - 0.1 |
+| **Adam** | `torch.optim.Adam()` | 自适应学习率、最流行、收敛快 | 大多数任务（2024推荐） | 0.001 - 0.0001 |
+| **AdamW** | `torch.optim.AdamW()` | Adam + 正确的权重衰减 | NLP、Transformers（2024推荐） | 0.001 - 0.0001 |
+| **RMSprop** | `torch.optim.RMSprop()` | 自适应学习率、适合非平稳目标 | RNN、强化学习 | 0.001 - 0.01 |
+| **Adagrad** | `torch.optim.Adagrad()` | 自适应学习率、适合稀疏梯度 | 稀疏数据、NLP | 0.01 |
+
+**选择建议：**
+- **初学者/不确定**：使用 `Adam`，lr=0.001
+- **计算机视觉**：`SGD + Momentum`，lr=0.01
+- **NLP/Transformers**：`AdamW`，lr=0.0001
+- **简单回归/分类**：`SGD`，lr=0.01
 
 ```python
-# 创建优化器
+# ==================== 创建优化器 ====================
+# 优化器负责根据梯度更新模型参数
+# 它决定了参数如何朝着减小损失的方向移动
+
+# torch.optim.SGD: 随机梯度下降 (Stochastic Gradient Descent)
+# 这是最基础的优化算法，更新公式: θ = θ - lr * ∇θ
+# 其中 θ 是参数，lr 是学习率，∇θ 是梯度
 optimizer = torch.optim.SGD(
-    params=model_1.parameters(),  # 要优化的参数
-    lr=0.01  # 学习率 (learning rate) - 重要的超参数
+    params=model_1.parameters(),  # 传入模型的所有可训练参数
+                                   # model_1.parameters() 返回所有 requires_grad=True 的参数
+    lr=0.01  # 学习率 (learning rate) - 控制参数更新的步长
+             # 太大: 可能错过最优解，训练不稳定
+             # 太小: 训练速度慢，可能陷入局部最优
+             # 典型值: 0.001 到 0.1 之间
 )
 
-# 查看优化器信息
+# 其他常用参数:
+# - momentum: 动量，帮助加速收敛和跳出局部最优 (如 momentum=0.9)
+# - weight_decay: 权重衰减，L2 正则化，防止过拟合 (如 weight_decay=1e-4)
+
+# ==================== 查看优化器信息 ====================
+# 打印优化器的配置信息
 print(f"优化器: {optimizer}")
+
+# 获取学习率
+# param_groups 是一个列表，包含参数组的配置
+# 通常只有一个组 (索引 0)，但可以为不同层设置不同的学习率
 print(f"学习率: {optimizer.param_groups[0]['lr']}")
+
+# 注意: 优化器必须知道要优化哪些参数
+# 如果模型参数改变了（如添加新层），需要重新创建优化器
 ```
 
 ### 3.3 训练循环 (核心)
 
 #### 训练循环的标准步骤
 
-```
-训练阶段:
-1. 前向传播 (Forward pass) - 计算预测
-2. 计算损失 (Calculate loss) - 衡量预测质量
-3. 清零梯度 (Zero gradients) - 清除上一步的梯度
-4. 反向传播 (Backpropagation) - 计算梯度
-5. 更新参数 (Optimizer step) - 使用梯度更新参数
+**训练阶段（Training Loop）：**
 
-评估阶段:
-1. 前向传播 (不计算梯度)
-2. 计算损失
-```
+1. **前向传播 (Forward Pass)**
+   - 将数据传入模型：`y_pred = model(X_train)`
+   - 模型计算预测值
+   - 自动调用 `forward()` 方法
+
+2. **计算损失 (Calculate Loss)**
+   - 比较预测值和真实值：`loss = loss_fn(y_pred, y_train)`
+   - 量化模型的预测误差
+   - 损失值越小，模型越好
+
+3. **清零梯度 (Zero Gradients)** ⚠️ **关键步骤**
+   - 调用：`optimizer.zero_grad()`
+   - 原因：PyTorch 默认会累积梯度
+   - 如果不清零，梯度会叠加，导致错误的参数更新
+
+4. **反向传播 (Backpropagation)**
+   - 调用：`loss.backward()`
+   - 计算损失相对于每个参数的梯度（∂loss/∂θ）
+   - 使用链式法则自动计算梯度
+   - 梯度存储在 `parameter.grad` 中
+
+5. **更新参数 (Optimizer Step)**
+   - 调用：`optimizer.step()`
+   - 使用计算出的梯度更新参数
+   - 更新公式（SGD）：`θ = θ - lr * ∇θ`
+   - 参数朝着减小损失的方向移动
+
+**评估阶段（Evaluation/Testing）：**
+
+1. **前向传播（不计算梯度）**
+   - 使用 `torch.inference_mode()` 或 `torch.no_grad()`
+   - 节省内存，加快速度
+   - 不构建计算图
+
+2. **计算损失**
+   - 评估模型在测试集上的表现
+   - 用于监控过拟合
+
+**关键区别：**
+- 训练阶段：需要梯度，更新参数
+- 评估阶段：不需要梯度，只计算损失
 
 #### 基础训练循环实现
 
 ```python
-# 训练设置
+# ==================== 训练设置 ====================
+# 设置训练轮数（epoch）
+# 一个 epoch 表示模型看过所有训练数据一次
 epochs = 100
 
-# 用于记录
-epoch_count = []
-train_loss_values = []
-test_loss_values = []
+# ==================== 初始化记录列表 ====================
+# 用于记录训练过程中的指标，便于后续可视化和分析
+epoch_count = []           # 记录 epoch 编号
+train_loss_values = []     # 记录每个 epoch 的训练损失
+test_loss_values = []      # 记录每个 epoch 的测试损失
 
+# ==================== 打印训练信息表头 ====================
 print("开始训练...")
 print(f"{'Epoch':<6} {'训练损失':<12} {'测试损失':<12}")
 print("-" * 35)
 
+# ==================== 主训练循环 ====================
 for epoch in range(epochs):
-    ### 训练模式 ###
-    model_1.train()  # 设置为训练模式
+    # ========== 训练阶段 ==========
+    # 将模型设置为训练模式
+    # train() 会启用 Dropout、BatchNorm 等训练时才需要的层
+    model_1.train()
 
-    # 1. 前向传播
+    # 步骤 1: 前向传播
+    # 将训练数据传入模型，计算预测值
     y_pred = model_1(X_train)
 
-    # 2. 计算损失
+    # 步骤 2: 计算损失
+    # 比较预测值和真实值，量化模型的预测误差
     loss = loss_fn(y_pred, y_train)
 
-    # 3. 清零梯度
+    # 步骤 3: 清零梯度 ⚠️ 重要！
+    # PyTorch 默认会累积梯度，必须在每次反向传播前清零
+    # 否则梯度会叠加，导致错误的参数更新
     optimizer.zero_grad()
 
-    # 4. 反向传播 (计算梯度)
+    # 步骤 4: 反向传播
+    # 计算损失相对于每个参数的梯度
+    # 使用链式法则自动计算 ∂loss/∂θ
     loss.backward()
 
-    # 5. 更新参数
+    # 步骤 5: 更新参数
+    # 优化器使用计算出的梯度更新模型参数
+    # SGD 更新: θ = θ - lr * ∇θ
     optimizer.step()
 
-    ### 评估模式 ###
-    model_1.eval()  # 设置为评估模式
+    # ========== 评估阶段 ==========
+    # 将模型设置为评估模式
+    # eval() 会关闭 Dropout、BatchNorm 等训练专用功能
+    model_1.eval()
 
+    # 使用推理模式进行评估（不需要计算梯度）
     with torch.inference_mode():
-        # 1. 前向传播
+        # 步骤 1: 前向传播（测试集）
+        # 使用测试数据进行预测
         test_pred = model_1(X_test)
 
-        # 2. 计算测试损失
+        # 步骤 2: 计算测试损失
+        # 评估模型在未见过的数据上的表现
         test_loss = loss_fn(test_pred, y_test)
 
-    # 记录损失
+    # ========== 记录和打印 ==========
+    # 每 10 个 epoch 记录一次损失值
     if epoch % 10 == 0:
         epoch_count.append(epoch)
+        
+        # .item() 将张量转换为 Python 标量
+        # 用于记录和打印，避免保存整个计算图
         train_loss_values.append(loss.item())
         test_loss_values.append(test_loss.item())
 
+        # 打印当前训练进度
+        # .4f 表示保留 4 位小数
         print(f"{epoch:<6} {loss.item():<12.4f} {test_loss.item():<12.4f}")
 
 print("\n训练完成!")
+
+# 注意事项:
+# 1. 训练损失应该逐渐下降
+# 2. 如果测试损失开始上升，可能出现过拟合
+# 3. 如果两者都不下降，可能需要调整学习率或模型结构
 ```
 
 ### 3.4 可视化训练过程
 
 ```python
 def plot_loss_curves(epoch_count, train_loss, test_loss):
-    """绘制训练和测试损失曲线"""
+    """
+    绘制训练和测试损失曲线
+    
+    这个函数用于可视化模型的训练过程，帮助诊断训练问题：
+    - 训练损失和测试损失都下降：模型正常学习 ✓
+    - 训练损失下降，测试损失上升：过拟合 ⚠️
+    - 两者都不下降：欠拟合或学习率问题 ⚠️
+    - 损失震荡：学习率可能太大 ⚠️
+    
+    参数:
+        epoch_count: epoch 编号列表
+        train_loss: 训练损失列表
+        test_loss: 测试损失列表
+    """
+    # 创建画布，设置图形大小（宽10英寸，高7英寸）
     plt.figure(figsize=(10, 7))
 
+    # 绘制训练损失曲线
+    # label: 图例标签
+    # color: 线条颜色
     plt.plot(epoch_count, train_loss, label="训练损失", color="blue")
+    
+    # 绘制测试损失曲线
     plt.plot(epoch_count, test_loss, label="测试损失", color="orange")
 
-    plt.title("训练和测试损失曲线")
-    plt.xlabel("Epoch")
-    plt.ylabel("损失")
+    # 设置图表标题
+    plt.title("训练和测试损失曲线", fontsize=14)
+    
+    # 设置 x 轴标签（训练轮数）
+    plt.xlabel("Epoch", fontsize=12)
+    
+    # 设置 y 轴标签（损失值）
+    plt.ylabel("损失", fontsize=12)
+    
+    # 显示图例（区分训练损失和测试损失）
     plt.legend()
+    
+    # 添加网格线，alpha 控制透明度（0-1）
+    # 网格线帮助更准确地读取数值
     plt.grid(True, alpha=0.3)
+    
+    # 显示图形
     plt.show()
 
-# 绘制损失曲线
+# ==================== 绘制损失曲线 ====================
+# 调用函数，可视化训练过程
+# 通过观察曲线可以判断：
+# 1. 模型是否收敛
+# 2. 是否需要更多训练轮数
+# 3. 是否出现过拟合
 plot_loss_curves(epoch_count, train_loss_values, test_loss_values)
 ```
 
@@ -822,93 +987,146 @@ def train_model(model,
                 device="cpu",
                 print_every=10):
     """
-    训练 PyTorch 模型的完整函数
+    训练 PyTorch 模型的完整函数（生产级实现）
+    
+    这是一个通用的训练函数，支持：
+    - 批量训练（使用 DataLoader）
+    - 设备管理（CPU/GPU）
+    - 训练历史记录
+    - 定期评估和打印
+    
+    参数：
+        model: PyTorch 模型（nn.Module 实例）
+        train_loader: 训练数据加载器（DataLoader）
+        test_loader: 测试数据加载器（DataLoader）
+        loss_fn: 损失函数（如 nn.L1Loss()）
+        optimizer: 优化器（如 torch.optim.SGD）
+        epochs: 训练轮数（整数）
+        device: 训练设备，"cpu" 或 "cuda"（默认 "cpu"）
+        print_every: 每隔多少个 epoch 打印一次（默认 10）
 
-    参数:
-        model: PyTorch 模型
-        train_loader: 训练数据加载器
-        test_loader: 测试数据加载器
-        loss_fn: 损失函数
-        optimizer: 优化器
-        epochs: 训练轮数
-        device: 训练设备 (cpu/cuda)
-        print_every: 打印频率
-
-    返回:
-        results: 包含损失历史的字典
+    返回：
+        results: 字典，包含训练历史
+            - "train_loss": 训练损失列表
+            - "test_loss": 测试损失列表
+            - "epoch": epoch 编号列表
     """
-    # 移动模型到设备
+    # ==================== 初始化设置 ====================
+    # 将模型移动到指定设备（CPU 或 GPU）
+    # 这确保模型参数和输入数据在同一设备上
     model = model.to(device)
 
-    # 记录历史
+    # 初始化结果字典，用于记录训练历史
+    # 这些数据可用于后续的可视化和分析
     results = {
-        "train_loss": [],
-        "test_loss": [],
-        "epoch": []
+        "train_loss": [],  # 每个 epoch 的平均训练损失
+        "test_loss": [],   # 每个 epoch 的平均测试损失
+        "epoch": []        # epoch 编号
     }
 
+    # ==================== 主训练循环 ====================
     for epoch in range(epochs):
-        ### 训练阶段 ###
+        # ========== 训练阶段 ==========
+        # 设置模型为训练模式
+        # 启用 Dropout、BatchNorm 等训练专用层
         model.train()
+        
+        # 初始化训练损失累加器
+        # 用于计算整个 epoch 的平均损失
         train_loss = 0
 
+        # 遍历训练数据的所有批次
+        # enumerate 返回 (批次索引, (特征, 标签))
         for batch, (X, y) in enumerate(train_loader):
-            # 移动数据到设备
+            # 将当前批次的数据移动到设备
+            # 确保数据和模型在同一设备上
             X, y = X.to(device), y.to(device)
 
-            # 1. 前向传播
+            # 步骤 1: 前向传播
+            # 将批次数据传入模型，计算预测值
             y_pred = model(X)
 
-            # 2. 计算损失
+            # 步骤 2: 计算损失
+            # 比较预测值和真实值
             loss = loss_fn(y_pred, y)
+            
+            # 累加当前批次的损失
+            # .item() 将张量转换为 Python 数值
             train_loss += loss.item()
 
-            # 3. 清零梯度
+            # 步骤 3: 清零梯度
+            # 清除上一批次的梯度，防止累积
             optimizer.zero_grad()
 
-            # 4. 反向传播
+            # 步骤 4: 反向传播
+            # 计算损失相对于每个参数的梯度
             loss.backward()
 
-            # 5. 更新参数
+            # 步骤 5: 更新参数
+            # 使用计算出的梯度更新模型参数
             optimizer.step()
 
         # 计算平均训练损失
+        # len(train_loader) 返回批次数量
         train_loss /= len(train_loader)
 
-        ### 测试阶段 ###
+        # ========== 测试/评估阶段 ==========
+        # 设置模型为评估模式
+        # 关闭 Dropout、BatchNorm 等训练专用功能
         model.eval()
+        
+        # 初始化测试损失累加器
         test_loss = 0
 
+        # 使用推理模式（不计算梯度）
+        # 节省内存和计算资源
         with torch.inference_mode():
+            # 遍历测试数据的所有批次
             for X, y in test_loader:
+                # 将数据移动到设备
                 X, y = X.to(device), y.to(device)
 
-                # 前向传播
+                # 前向传播：计算预测值
                 test_pred = model(X)
 
-                # 计算损失
+                # 计算测试损失
                 loss = loss_fn(test_pred, y)
+                
+                # 累加当前批次的测试损失
                 test_loss += loss.item()
 
         # 计算平均测试损失
         test_loss /= len(test_loader)
 
-        # 记录结果
+        # ========== 记录和打印 ==========
+        # 每隔 print_every 个 epoch 记录和打印一次
         if epoch % print_every == 0:
+            # 记录当前 epoch 的结果
             results["train_loss"].append(train_loss)
             results["test_loss"].append(test_loss)
             results["epoch"].append(epoch)
 
+            # 打印训练进度
+            # .5f 表示保留 5 位小数
             print(f"Epoch: {epoch} | "
                   f"Train loss: {train_loss:.5f} | "
                   f"Test loss: {test_loss:.5f}")
 
+    # 返回训练历史，用于后续分析和可视化
     return results
+
+# 使用示例：
+# results = train_model(
+#     model=model_1,
+#     train_loader=train_dataloader,
+#     test_loader=test_dataloader,
+#     loss_fn=nn.L1Loss(),
+#     optimizer=torch.optim.SGD(model_1.parameters(), lr=0.01),
+#     epochs=100,
+#     device="cuda" if torch.cuda.is_available() else "cpu",
+#     print_every=10
+# )
 ```
-
----
-
-## 4. 模型评估与预测
 
 ### 4.1 推理模式 (Inference Mode)
 
