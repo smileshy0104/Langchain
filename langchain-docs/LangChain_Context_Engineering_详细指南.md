@@ -507,105 +507,146 @@ def context_aware_prompt(request: ModelRequest) -> str:
 ### 使用 @wrap_model_call 注入消息
 
 ```python
-from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
-from typing import Callable
+# 导入必要的模块
+from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse  # 模型包装装饰器和类型
+from typing import Callable  # 可调用对象类型注解
 
-@wrap_model_call
+@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
 def inject_file_context(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    request: ModelRequest,  # 模型请求对象，包含消息、状态、上下文等信息
+    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
 ) -> ModelResponse:
-    """注入用户上传文件的上下文"""
+    """注入用户上传文件的上下文
+    
+    这个中间件函数演示了如何从请求状态中获取用户上传的文件信息，
+    并在模型调用前将文件上下文注入到消息中。这样可以让模型
+    基于用户上传的文件内容来回答问题，实现文件驱动的对话。
+    """
 
-    # 从 State 获取上传的文件
+    # 从请求状态中获取用户上传的文件列表
+    # 使用 get 方法提供默认值，避免键不存在时的错误
     uploaded_files = request.state.get("uploaded_files", [])
 
+    # 检查是否有上传的文件
     if uploaded_files:
-        # 构建文件描述
+        # 构建文件描述列表，为每个文件创建可读的描述信息
         file_descriptions = []
         for file in uploaded_files:
+            # 为每个文件创建格式化的描述字符串
             file_descriptions.append(
                 f"- {file['name']} ({file['type']}): {file['summary']}"
+                # 文件名、文件类型、文件摘要的格式化显示
             )
 
+        # 构建文件上下文提示词，告知模型可以访问的文件信息
         file_context = f"""你可以访问以下用户上传的文件:
-{chr(10).join(file_descriptions)}
+{chr(10).join(file_descriptions)}  # 使用换行符连接文件描述
 
 请根据这些文件内容回答用户的问题。"""
 
-        # 创建新的消息列表（注入文件上下文）
+        # 创建新的消息列表：保留原有消息 + 注入文件上下文
         messages = [
-            *request.messages,
-            {"role": "user", "content": file_context},
+            *request.messages,  # 解包原有消息，保持对话历史
+            {"role": "user", "content": file_context},  # 添加用户级文件上下文信息
         ]
 
-        # 使用 override 创建新的请求（瞬态修改）
+        # 使用 override 创建新的请求对象（瞬态修改）
+        # 这会创建一个新的请求对象，包含修改后的消息列表
         request = request.override(messages=messages)
 
+    # 调用处理函数执行实际的模型调用
+    # 如果没有上传文件，直接使用原始请求
     return handler(request)
 ```
 
 ### 从 Store 注入用户偏好
 
 ```python
-@wrap_model_call
+@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
 def inject_writing_style(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    request: ModelRequest,  # 模型请求对象，包含消息、上下文等信息
+    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
 ) -> ModelResponse:
-    """从 Store 读取并注入用户的写作风格"""
+    """从 Store 读取并注入用户的写作风格
+    
+    这个中间件函数演示了如何从持久化存储中读取用户偏好，
+    并在模型调用前动态注入个性化的写作风格指令。
+    这样可以让每个用户都获得符合其偏好的个性化体验。
+    """
 
+    # 从运行时上下文获取用户 ID - 确定当前会话的用户身份
     user_id = request.runtime.context.user_id
+    # 从运行时获取 Store 组件 - 用于访问持久化存储
     store = request.runtime.store
 
-    # 从 Store 读取写作风格
+    # 从 Store 读取用户的写作风格设置
+    # 使用元组 ("writing_style",) 作为键，user_id 作为值进行查询
     writing_style = store.get(("writing_style",), user_id)
 
+    # 检查是否找到了用户的写作风格设置
     if writing_style:
+        # 获取存储的风格配置对象
         style = writing_style.value
+        # 构建个性化的写作风格指令字符串
         style_context = f"""请使用以下写作风格回复:
-- 语气: {style.get('tone', '专业')}
-- 开场白: "{style.get('greeting', '你好')}"
-- 结束语: "{style.get('sign_off', '祝好')}"
-- 正式程度: {style.get('formality', '中等')}"""
+- 语气: {style.get('tone', '专业')}  # 语气：专业、友好、幽默等
+- 开场白: "{style.get('greeting', '你好')}"  # 个性化开场白
+- 结束语: "{style.get('sign_off', '祝好')}"  # 个性化结束语
+- 正式程度: {style.get('formality', '中等')}"""  # 正式程度：低、中等、高
 
+        # 构建新的消息列表：保留原有消息 + 添加系统级风格指令
         messages = [
-            *request.messages,
-            {"role": "system", "content": style_context}
+            *request.messages,  # 解包原有消息，保持对话历史
+            {"role": "system", "content": style_context}  # 添加系统级风格指令
         ]
 
+        # 使用 override 创建新的请求对象（瞬态修改）
+        # 这会创建一个新的请求对象，包含修改后的消息列表
         request = request.override(messages=messages)
 
+    # 调用处理函数执行实际的模型调用
+    # 如果没有找到用户风格设置，直接使用原始请求
     return handler(request)
 ```
 
 ### 注入实时数据
 
 ```python
-import datetime
+# 导入日期时间模块
+import datetime  # 用于获取和处理实时时间信息
 
-@wrap_model_call
+@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
 def inject_realtime_context(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    request: ModelRequest,  # 模型请求对象，包含消息、状态、上下文等信息
+    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
 ) -> ModelResponse:
-    """注入实时上下文信息"""
+    """注入实时上下文信息
+    
+    这个中间件函数演示了如何在模型调用前注入实时的上下文信息，
+    如当前时间、星期、工作时段等。这样可以让模型根据时间
+    提供更相关、更个性化的响应。
+    """
 
-    # 获取当前时间
+    # 获取当前时间对象，包含完整的日期和时间信息
     now = datetime.datetime.now()
 
-    # 构建实时上下文
+    # 构建实时上下文信息字符串，为模型提供时间相关的背景
     realtime_context = f"""当前上下文信息:
-- 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
-- 星期: {['周一', '周二', '周三', '周四', '周五', '周六', '周日'][now.weekday()]}
-- 时段: {'工作时间' if 9 <= now.hour < 18 else '非工作时间'}"""
+- 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}  # 格式化显示年月日时分秒
+- 星期: {['周一', '周二', '周三', '周四', '周五', '周六', '周日'][now.weekday()]}  # 将数字星期转换为中文
+- 时段: {'工作时间' if 9 <= now.hour < 18 else '非工作时间'}  # 根据小时判断工作时段"""
 
+    # 构建新的消息列表：实时上下文 + 原有消息
     messages = [
-        {"role": "system", "content": realtime_context},
-        *request.messages,
+        {"role": "system", "content": realtime_context},  # 添加系统级实时上下文信息
+        *request.messages,  # 解包原有消息，保持对话历史
     ]
 
+    # 使用 override 创建新的请求对象（瞬态修改）
+    # 这会创建一个新的请求对象，包含修改后的消息列表
     request = request.override(messages=messages)
+    
+    # 调用处理函数执行实际的模型调用
     return handler(request)
 ```
 
