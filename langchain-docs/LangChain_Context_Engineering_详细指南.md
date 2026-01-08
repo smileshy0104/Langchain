@@ -668,89 +668,131 @@ def inject_realtime_context(
 ### 基于 State 选择工具
 
 ```python
-@wrap_model_call
+@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
 def state_based_tools(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    request: ModelRequest,  # 模型请求对象，包含消息、状态、工具等信息
+    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
 ) -> ModelResponse:
-    """根据认证状态选择工具"""
+    """根据认证状态选择工具
+    
+    这个中间件函数演示了如何根据用户的认证状态动态选择
+    可用工具。未认证用户只能使用公开工具，已认证用户
+    可以使用所有工具，实现基于权限的工具访问控制。
+    """
 
+    # 从请求状态中获取状态信息
     state = request.state
+    # 检查用户的认证状态，默认为未认证
     is_authenticated = state.get("authenticated", False)
 
+    # 根据认证状态决定可用工具
     if not is_authenticated:
-        # 未认证：只提供公开工具
+        # 未认证用户：只提供公开工具
+        # 使用列表推导式过滤出以"public_"开头的工具
         public_tools = [t for t in request.tools if t.name.startswith("public_")]
+        # 使用 override 创建新的请求对象，只包含公开工具
         request = request.override(tools=public_tools)
     else:
-        # 已认证：提供所有工具
-        pass
+        # 已认证用户：提供所有工具，无需修改
+        pass  # 保持原有工具列表不变
 
+    # 调用处理函数执行实际的模型调用
     return handler(request)
 ```
 
 ### 基于 Runtime Context 选择工具
 
 ```python
-@dataclass
+@dataclass  # 装饰器：自动生成初始化方法、比较方法等
 class Context:
-    user_role: str  # "admin", "editor", "viewer"
+    """用户上下文数据类
+    
+    定义用户角色的数据结构，用于基于角色的权限控制。
+    """
+    user_role: str  # 用户角色类型："admin" (管理员), "editor" (编辑者), "viewer" (查看者)
 
-@wrap_model_call
+@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
 def role_based_tools(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    request: ModelRequest,  # 模型请求对象，包含消息、上下文、工具等信息
+    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
 ) -> ModelResponse:
-    """根据用户角色选择工具"""
+    """根据用户角色选择工具
+    
+    这个中间件函数演示了如何根据用户的角色动态选择
+    可用工具。不同角色有不同的权限级别，实现细粒度的
+    访问控制和安全保障。
+    """
 
+    # 从运行时上下文获取用户角色信息
     user_role = request.runtime.context.user_role
+    # 获取所有可用工具的列表
     all_tools = request.tools
 
+    # 根据用户角色决定可用工具
     if user_role == "admin":
-        # 管理员：所有工具
+        # 管理员：拥有所有工具的完全访问权限
         tools = all_tools
     elif user_role == "editor":
-        # 编辑者：排除删除工具
+        # 编辑者：可以创建和修改，但不能删除
+        # 使用列表推导式排除以"delete_"开头的危险工具
         tools = [t for t in all_tools if not t.name.startswith("delete_")]
     else:
-        # 查看者：只有读取工具
+        # 查看者：只能进行只读操作
+        # 只保留以"read_"或"get_"开头的读取工具
         tools = [t for t in all_tools if t.name.startswith("read_") or t.name.startswith("get_")]
 
+    # 使用 override 创建新的请求对象，只包含角色允许的工具
     request = request.override(tools=tools)
+    
+    # 调用处理函数执行实际的模型调用
     return handler(request)
 ```
 
 ### 基于对话内容选择工具
 
 ```python
-@wrap_model_call
+@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
 def context_based_tools(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    request: ModelRequest,  # 模型请求对象，包含消息、上下文、工具等信息
+    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
 ) -> ModelResponse:
-    """根据对话内容智能选择工具"""
+    """根据对话内容智能选择工具
+    
+    这个中间件函数演示了如何根据用户的对话内容动态选择
+    相关工具。通过分析用户消息中的关键词，智能推断用户意图，
+    只提供与当前任务相关的工具，提高响应的准确性和效率。
+    """
 
-    # 获取最后一条用户消息
+    # 获取最后一条用户消息，用于分析用户意图
     last_user_msg = ""
+    # 使用 reversed 倒序遍历消息，找到最近的用户消息
     for msg in reversed(request.messages):
         if msg.get("role") == "user":
+            # 获取消息内容并转换为小写，便于关键词匹配
             last_user_msg = msg.get("content", "").lower()
-            break
+            break  # 找到后立即退出循环
 
+    # 获取所有可用工具的列表
     all_tools = request.tools
 
-    # 根据关键词选择相关工具
+    # 根据关键词选择相关工具，实现智能工具过滤
     if "订单" in last_user_msg or "购买" in last_user_msg:
+        # 订单相关：只提供订单和购买相关的工具
         tools = [t for t in all_tools if "order" in t.name or "purchase" in t.name]
     elif "账户" in last_user_msg or "密码" in last_user_msg:
+        # 账户相关：只提供账户和认证相关的工具
         tools = [t for t in all_tools if "account" in t.name or "auth" in t.name]
     elif "报告" in last_user_msg or "统计" in last_user_msg:
+        # 报告相关：只提供报告和统计相关的工具
         tools = [t for t in all_tools if "report" in t.name or "stats" in t.name]
     else:
-        # 默认提供所有工具
+        # 默认情况：提供所有工具，让模型自行选择
         tools = all_tools
 
+    # 使用 override 创建新的请求对象，只包含相关的工具
     request = request.override(tools=tools)
+    
+    # 调用处理函数执行实际的模型调用
     return handler(request)
 ```
 
