@@ -1066,196 +1066,242 @@ email_agent = create_agent(
 ### 案例 1：数据库操作审批系统
 
 ```python
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langgraph.checkpoint.postgres import AsyncPostgresSaver
-from langchain_core.tools import tool
-import asyncio
+# 导入必要的模块
+from langchain.agents import create_agent  # 创建 Agent 的工具函数
+from langchain.agents.middleware import HumanInTheLoopMiddleware  # 人机循环中间件
+from langgraph.checkpoint.postgres import AsyncPostgresSaver  # PostgreSQL 异步检查点存储
+from langchain_core.tools import tool  # 工具装饰器
+import asyncio  # 异步编程支持
 
-@tool
+@tool  # 装饰器：注册为 LangChain 工具
 def execute_sql(query: str) -> str:
-    """执行 SQL 查询"""
-    # 验证 SQL 安全性
-    dangerous_keywords = ["DROP", "DELETE", "TRUNCATE", "ALTER"]
-    query_upper = query.upper()
+    """执行 SQL 查询
+    
+    这个工具演示了如何在执行 SQL 前进行安全性检查，
+    防止危险操作。结合人机循环中间件，
+    可以实现 SQL 查询的审批流程。
+    """
+    # 验证 SQL 安全性，防止危险操作
+    dangerous_keywords = ["DROP", "DELETE", "TRUNCATE", "ALTER"]  # 危险关键字列表
+    query_upper = query.upper()  # 转换为大写进行匹配
 
+    # 检查查询中是否包含危险关键字
     for keyword in dangerous_keywords:
         if keyword in query_upper:
-            return f"错误：检测到危险关键字 {keyword}"
+            return f"错误：检测到危险关键字 {keyword}"  # 返回错误信息
 
-    # 执行查询
+    # 执行查询（这里只是示例，实际应该连接数据库）
     return f"已执行: {query}"
 
-@tool
+@tool  # 装饰器：注册为 LangChain 工具
 def export_data(table: str, format: str = "csv") -> str:
-    """导出数据"""
-    return f"已导出 {table} 为 {format} 格式"
+    """导出数据
+    
+    这个工具演示了数据导出功能，结合人机循环中间件，
+    可以实现数据导出的审批流程，防止敏感数据泄露。
+    """
+    return f"已导出 {table} 为 {format} 格式"  # 返回导出结果
 
 async def create_db_agent():
-    """创建数据库 Agent"""
+    """创建数据库 Agent
+    
+    创建一个具有人机循环功能的数据库 Agent，
+    包含 SQL 执行和数据导出工具，并配置审批流程。
+    """
+    # 创建 PostgreSQL 检查点存储，用于持久化对话状态
     checkpointer = AsyncPostgresSaver.from_conn_string(
-        "postgresql://user:pass@localhost/db"
+        "postgresql://user:pass@localhost/db"  # 数据库连接字符串
     )
-    await checkpointer.setup()
+    await checkpointer.setup()  # 初始化检查点存储
 
+    # 创建 Agent 并配置人机循环中间件
     agent = create_agent(
-        model="gpt-4o",
-        tools=[execute_sql, export_data],
-        middleware=[
+        model="gpt-4o",  # 使用的语言模型
+        tools=[execute_sql, export_data],  # 可用工具列表
+        middleware=[  # 中间件列表
             HumanInTheLoopMiddleware(
-                interrupt_on={
-                    "execute_sql": {
-                        "allowed_decisions": ["approve", "edit"],
-                        "description": lambda args: (
+                interrupt_on={  # 配置需要审批的工具
+                    "execute_sql": {  # SQL 执行工具的审批配置
+                        "allowed_decisions": ["approve", "edit"],  # 允许的决策类型
+                        "description": lambda args: (  # 动态生成审批描述
                             f"SQL 审批:\n"
                             f"查询: {args['query']}\n"
                             f"请确认查询正确且安全"
                         )
                     },
-                    "export_data": {
-                        "allowed_decisions": ["approve", "reject"],
-                        "description": "数据导出审批",
+                    "export_data": {  # 数据导出工具的审批配置
+                        "allowed_decisions": ["approve", "reject"],  # 允许的决策类型
+                        "description": "数据导出审批",  # 固定的审批描述
                     }
                 }
             )
         ],
-        checkpointer=checkpointer,
+        checkpointer=checkpointer,  # 指定检查点存储
     )
 
     return agent
 
-# 使用
+# 使用示例：演示完整的人机循环流程
 async def main():
-    agent = await create_db_agent()
-    config = {"configurable": {"thread_id": "db-session-001"}}
+    """主函数：演示 Agent 的使用和审批流程"""
+    agent = await create_db_agent()  # 创建 Agent
+    config = {"configurable": {"thread_id": "db-session-001"}}  # 配置会话 ID
 
+    # 调用 Agent 执行任务
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": "导出所有用户数据"}]},
-        config=config
+        {"messages": [{"role": "user", "content": "导出所有用户数据"}]},  # 用户请求
+        config=config  # 传递配置
     )
 
+    # 检查是否需要人工审批
     if "__interrupt__" in result:
-        # 审批流程
+        # 审批流程：显示审批信息
         print(result["__interrupt__"])
 
-        # 批准
+        # 批准操作：恢复 Agent 执行
         result = agent.invoke(
-            Command(resume={"decisions": [{"type": "approve"}]}),
-            config=config
+            Command(resume={"decisions": [{"type": "approve"}]}),  # 批准决策
+            config=config  # 传递配置
         )
 
+# 运行主函数
 asyncio.run(main())
 ```
 
 ### 案例 2：邮件发送审核系统
 
 ```python
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langgraph.checkpoint.memory import InMemorySaver
-from langchain_core.tools import tool
+# 导入必要的模块
+from langchain.agents import create_agent  # 创建 Agent 的工具函数
+from langchain.agents.middleware import HumanInTheLoopMiddleware  # 人机循环中间件
+from langgraph.checkpoint.memory import InMemorySaver  # 内存检查点存储
+from langchain_core.tools import tool  # 工具装饰器
 
-@tool
+@tool  # 装饰器：注册为 LangChain 工具
 def send_email(
-    to: list[str],
-    subject: str,
-    body: str,
-    attachments: list[str] = []
+    to: list[str],  # 收件人列表
+    subject: str,  # 邮件主题
+    body: str,  # 邮件正文
+    attachments: list[str] = []  # 附件列表，默认为空
 ) -> str:
-    """发送邮件"""
-    # 验证收件人
-    allowed_domains = ["company.com", "trusted-partner.com"]
+    """发送邮件
+    
+    这个工具演示了如何在发送邮件前进行安全检查，
+    防止向未经授权的域名发送邮件。结合人机循环中间件，
+    可以实现邮件发送的审批流程。
+    """
+    # 验证收件人域名，防止邮件发送到未经授权的域名
+    allowed_domains = ["company.com", "trusted-partner.com"]  # 允许的域名列表
     for email in to:
-        domain = email.split("@")[-1]
+        domain = email.split("@")[-1]  # 提取域名部分
         if domain not in allowed_domains:
-            return f"错误：不允许发送到 {domain}"
+            return f"错误：不允许发送到 {domain}"  # 返回错误信息
 
-    return f"已发送邮件至 {', '.join(to)}"
+    return f"已发送邮件至 {', '.join(to)}"  # 返回发送成功信息
 
-@tool
+@tool  # 装饰器：注册为 LangChain 工具
 def schedule_meeting(
-    attendees: list[str],
-    title: str,
-    start_time: str,
-    duration_minutes: int
+    attendees: list[str],  # 参与者列表
+    title: str,  # 会议标题
+    start_time: str,  # 开始时间
+    duration_minutes: int  # 持续时间（分钟）
 ) -> str:
-    """安排会议"""
-    return f"已安排会议: {title}, 参与者: {len(attendees)} 人"
+    """安排会议
+    
+    这个工具演示了会议安排功能，结合人机循环中间件，
+    可以实现会议安排的审批流程，确保会议安排的合理性。
+    """
+    return f"已安排会议: {title}, 参与者: {len(attendees)} 人"  # 返回安排结果
 
-# 创建 Agent
+# 创建 Agent 并配置人机循环中间件
 agent = create_agent(
-    model="gpt-4o",
-    tools=[send_email, schedule_meeting],
-    middleware=[
+    model="gpt-4o",  # 使用的语言模型
+    tools=[send_email, schedule_meeting],  # 可用工具列表
+    middleware=[  # 中间件列表
         HumanInTheLoopMiddleware(
-            interrupt_on={
-                "send_email": {
-                    "allowed_decisions": ["approve", "edit", "reject"],
-                    "description": lambda args: (
+            interrupt_on={  # 配置需要审批的工具
+                "send_email": {  # 邮件发送工具的审批配置
+                    "allowed_decisions": ["approve", "edit", "reject"],  # 允许的决策类型
+                    "description": lambda args: (  # 动态生成审批描述
                         f"邮件审核:\n"
                         f"收件人: {', '.join(args['to'])}\n"
                         f"主题: {args['subject']}\n"
                         f"正文预览: {args['body'][:100]}..."
                     )
                 },
-                "schedule_meeting": {
-                    "allowed_decisions": ["approve", "edit"],
-                    "description": "会议安排审核",
+                "schedule_meeting": {  # 会议安排工具的审批配置
+                    "allowed_decisions": ["approve", "edit"],  # 允许的决策类型
+                    "description": "会议安排审核",  # 固定的审批描述
                 }
             }
         )
     ],
-    checkpointer=InMemorySaver(),
+    checkpointer=InMemorySaver(),  # 使用内存检查点存储
 )
 
-# 审核界面
+# 邮件审核界面：演示完整的人机循环交互流程
 def email_review_interface(agent, user_request, config):
-    """邮件审核界面"""
+    """邮件审核界面
+    
+    这个函数演示了如何构建一个交互式的审核界面，
+    允许用户查看待审核操作、编辑参数、批准或拒绝操作。
+    """
+    # 调用 Agent 执行任务
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": user_request}]},
-        config=config
+        {"messages": [{"role": "user", "content": user_request}]},  # 用户请求
+        config=config  # 传递配置
     )
 
+    # 循环处理所有待审核操作
     while "__interrupt__" in result:
         interrupt = result["__interrupt__"]
 
+        # 显示审核界面标题
         print("\n" + "="*60)
         print("待审核操作")
         print("="*60)
 
+        # 显示所有待审核的操作
         for i, action in enumerate(interrupt["value"]["action_requests"]):
-            print(f"\n[{i+1}] {action['name']}")
-            print(action['description'])
+            print(f"\n[{i+1}] {action['name']}")  # 显示操作名称
+            print(action['description'])  # 显示操作描述
 
-            # 收件人检查
+            # 特殊处理邮件发送操作，检查外部收件人
             if action['name'] == 'send_email':
-                recipients = action['arguments']['to']
+                recipients = action['arguments']['to']  # 获取收件人列表
+                # 找出外部收件人（非公司域名）
                 external = [e for e in recipients if not e.endswith("company.com")]
                 if external:
-                    print(f"⚠️  警告：包含外部收件人: {external}")
+                    print(f"⚠️  警告：包含外部收件人: {external}")  # 显示警告
 
         print("\n" + "-"*60)
 
-        # 收集决策
+        # 收集用户决策
         decisions = []
         for i, action in enumerate(interrupt["value"]["action_requests"]):
             print(f"\n操作 {i+1}/{len(interrupt['value']['action_requests'])}")
 
+            # 获取用户输入
             choice = input("操作 (a=批准/e=编辑/r=拒绝/v=查看详情): ").lower()
 
             if choice == 'a':
+                # 批准操作
                 decisions.append({"type": "approve"})
             elif choice == 'e':
+                # 编辑操作参数
                 print("当前参数:", action['arguments'])
                 if action['name'] == 'send_email':
+                    # 编辑收件人
                     new_to = input("收件人 (当前: " + str(action['arguments']['to']) + "): ")
                     if new_to:
                         action['arguments']['to'] = new_to.split(',')
 
+                    # 编辑主题
                     new_subject = input(f"主题 (当前: {action['arguments']['subject']}): ")
                     if new_subject:
                         action['arguments']['subject'] = new_subject
 
+                # 添加编辑决策
                 decisions.append({
                     "type": "edit",
                     "edited_action": {
@@ -1264,20 +1310,21 @@ def email_review_interface(agent, user_request, config):
                     }
                 })
             elif choice == 'r':
+                # 拒绝操作
                 reason = input("拒绝原因: ")
                 decisions.append({
                     "type": "reject",
                     "message": reason
                 })
             elif choice == 'v':
-                # 显示详情
+                # 查看操作详情
                 import json
                 print(json.dumps(action['arguments'], indent=2, ensure_ascii=False))
-                # 重新询问
+                # 递归调用以重新处理
                 decisions.extend(email_review_interface(agent, user_request, config))
                 return decisions
 
-        # 恢复执行
+        # 恢复 Agent 执行，传递用户决策
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
             config=config
@@ -1289,46 +1336,55 @@ def email_review_interface(agent, user_request, config):
 ### 案例 3：金融交易审批系统
 
 ```python
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langgraph.checkpoint.memory import InMemorySaver
-from langchain_core.tools import tool
-from datetime import datetime
-from typing import Literal
+# 导入必要的模块
+from langchain.agents import create_agent  # 创建 Agent 的工具函数
+from langchain.agents.middleware import HumanInTheLoopMiddleware  # 人机循环中间件
+from langgraph.checkpoint.memory import InMemorySaver  # 内存检查点存储
+from langchain_core.tools import tool  # 工具装饰器
+from datetime import datetime  # 日期时间处理
+from typing import Literal  # 类型提示
 
-@tool
+@tool  # 装饰器：注册为 LangChain 工具
 def transfer_funds(
-    from_account: str,
-    to_account: str,
-    amount: float,
-    currency: str = "USD"
+    from_account: str,  # 转出账户
+    to_account: str,  # 转入账户
+    amount: float,  # 转账金额
+    currency: str = "USD"  # 货币类型，默认为美元
 ) -> str:
-    """转账"""
-    # 金额限制
+    """转账
+    
+    这个工具演示了金融转账功能，包含金额限制检查。
+    结合人机循环中间件，可以实现转账的严格审批流程。
+    """
+    # 金额限制检查，防止大额转账风险
     if amount > 100000:
-        return f"错误：单笔转账限额为 $100,000"
+        return f"错误：单笔转账限额为 $100,000"  # 返回错误信息
 
-    return f"已从 {from_account} 转账 ${amount} {currency} 到 {to_account}"
+    return f"已从 {from_account} 转账 ${amount} {currency} 到 {to_account}"  # 返回转账结果
 
-@tool
+@tool  # 装饰器：注册为 LangChain 工具
 def approve_invoice(
-    invoice_id: str,
-    approval_amount: float,
-    notes: str = ""
+    invoice_id: str,  # 发票编号
+    approval_amount: float,  # 审批金额
+    notes: str = ""  # 备注信息
 ) -> str:
-    """审批发票"""
-    return f"已审批发票 {invoice_id}，金额: ${approval_amount}"
+    """审批发票
+    
+    这个工具演示了发票审批功能，结合人机循环中间件，
+    可以实现发票金额的审批和修改流程。
+    """
+    return f"已审批发票 {invoice_id}，金额: ${approval_amount}"  # 返回审批结果
 
-# 创建 Agent
+# 创建金融交易 Agent 并配置人机循环中间件
 agent = create_agent(
-    model="gpt-4o",
-    tools=[transfer_funds, approve_invoice],
-    middleware=[
+    model="gpt-4o",  # 使用的语言模型
+    tools=[transfer_funds, approve_invoice],  # 可用工具列表
+    middleware=[  # 中间件列表
         HumanInTheLoopMiddleware(
-            interrupt_on={
-                "transfer_funds": {
-                    "allowed_decisions": ["approve", "reject"],  # 不允许修改金额
-                    "description": lambda args: (
+            interrupt_on={  # 配置需要审批的工具
+                "transfer_funds": {  # 转账工具的审批配置
+                    "allowed_decisions": ["approve", "reject"],  # 不允许修改金额，只能批准或拒绝
+                    "description": lambda args: (  # 动态生成审批描述
                         f"转账审批:\n"
                         f"从: {args['from_account']}\n"
                         f"到: {args['to_account']}\n"
@@ -1336,9 +1392,9 @@ agent = create_agent(
                         f"⚠️  此操作不可撤销！"
                     )
                 },
-                "approve_invoice": {
-                    "allowed_decisions": ["approve", "edit", "reject"],
-                    "description": lambda args: (
+                "approve_invoice": {  # 发票审批工具的审批配置
+                    "allowed_decisions": ["approve", "edit", "reject"],  # 允许批准、编辑、拒绝
+                    "description": lambda args: (  # 动态生成审批描述
                         f"发票审批:\n"
                         f"发票号: {args['invoice_id']}\n"
                         f"审批金额: ${args['approval_amount']}"
@@ -1347,50 +1403,59 @@ agent = create_agent(
             }
         )
     ],
-    checkpointer=InMemorySaver(),
+    checkpointer=InMemorySaver(),  # 使用内存检查点存储
 )
 
-# 审批工作流
+# 金融审批工作流：演示完整的金融交易审批流程
 def finance_approval_workflow(agent, request, config):
-    """金融审批工作流"""
+    """金融审批工作流
+    
+    这个函数演示了金融交易的审批流程，包括风险检查、
+    二级审批和决策处理等高级功能。
+    """
+    # 调用 Agent 执行任务
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": request}]},
-        config=config
+        {"messages": [{"role": "user", "content": request}]},  # 用户请求
+        config=config  # 传递配置
     )
 
+    # 循环处理所有待审批操作
     while "__interrupt__" in result:
         interrupt = result["__interrupt__"]
 
+        # 显示审批界面标题
         print("\n" + "="*60)
         print("金融交易审批")
         print("="*60)
 
+        # 显示所有待审批的操作
         for action in interrupt["value"]["action_requests"]:
-            print(f"\n操作: {action['name']}")
-            print(action['description'])
+            print(f"\n操作: {action['name']}")  # 显示操作名称
+            print(action['description'])  # 显示操作描述
 
-            # 风险检查
+            # 风险检查：针对转账操作的特殊检查
             if action['name'] == 'transfer_funds':
-                amount = action['arguments']['amount']
+                amount = action['arguments']['amount']  # 获取转账金额
                 if amount > 50000:
-                    print("⚠️  高风险交易：金额超过 $50,000")
-                    print("需要二级审批")
+                    print("⚠️  高风险交易：金额超过 $50,000")  # 高风险警告
+                    print("需要二级审批")  # 提示需要二级审批
 
-                to_account = action['arguments']['to_account']
+                to_account = action['arguments']['to_account']  # 获取目标账户
                 if to_account.startswith("EXTERNAL"):
-                    print("⚠️  外部账户转账")
+                    print("⚠️  外部账户转账")  # 外部账户警告
 
         print("\n" + "-"*60)
 
-        # 收集决策
+        # 收集用户决策
         decisions = []
         for i, action in enumerate(interrupt["value"]["action_requests"]):
-            config_info = interrupt["value"]["review_configs"][i]
-            allowed = config_info["allowed_decisions"]
+            config_info = interrupt["value"]["review_configs"][i]  # 获取审批配置
+            allowed = config_info["allowed_decisions"]  # 获取允许的决策类型
 
             print(f"\n操作 {i+1}: {action['name']}")
             print(f"允许的决策: {', '.join(allowed)}")
 
+            # 显示可用的决策选项
             if "approve" in allowed:
                 print("1. 批准 (approve)")
             if "edit" in allowed:
@@ -1398,28 +1463,34 @@ def finance_approval_workflow(agent, request, config):
             if "reject" in allowed:
                 print("3. 拒绝 (reject)")
 
+            # 获取用户选择
             choice = input("选择: ").strip().lower()
 
             if choice == "1" and "approve" in allowed:
-                # 二级审批检查
+                # 批准操作：检查是否需要二级审批
                 if action['name'] == 'transfer_funds' and action['arguments']['amount'] > 50000:
+                    # 二级审批检查：高风险交易需要二级审批人
                     approver_2 = input("二级审批人 ID: ")
                     if not approver_2:
                         print("需要二级审批人批准")
-                        continue
+                        continue  # 跳过此操作，等待二级审批
 
-                decisions.append({"type": "approve"})
+                decisions.append({"type": "approve"})  # 添加批准决策
 
             elif choice == "2" and "edit" in allowed:
+                # 编辑操作：修改操作参数
                 if action['name'] == 'approve_invoice':
+                    # 修改发票审批金额
                     new_amount = input(f"新金额 (当前: {action['arguments']['approval_amount']}): ")
                     if new_amount:
                         try:
+                            # 验证并更新金额
                             action['arguments']['approval_amount'] = float(new_amount)
                         except ValueError:
                             print("无效金额")
-                            continue
+                            continue  # 重新输入
 
+                # 添加编辑决策
                 decisions.append({
                     "type": "edit",
                     "edited_action": {
@@ -1429,13 +1500,14 @@ def finance_approval_workflow(agent, request, config):
                 })
 
             elif choice == "3" and "reject" in allowed:
+                # 拒绝操作：记录拒绝原因
                 reason = input("拒绝原因: ")
                 decisions.append({
                     "type": "reject",
-                    "message": reason or "审批被拒绝"
+                    "message": reason or "审批被拒绝"  # 使用默认拒绝原因
                 })
 
-        # 恢复执行
+        # 恢复 Agent 执行，传递用户决策
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
             config=config
@@ -1447,76 +1519,127 @@ def finance_approval_workflow(agent, request, config):
 ### 案例 4：带日志和审计的 HITL
 
 ```python
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langgraph.checkpoint.memory import InMemorySaver
-from datetime import datetime
-import json
+# 导入必要的模块
+from langchain.agents import create_agent  # 创建 Agent 的工具函数
+from langchain.agents.middleware import HumanInTheLoopMiddleware  # 人机循环中间件
+from langgraph.checkpoint.memory import InMemorySaver  # 内存检查点存储
+from datetime import datetime  # 日期时间处理
+import json  # JSON 数据处理
 
 class AuditMiddleware:
-    """审计日志中间件"""
-
+    """审计日志中间件
+    
+    这个类演示了如何实现审批决策的审计日志功能。
+    记录所有审批操作的详细信息，用于合规性和安全审计。
+    """
+    
     def __init__(self, log_file="hitl_audit.log"):
-        self.log_file = log_file
+        """初始化审计中间件
+        
+        Args:
+            log_file: 日志文件路径，默认为 'hitl_audit.log'
+        """
+        self.log_file = log_file  # 日志文件路径
 
     def log_decision(self, interrupt, decisions, user_id):
-        """记录审批决策"""
+        """记录审批决策
+        
+        将审批过程中的所有信息记录到日志文件中，
+        包括时间戳、用户信息、操作详情和决策结果。
+        
+        Args:
+            interrupt: 中断信息，包含待审批的操作
+            decisions: 用户做出的决策列表
+            user_id: 审批用户的标识符
+        """
+        # 构建日志条目，包含所有审计相关信息
         log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "user_id": user_id,
-            "actions": [
+            "timestamp": datetime.now().isoformat(),  # ISO 格式的时间戳
+            "user_id": user_id,  # 审批用户 ID
+            "actions": [  # 待审批的操作列表
                 {
-                    "tool": action["name"],
-                    "arguments": action["arguments"]
+                    "tool": action["name"],  # 工具名称
+                    "arguments": action["arguments"]  # 工具参数
                 }
                 for action in interrupt["value"]["action_requests"]
             ],
-            "decisions": decisions,
+            "decisions": decisions,  # 用户做出的决策
         }
 
+        # 将日志条目写入文件，使用追加模式
         with open(self.log_file, "a") as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")  # 写入 JSON 格式的日志
 
-# 创建带审计的 Agent
-audit = AuditMiddleware()
+# 创建审计中间件实例
+audit = AuditMiddleware()  # 使用默认日志文件路径
 
+# 创建带审计功能的 Agent
 agent = create_agent(
-    model="gpt-4o",
-    tools=[...],
-    middleware=[
+    model="gpt-4o",  # 使用的语言模型
+    tools=[...],  # 工具列表（省略具体实现）
+    middleware=[  # 中间件列表
         HumanInTheLoopMiddleware(
-            interrupt_on={
-                "sensitive_operation": True
+            interrupt_on={  # 配置需要审批的工具
+                "sensitive_operation": True  # 所有敏感操作都需要审批
             }
         )
     ],
-    checkpointer=InMemorySaver(),
+    checkpointer=InMemorySaver(),  # 使用内存检查点存储
 )
 
-# 审批流程
+# 带审计的审批流程：演示完整的审计记录功能
 def audited_approval_workflow(agent, request, config, user_id):
-    """带审计的审批流程"""
+    """带审计的审批流程
+    
+    这个函数演示了如何在审批流程中集成审计功能，
+    确保所有决策都被记录和追踪。
+    
+    Args:
+        agent: 配置好的 Agent 实例
+        request: 用户请求内容
+        config: Agent 配置信息
+        user_id: 审批用户标识符
+        
+    Returns:
+        Agent 执行结果
+    """
+    # 调用 Agent 执行任务
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": request}]},
-        config=config
+        {"messages": [{"role": "user", "content": request}]},  # 用户请求
+        config=config  # 传递配置
     )
 
+    # 循环处理所有待审批操作
     while "__interrupt__" in result:
         interrupt = result["__interrupt__"]
 
-        # 收集决策
+        # 收集用户决策（这里假设有一个收集决策的函数）
         decisions = collect_user_decisions(interrupt)
 
-        # 记录审计日志
+        # 记录审计日志：在恢复执行前记录所有决策
         audit.log_decision(interrupt, decisions, user_id)
 
-        # 恢复执行
+        # 恢复 Agent 执行，传递用户决策
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
             config=config
         )
 
     return result
+
+# 辅助函数：收集用户决策（示例实现）
+def collect_user_decisions(interrupt):
+    """收集用户决策的辅助函数
+    
+    Args:
+        interrupt: 中断信息
+        
+    Returns:
+        决策列表
+    """
+    # 这里应该实现具体的用户交互逻辑
+    # 返回示例决策
+    return [{"type": "approve"}]
 ```
 
 ---
