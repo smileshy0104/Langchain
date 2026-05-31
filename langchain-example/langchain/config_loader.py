@@ -43,7 +43,7 @@ class ConfigLoader:
         获取指定提供商的 API Key
         
         Args:
-            provider: 提供商名称，如 'zhipuai', 'openai', 'anthropic'
+            provider: 提供商名称，如 'zhipuai', 'openai', 'anthropic', 'custom'
         
         Returns:
             API Key 字符串
@@ -55,6 +55,7 @@ class ConfigLoader:
             'zhipuai': 'ZHIPUAI_API_KEY',
             'openai': 'OPENAI_API_KEY',
             'anthropic': 'ANTHROPIC_API_KEY',
+            'custom': 'CUSTOM_MODEL_API_KEY',
         }
         
         if provider not in env_var_map:
@@ -100,6 +101,21 @@ class ConfigLoader:
             config['model'] = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
             config['temperature'] = float(os.getenv('ANTHROPIC_TEMPERATURE', '0.7'))
             config['max_tokens'] = int(os.getenv('ANTHROPIC_MAX_TOKENS', '1024'))
+
+        elif provider == 'custom':
+            config['model'] = os.getenv('CUSTOM_MODEL_NAME', 'gpt-4o-mini')
+            config['base_url'] = os.getenv('CUSTOM_MODEL_BASE_URL', '').strip()
+            config['temperature'] = float(os.getenv('CUSTOM_MODEL_TEMPERATURE', '0.7'))
+
+            max_tokens = os.getenv('CUSTOM_MODEL_MAX_TOKENS', '').strip()
+            if max_tokens:
+                config['max_tokens'] = int(max_tokens)
+
+            if not config['base_url'] or 'your-' in config['base_url'].lower():
+                raise ValueError(
+                    f"❌ 请在 {self.env_path} 中配置 CUSTOM_MODEL_BASE_URL\n"
+                    f"当前值: {config['base_url'] or '(未设置)'}"
+                )
         
         return config
     
@@ -148,6 +164,39 @@ def get_anthropic_config() -> Dict[str, Any]:
     """获取 Anthropic 配置"""
     loader = load_config()
     return loader.get_model_config('anthropic')
+
+
+def get_custom_model_config() -> Dict[str, Any]:
+    """获取自定义 OpenAI-compatible 模型配置"""
+    loader = load_config()
+    return loader.get_model_config('custom')
+
+
+def create_chat_model(provider: Optional[str] = None):
+    """
+    根据配置创建聊天模型。
+
+    - zhipuai: 使用 langchain_community.chat_models.ChatZhipuAI
+    - custom: 使用 langchain_openai.ChatOpenAI，支持自定义 base_url 和 api_key
+    """
+    loader = load_config()
+    provider = provider or loader.get_setting('DEFAULT_PROVIDER', 'zhipuai')
+    provider = provider.lower()
+
+    if provider == 'zhipuai':
+        from langchain_community.chat_models import ChatZhipuAI
+
+        return ChatZhipuAI(**loader.get_model_config('zhipuai'))
+
+    if provider == 'custom':
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(**loader.get_model_config('custom'))
+
+    raise ValueError(
+        f"暂不支持 provider={provider!r}。"
+        "当前 create_chat_model 支持: zhipuai, custom"
+    )
 
 
 # ==================== 使用示例 ====================
