@@ -1,6 +1,6 @@
 # LangChain Agents 详细总结
 
-> 基于官方文档 https://docs.langchain.com/oss/python/langchain/agents 的完整中文总结
+> 基于官方文档 [https://docs.langchain.com/oss/python/langchain/agents](https://docs.langchain.com/oss/python/langchain/agents) 的完整中文总结（在原有内容基础上补充当前 v1.x 文档中的 Model + Harness、调用方式、Streaming 与 Harness 中间件体系）
 
 ---
 
@@ -8,12 +8,14 @@
 
 - [核心概念](#核心概念)
 - [create_agent 详解](#create_agent-详解)
+- [Agent 调用与流式输出](#agent-调用与流式输出)
 - [工具（Tools）](#工具tools)
 - [中间件（Middleware）](#中间件middleware)
 - [短期记忆（Short-term Memory）](#短期记忆short-term-memory)
 - [上下文工程（Context Engineering）](#上下文工程context-engineering)
 - [人机协作（Human-in-the-Loop）](#人机协作human-in-the-loop)
 - [结构化输出](#结构化输出)
+- [Harness 配置与 Deep Agents](#harness-配置与-deep-agents)
 - [最佳实践](#最佳实践)
 
 ---
@@ -24,7 +26,14 @@
 
 **定义**: Agents 将语言模型与工具结合，创建能够推理任务、决定使用哪些工具并迭代地朝着解决方案努力的系统。
 
+**当前官方文档的核心表述**: **Agent = Model + Harness**。
+
+- **Model**: 负责推理、决定是否调用工具以及如何继续任务
+- **Harness**: 围绕模型循环的运行时外壳，包括提示词、工具、上下文、状态、中间件、检查点与观测能力
+- Harness 的职责是：**在正确的时间，把正确的上下文交给模型**
+
 **核心特征**:
+
 - LLM Agent 在循环中运行工具以实现目标
 - Agent 持续运行直到满足停止条件（模型输出最终答案或达到迭代限制）
 
@@ -59,6 +68,7 @@
 ```
 
 **执行步骤**:
+
 1. **输入** → 用户查询进入 Agent
 2. **模型** → LLM 分析并决定是否调用工具
 3. **工具** → 执行工具并返回观察结果（observation）
@@ -70,6 +80,7 @@
 `create_agent` 构建基于 **LangGraph** 的图状运行时：
 
 **图的组成**:
+
 - **节点（Nodes）**: 执行步骤
   - `model` 节点: 调用模型
   - `tools` 节点: 执行工具
@@ -77,6 +88,7 @@
 - **边（Edges）**: 连接，定义信息流
 
 **优势**:
+
 - 可视化执行流程
 - 灵活的控制流
 - 持久化执行状态
@@ -88,9 +100,20 @@
 
 ### 基础用法
 
-`create_agent` 是 **LangChain v1.0** 构建 Agent 的标准方式。
+`create_agent` 是 **LangChain v1.x** 构建 Agent 的标准方式。它是一个高度可配置的 Harness，最基础只需要配置 `model` 和 `tools`，复杂能力则通过 `middleware`、`checkpointer`、`context_schema`、`state_schema` 等扩展。
+
+当前官方文档推荐的最简写法是直接传入模型标识字符串：
+
+```python
+from langchain.agents import create_agent
+
+agent = create_agent("openai:gpt-5.4", tools=tools)
+```
+
+也可以继续传入已初始化的模型实例，适合需要自定义 provider 参数、超时、温度等配置的场景。
 
 **最简示例**:
+
 ```python
 from langchain.agents import create_agent
 from langchain_anthropic import ChatAnthropic
@@ -104,7 +127,7 @@ def get_weather(location: str) -> str:
     return f"{location} 的天气是晴朗的，温度 20°C"
 
 # 创建 Agent
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-6")
 agent = create_agent(
     model=model,
     tools=[get_weather],
@@ -124,32 +147,34 @@ print(result["messages"][-1]["content"])
 
 #### 1. `model` - 模型配置
 
-**类型**: `BaseChatModel` 或 字符串
+**类型**: `BaseChatModel` 或模型标识字符串（推荐格式：`"provider:model"`）
 
 **支持的模型**:
+
 ```python
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # 方式 1: 直接传入模型实例
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-6")
 
 # 方式 2: 传入模型名称（简写）
 agent = create_agent(
-    model="claude-sonnet-4-5-20250929",  # 简化写法
+    model="claude-sonnet-4-6",  # 简化写法
     tools=tools
 )
 
 # 方式 3: 使用不同提供商
 models = [
     ChatOpenAI(model="gpt-4o"),
-    ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    ChatAnthropic(model="claude-sonnet-4-6"),
     ChatGoogleGenerativeAI(model="gemini-pro")
 ]
 ```
 
 **动态模型选择** (通过中间件):
+
 ```python
 from langchain.agents.middleware import wrap_model_call
 from langchain_openai import ChatOpenAI
@@ -183,6 +208,7 @@ agent = create_agent(
 **定义工具的方式**:
 
 **方式 1: 使用 `@tool` 装饰器**
+
 ```python
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -211,6 +237,7 @@ tools = [search_web]
 ```
 
 **方式 2: 从 Retriever 创建工具**
+
 ```python
 from langchain_classic.tools.retriever import create_retriever_tool
 
@@ -230,6 +257,7 @@ tools = [retriever_tool]
 **作用**: 设置 Agent 的行为和能力
 
 **静态提示词**:
+
 ```python
 agent = create_agent(
     model=model,
@@ -256,6 +284,7 @@ agent = create_agent(
 ```
 
 **动态提示词** (通过中间件):
+
 ```python
 from langchain.agents.middleware import dynamic_prompt, ModelRequest
 from dataclasses import dataclass
@@ -426,6 +455,132 @@ weather_data: WeatherResponse = result["structured_response"]
 print(f"温度: {weather_data.temperature}°C")
 ```
 
+#### 9. `name` - Agent 名称
+
+**类型**: `str` (可选)
+
+**作用**: 为 Agent 设置标识符。当 Agent 被嵌入多 Agent 系统或作为 LangGraph 子图使用时，`name` 会作为节点名，便于追踪和调试。
+
+```python
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=tools,
+    name="research_assistant"
+)
+```
+
+---
+
+## Agent 调用与流式输出
+
+### 1. 基础调用
+
+Agent 接收的是对状态（State）的更新。所有 Agent 默认都包含 `messages` 序列，因此最常见的调用方式是传入一条新的用户消息：
+
+```python
+result = agent.invoke({
+    "messages": [{"role": "user", "content": "What's the weather in San Francisco?"}]
+})
+
+print(result["messages"][-1].content)
+```
+
+### 2. 使用 `thread_id` 保持会话历史
+
+如果需要 Agent 记住同一段对话中的上下文，需要同时满足两个条件：
+
+1. 创建 Agent 时配置 `checkpointer`
+2. 调用时在 `config` 中传入稳定的 `thread_id`
+
+当前官方示例使用 `InMemorySaver`：
+
+```python
+from langchain.agents import create_agent
+from langchain_core.utils.uuid import uuid7
+from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[],
+    checkpointer=InMemorySaver(),
+)
+
+config = {"configurable": {"thread_id": str(uuid7())}}
+
+agent.invoke(
+    {"messages": [{"role": "user", "content": "我叫张三"}]},
+    config=config,
+)
+
+# 复用同一个 thread_id，Agent 可以恢复同一会话历史
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+    config=config,
+)
+```
+
+> `thread_id` 标识一段对话；`checkpointer` 负责保存和恢复该对话的状态。部署到 LangSmith 时通常会自动配置检查点；本地运行则需要显式传入。
+
+### 3. `context` 与 `thread_id` 的区别
+
+
+| 概念          | 用途                           | 生命周期  |
+| ----------- | ---------------------------- | ----- |
+| `thread_id` | 标识会话，用于保存/恢复消息历史和 checkpoint | 会话级   |
+| `context`   | 每次调用传入的运行时数据，供工具和中间件读取       | 单次调用级 |
+
+
+适合放入 `context` 的内容包括：`user_id`、角色、权限、API key、feature flags、租户信息、数据库连接等。
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Context:
+    user_id: str
+    role: str
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=tools,
+    context_schema=Context,
+    checkpointer=InMemorySaver(),
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "查询我的订单"}]},
+    config={"configurable": {"thread_id": "conversation-1"}},
+    context=Context(user_id="user-123", role="customer"),
+)
+```
+
+### 4. Streaming 流式输出
+
+当 Agent 执行多步推理或多个工具调用时，`invoke` 只能拿到最终结果。使用 `stream` 可以展示中间状态、调试工具调用顺序或在 UI 中显示进度。
+
+```python
+from langchain.messages import AIMessage, HumanMessage
+
+for chunk in agent.stream(
+    {
+        "messages": [
+            {"role": "user", "content": "Search for AI news and summarize the findings"}
+        ]
+    },
+    stream_mode="values",
+):
+    # 每个 chunk 包含当前完整状态
+    latest_message = chunk["messages"][-1]
+
+    if latest_message.content:
+        if isinstance(latest_message, HumanMessage):
+            print(f"User: {latest_message.content}")
+        elif isinstance(latest_message, AIMessage):
+            print(f"Agent: {latest_message.content}")
+    elif latest_message.tool_calls:
+        print(f"Calling tools: {[tc['name'] for tc in latest_message.tool_calls]}")
+```
+
 ---
 
 ## 工具（Tools）
@@ -456,6 +611,7 @@ def calculate(expression: str) -> float:
 ```
 
 **关键要素**:
+
 - ✅ **函数名**: 描述性名称（模型会看到）
 - ✅ **文档字符串**: 详细说明工具用途
 - ✅ **参数类型**: 明确的类型注解
@@ -520,6 +676,7 @@ def send_email(to: str, subject: str, body: str) -> str:
 ```
 
 **通过中间件处理工具错误**:
+
 ```python
 from langchain.agents.middleware import wrap_tool_call
 from langchain_core.messages import ToolMessage
@@ -599,6 +756,7 @@ async def async_web_search(query: str) -> str:
 **中间件** 是 `create_agent` 的定义性功能，提供高度可定制的入口点。
 
 **主要用途**:
+
 - 📝 动态提示词
 - 💬 对话摘要
 - 🔧 选择性工具访问
@@ -635,14 +793,16 @@ Agent 开始
 
 ### 中间件钩子（Hooks）
 
-| 钩子 | 执行时机 | 用途 |
-|-----|---------|------|
-| `before_agent` | Agent 开始前 | 加载记忆、验证输入 |
-| `before_model` | 每次 LLM 调用前 | 更新提示、修剪消息 |
+
+| 钩子                | 执行时机        | 用途         |
+| ----------------- | ----------- | ---------- |
+| `before_agent`    | Agent 开始前   | 加载记忆、验证输入  |
+| `before_model`    | 每次 LLM 调用前  | 更新提示、修剪消息  |
 | `wrap_model_call` | 每次 LLM 调用周围 | 拦截和修改请求/响应 |
-| `after_model` | 每次 LLM 响应后 | 验证输出、应用防护 |
-| `wrap_tool_call` | 每次工具调用周围 | 拦截和修改工具执行 |
-| `after_agent` | Agent 完成后 | 保存结果、清理资源 |
+| `after_model`     | 每次 LLM 响应后  | 验证输出、应用防护  |
+| `wrap_tool_call`  | 每次工具调用周围    | 拦截和修改工具执行  |
+| `after_agent`     | Agent 完成后   | 保存结果、清理资源  |
+
 
 ### 装饰器风格中间件
 
@@ -667,6 +827,7 @@ agent = create_agent(
 ```
 
 **修剪消息示例**:
+
 ```python
 from langchain.agents.middleware import before_model, trim_messages
 
@@ -735,6 +896,7 @@ def retry_model(
 ```
 
 **动态模型选择**:
+
 ```python
 @wrap_model_call
 def smart_model_routing(request: ModelRequest, handler):
@@ -827,7 +989,7 @@ class ExpertiseBasedToolMiddleware(AgentMiddleware):
         return handler(request)
 
 agent = create_agent(
-    model="claude-sonnet-4-5-20250929",
+    model="claude-sonnet-4-6",
     tools=[simple_search, advanced_search, basic_calculator, data_analysis],
     middleware=[ExpertiseBasedToolMiddleware()],
     context_schema=Context
@@ -862,7 +1024,7 @@ agent = create_agent(
     tools=tools,
     middleware=[
         summarization_middleware(
-            model="claude-sonnet-4-5-20250929",
+            model="claude-sonnet-4-6",
             max_tokens_before_summary=500
         )
     ]
@@ -899,14 +1061,13 @@ middleware=[middleware1, middleware2, middleware3]
 **执行顺序**:
 
 1. **Before 钩子**: 按顺序执行
-   ```
+  ```
    middleware1.before_agent()
    middleware2.before_agent()
    middleware3.before_agent()
-   ```
-
+  ```
 2. **Wrap 钩子**: 嵌套执行（洋葱模型）
-   ```
+  ```
    middleware1.wrap_model_call(
        middleware2.wrap_model_call(
            middleware3.wrap_model_call(
@@ -914,14 +1075,13 @@ middleware=[middleware1, middleware2, middleware3]
            )
        )
    )
-   ```
-
+  ```
 3. **After 钩子**: 逆序执行
-   ```
+  ```
    middleware3.after_model()
    middleware2.after_model()
    middleware1.after_model()
-   ```
+  ```
 
 ---
 
@@ -932,6 +1092,7 @@ middleware=[middleware1, middleware2, middleware3]
 **短期记忆** = 线程级持久化，跟踪单个会话中的对话历史。
 
 **核心机制**:
+
 - LangChain 将短期记忆作为 Agent **状态（State）** 的一部分管理
 - 使用 **Checkpointer** 将状态持久化到数据库（或内存）
 - 通过 `thread_id` 区分不同的对话会话
@@ -946,7 +1107,7 @@ from langgraph.checkpoint.memory import MemorySaver
 checkpointer = MemorySaver()
 
 agent = create_agent(
-    model="claude-sonnet-4-5-20250929",
+    model="claude-sonnet-4-6",
     tools=[],
     checkpointer=checkpointer  # 启用记忆
 )
@@ -970,6 +1131,7 @@ agent.invoke(
 **默认状态**: `AgentState` 只包含 `messages` 字段
 
 **扩展状态**:
+
 ```python
 from langchain.agents import create_agent, AgentState
 from langgraph.checkpoint.memory import MemorySaver
@@ -1047,6 +1209,7 @@ async def trim_long_conversations(state: AgentState, runtime: Runtime):
 **上下文工程** = 在正确的时间将正确的信息提供给模型
 
 **三个关键来源**:
+
 1. **State（状态）**: 当前会话的数据
 2. **Runtime Context（运行时上下文）**: 每次调用的配置
 3. **Store（存储）**: 跨会话的长期记忆
@@ -1218,6 +1381,7 @@ agent = create_agent(
 **Human-in-the-Loop (HITL)** 中间件允许你为 Agent 工具调用添加人工监督。
 
 **工作原理**:
+
 1. 模型提议一个可能需要审查的操作（如删除文件、发送邮件）
 2. 中间件根据配置的策略检查工具调用
 3. 如果需要干预，中间件发出 **中断（interrupt）**，暂停执行
@@ -1249,7 +1413,7 @@ def send_email(to: str, subject: str, body: str) -> str:
 checkpointer = MemorySaver()
 
 agent = create_agent(
-    model="claude-sonnet-4-5-20250929",
+    model="claude-sonnet-4-6",
     tools=[delete_file, send_email],
     middleware=[
         human_in_the_loop_middleware(
@@ -1265,11 +1429,13 @@ agent = create_agent(
 
 ### 决策类型
 
-| 决策类型 | 说明 | 示例用例 |
-|---------|------|---------|
-| ✅ **approve** | 操作按原样批准并执行，无更改 | 按原样发送邮件草稿 |
-| ✏️ **edit** | 工具调用被修改后执行 | 发送邮件前更改收件人 |
-| ❌ **reject** | 工具调用被拒绝，并将解释添加到对话中 | 拒绝邮件草稿并说明如何重写 |
+
+| 决策类型          | 说明                 | 示例用例          |
+| ------------- | ------------------ | ------------- |
+| ✅ **approve** | 操作按原样批准并执行，无更改     | 按原样发送邮件草稿     |
+| ✏️ **edit**   | 工具调用被修改后执行         | 发送邮件前更改收件人    |
+| ❌ **reject**  | 工具调用被拒绝，并将解释添加到对话中 | 拒绝邮件草稿并说明如何重写 |
+
 
 ### 执行流程
 
@@ -1363,6 +1529,31 @@ response = HITLResponse(
 
 强制 Agent 返回符合预定义 schema 的结构化数据，而不是自由文本。
 
+### 直接传入 Schema（当前文档推荐的简洁方式）
+
+对于常见场景，可以直接把 Pydantic schema 传给 `response_format`：
+
+```python
+from pydantic import BaseModel
+from langchain.agents import create_agent
+
+class Answer(BaseModel):
+    summary: str
+    confidence: float
+
+agent = create_agent(
+    "anthropic:claude-sonnet-4-6",
+    tools=tools,
+    response_format=Answer,
+)
+
+result = agent.invoke({
+    "messages": [{"role": "user", "content": "总结一下 AI Agent 的趋势"}]
+})
+
+answer: Answer = result["structured_response"]
+```
+
 ### 使用 ToolStrategy
 
 ```python
@@ -1406,13 +1597,15 @@ print(f"关键点: {review.key_points}")
 ### 支持的 Schema 类型
 
 1. **Pydantic 模型**
+
 ```python
 class WeatherData(BaseModel):
     temperature: float
     condition: str
 ```
 
-2. **数据类（Dataclass）**
+1. **数据类（Dataclass）**
+
 ```python
 from dataclasses import dataclass
 
@@ -1422,7 +1615,8 @@ class WeatherData:
     condition: str
 ```
 
-3. **TypedDict**
+1. **TypedDict**
+
 ```python
 from typing import TypedDict
 
@@ -1431,7 +1625,8 @@ class WeatherData(TypedDict):
     condition: str
 ```
 
-4. **JSON Schema**
+1. **JSON Schema**
+
 ```python
 schema = {
     "type": "object",
@@ -1443,7 +1638,8 @@ schema = {
 }
 ```
 
-5. **Union 类型**（多个 schema 选项）
+1. **Union 类型**（多个 schema 选项）
+
 ```python
 from typing import Union
 
@@ -1481,12 +1677,157 @@ agent = create_agent(
 ```
 
 **内置错误处理选项**:
+
 - `True`: 捕获所有错误，使用默认错误模板
 - `str`: 捕获所有错误，使用自定义消息
 - `type[Exception]`: 只捕获特定异常类型
 - `tuple[type[Exception], ...]`: 捕获多种异常类型
 - `Callable[[Exception], str]`: 自定义错误处理函数
 - `False`: 不重试，让异常传播
+
+---
+
+## Harness 配置与 Deep Agents
+
+当前官方文档把 `create_agent` 描述为一个可配置的 Harness。中间件是扩展 Harness 的主要方式：每个中间件处理一个关注点，并在 Agent Loop 的合适阶段介入。
+
+### 1. Execution Environment（执行环境）
+
+Agent 需要能执行动作，而不仅是生成文本。执行环境中间件可以提供文件系统、沙箱、解释器或代码执行环境。
+
+```python
+from langchain.agents import create_agent
+from deepagents.backends import StateBackend
+from deepagents.middleware import FilesystemMiddleware
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[search],
+    middleware=[FilesystemMiddleware(backend=StateBackend())],
+)
+```
+
+### 2. Context Management（上下文管理）
+
+长任务会不断累积消息、工具结果和中间步骤，容易填满上下文窗口。上下文管理中间件用于摘要历史、加载记忆、按需加载技能，并减少无关上下文。
+
+```python
+from deepagents.backends import StateBackend
+from deepagents.middleware import (
+    FilesystemMiddleware,
+    MemoryMiddleware,
+    SkillsMiddleware,
+    SummarizationMiddleware,
+)
+
+backend = StateBackend()
+model = "anthropic:claude-sonnet-4-6"
+
+agent = create_agent(
+    model=model,
+    tools=[search],
+    middleware=[
+        FilesystemMiddleware(backend=backend),
+        SummarizationMiddleware(model=model, backend=backend),
+        MemoryMiddleware(backend=backend, sources=["./AGENTS.md"]),
+        SkillsMiddleware(backend=backend, sources=["./skills/"]),
+    ],
+)
+```
+
+### 3. Planning and Delegation（规划与委派）
+
+复杂任务可以由主 Agent 规划，再委派给子 Agent 处理。这样可以保持主 Agent 上下文简洁，并让子任务并行或隔离执行。
+
+```python
+from langchain.agents.middleware import TodoListMiddleware
+from deepagents import SubAgent
+from deepagents.backends import StateBackend
+from deepagents.middleware import FilesystemMiddleware, SubAgentMiddleware
+
+backend = StateBackend()
+
+researcher: SubAgent = {
+    "name": "researcher",
+    "description": "Searches and returns a structured summary.",
+    "tools": [search],
+}
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[search],
+    middleware=[
+        FilesystemMiddleware(backend=backend),
+        TodoListMiddleware(),
+        SubAgentMiddleware(backend=backend, subagents=[researcher]),
+    ],
+)
+```
+
+### 4. Fault Tolerance（容错）
+
+生产环境中常见限流、超时、模型调用失败、工具 API 抖动等问题。推荐使用中间件统一处理重试和回退逻辑。
+
+```python
+from langchain.agents.middleware import ModelRetryMiddleware, ToolRetryMiddleware
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[search],
+    middleware=[
+        ModelRetryMiddleware(max_retries=3),
+        ToolRetryMiddleware(max_retries=2),
+    ],
+)
+```
+
+### 5. Guardrails（护栏）
+
+某些策略不应只依赖 prompt，而应通过确定性逻辑强制执行。例如 PII 脱敏、内容策略、输入/输出合规检查等。
+
+```python
+from langchain.agents.middleware import PIIMiddleware
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[search],
+    middleware=[PIIMiddleware()],
+)
+```
+
+### 6. Steering（人机协作）
+
+对删除、写入、发送邮件、付款、调用高成本 API 等高影响操作，建议使用 Human-in-the-loop 让 Agent 暂停并等待人工审批。
+
+```python
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[write_file, send_email],
+    middleware=[
+        HumanInTheLoopMiddleware(
+            interrupt_on={
+                "write_file": True,
+                "send_email": True,
+            }
+        )
+    ],
+    checkpointer=InMemorySaver(),
+)
+```
+
+### 7. Deep Agents
+
+如果要构建长时间运行的编码、研究或复杂任务 Agent，官方建议关注 `create_deep_agent`。它预先组合了常见能力，例如：
+
+- 文件系统
+- 摘要
+- 子 Agent
+- prompt caching
+
+它适合比普通工具调用 Agent 更复杂、更长周期的任务。
 
 ---
 
@@ -1733,64 +2074,58 @@ class SensitiveDataMiddleware(Middleware):
 
 ### 核心要点
 
-1. **Agent = 模型 + 工具 + 循环**
-   - Agent 通过循环调用模型和工具来完成任务
-   - 基于 LangGraph 的图状运行时提供灵活控制
-
+1. **Agent = Model + Harness**
+  - Agent 通过循环调用模型和工具来完成任务
+  - Harness 负责提示词、工具、上下文、状态、中间件、检查点和观测
+  - 基于 LangGraph 的图状运行时提供灵活控制
 2. **create_agent 是标准方式**
-   - 简单易用（<10 行代码）
-   - 高度可定制（通过中间件）
-   - 生产就绪（持久化、监控等）
-
+  - 简单易用（<10 行代码）
+  - 高度可定制（通过中间件）
+  - 生产就绪（持久化、监控等）
 3. **中间件是核心扩展点**
-   - 在执行的各个阶段插入自定义逻辑
-   - 支持动态提示、工具选择、错误处理等
-   - 可组合、可复用
-
+  - 在执行的各个阶段插入自定义逻辑
+  - 支持动态提示、工具选择、错误处理等
+  - 可组合、可复用
 4. **上下文工程很关键**
-   - State: 会话数据
-   - Runtime Context: 运行时配置
-   - Store: 长期记忆
-   - 在正确的时间提供正确的信息
-
+  - State: 会话数据
+  - Runtime Context: 运行时配置
+  - Store: 长期记忆
+  - 在正确的时间提供正确的信息
 5. **记忆管理分两种**
-   - 短期记忆: Checkpointer + thread_id
-   - 长期记忆: Store + 自定义命名空间
-
+  - 短期记忆: Checkpointer + thread_id
+  - 长期记忆: Store + 自定义命名空间
 6. **人机协作提升安全性**
-   - 敏感操作需要人工批准
-   - 支持批准、编辑、拒绝三种决策
-   - 需要 Checkpointer 支持
+  - 敏感操作需要人工批准
+  - 支持批准、编辑、拒绝三种决策
+  - 需要 Checkpointer 支持
 
 ### 推荐学习路径
 
 1. **入门** (1-2 天)
-   - 创建第一个 Agent
-   - 定义简单工具
-   - 理解基本执行流程
-
+  - 创建第一个 Agent
+  - 定义简单工具
+  - 理解基本执行流程
 2. **进阶** (1 周)
-   - 使用中间件自定义行为
-   - 添加短期记忆
-   - 实现动态提示和工具选择
-
+  - 使用中间件自定义行为
+  - 添加短期记忆
+  - 实现动态提示和工具选择
 3. **高级** (2-4 周)
-   - 构建多 Agent 系统
-   - 实现人机协作
-   - 优化性能和安全性
-   - 集成长期记忆
+  - 构建多 Agent 系统
+  - 实现人机协作
+  - 优化性能和安全性
+  - 集成长期记忆
 
 ### 参考资源
 
-- **官方文档**: https://docs.langchain.com/oss/python/langchain/agents
-- **API 参考**: https://api.python.langchain.com/
-- **LangGraph 文档**: https://docs.langchain.com/langgraph
-- **示例项目**: https://github.com/langchain-ai/langchain/tree/master/templates
+- **官方文档**: [https://docs.langchain.com/oss/python/langchain/agents](https://docs.langchain.com/oss/python/langchain/agents)
+- **API 参考**: [https://api.python.langchain.com/](https://api.python.langchain.com/)
+- **LangGraph 文档**: [https://docs.langchain.com/langgraph](https://docs.langchain.com/langgraph)
+- **示例项目**: [https://github.com/langchain-ai/langchain/tree/master/templates](https://github.com/langchain-ai/langchain/tree/master/templates)
 
 ---
 
-**文档版本**: 1.0
-**最后更新**: 2025-01-09
+**文档版本**: 1.1
+**最后更新**: 2026-05-31
 **基于**: LangChain v1.0 官方文档
 
 如有问题或建议，欢迎反馈！
