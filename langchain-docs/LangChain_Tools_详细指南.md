@@ -1,6 +1,6 @@
 # LangChain Tools 详细指南
 
-> 基于官方文档 https://docs.langchain.com/oss/python/langchain/tools 的完整中文总结
+> 基于官方文档 https://docs.langchain.com/oss/python/langchain/tools 的完整中文总结（在原有内容基础上补充当前 v1.x 文档中的上下文访问、状态/Store 注入、StreamWriter、工具返回 Command、动态工具选择、预构建工具与服务端工具等内容）
 
 ---
 
@@ -9,12 +9,14 @@
 - [核心概念](#核心概念)
 - [工具定义方式](#工具定义方式)
 - [参数验证与Schema](#参数验证与schema)
+- [访问上下文](#访问上下文)
 - [错误处理](#错误处理)
 - [异步工具](#异步工具)
 - [流式输出](#流式输出)
 - [特殊类型工具](#特殊类型工具)
 - [工具集成](#工具集成)
 - [高级用法](#高级用法)
+- [官方 v1.x 补充：工具执行与返回值](#官方-v1x-补充工具执行与返回值)
 - [最佳实践](#最佳实践)
 
 ---
@@ -23,13 +25,15 @@
 
 ### 什么是 Tool？
 
-**定义**: Tools（工具）是 Agent 调用以执行操作的组件。它们通过明确定义的输入和输出扩展模型能力，使其能够与外部世界交互。
+**定义**: Tools（工具）是 Agent 或 Chat Model 调用以执行操作的组件。它们通过明确定义的输入和输出扩展模型能力，使模型能够查询数据库、调用 API、读写系统、检索知识库或执行业务动作。
 
 **核心特征**:
 - 封装一个可调用函数
 - 定义输入 Schema（输入模式）
-- 可以传递给兼容的聊天模型
+- 可以传递给兼容的聊天模型或 Agent
 - 模型决定是否调用工具以及使用什么参数
+- 工具可以访问运行时上下文、短期状态、长期 Store、stream writer 和执行配置
+- 工具结果可以是字符串、对象，或用于更新图状态的 `Command`
 
 ### Tool 的作用
 
@@ -41,7 +45,6 @@ Tools 主要用于两种方式：
 
 ```python
 from langchain_core.tools import tool
-# from langchain.tools import tool
 
 @tool
 def calculate(expression: str) -> float:
@@ -71,7 +74,6 @@ ToolMessage(content=str(result), tool_call_id="call_123")
 
 ```python
 from langchain_core.tools import BaseTool
-# from langchain.tools import tool
 
 class MyTool(BaseTool):
     # 3 个必需属性
@@ -99,10 +101,8 @@ class MyTool(BaseTool):
 
 ```python
 from langchain_core.tools import tool
-# from langchain.tools import tool
 
-@tool
-@tool(name="search_database", description="搜索客户数据库以查找匹配查询的记录。") # 自定义工具名称和描述
+@tool(name="search_database", description="搜索客户数据库以查找匹配查询的记录。")  # 自定义工具名称和描述
 def search_database(query: str, limit: int = 10) -> str:
     """搜索客户数据库以查找匹配查询的记录。
 
@@ -147,12 +147,30 @@ print(search_database.args_schema.schema())
 # }
 ```
 
+#### 自定义工具名称和描述
+
+默认情况下，函数名会作为工具名，docstring 会作为工具描述。你也可以显式指定：
+
+```python
+from langchain_core.tools import tool
+
+@tool("web_search", description="Search the web for up-to-date information.")
+def search(query: str) -> str:
+    """Search for information."""
+    return f"Results for: {query}"
+```
+
+工具名称和描述会直接影响模型是否正确选择工具。建议：
+
+- 名称短、明确、动词开头，例如 `search_docs`、`get_user`、`create_ticket`
+- 描述说明“什么时候使用这个工具”
+- 参数描述说明格式、限制和示例
+
 #### 详细的文档字符串
 
 ```python
 @tool
 def send_email(to: str, subject: str, body: str, cc: list[str] = None) -> str:
-    ## TODO 详细文档提示
     """
     发送电子邮件给指定收件人。
 
@@ -194,7 +212,6 @@ def send_email(to: str, subject: str, body: str, cc: list[str] = None) -> str:
 
 ```python
 from langchain_core.tools import tool
-# from langchain.tools import tool
 from pydantic import BaseModel, Field, validator
 
 ## Advanced schema definition 高级架构定义（参数验证模型）
@@ -249,13 +266,27 @@ def query_database(query: str, limit: int = 100, offset: int = 0) -> list:
     return results[offset:]
 ```
 
+### 保留参数名（Reserved argument names）
+
+工具函数可以通过特殊参数名接收 LangChain 运行时注入的信息。这些参数通常不应暴露给模型作为普通输入。
+
+常见保留/特殊参数包括：
+
+| 参数/注解 | 用途 |
+|----------|------|
+| `config` / `RunnableConfig` | 访问调用配置、metadata、tags、configurable 等 |
+| `InjectedState` | 注入 Agent/LangGraph 短期状态 |
+| `InjectedStore` | 注入长期 Store |
+| `ToolRuntime` | 统一访问 state、context、store、stream_writer、config、tool_call_id 等运行时信息 |
+
+实践建议：业务参数尽量避免命名为 `config`、`runtime`、`state`、`store`，以免和运行时注入概念混淆。
+
 ### 方式 3: 继承 BaseTool 类
 
 对于需要完全控制的复杂工具。
 
 ```python
 from langchain_core.tools import BaseTool
-# from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 from typing import Optional, Type
 
@@ -317,6 +348,9 @@ search_tool = AdvancedSearchTool(api_key="your-api-key", max_results=20)
 ## 参数验证与Schema
 
 ### Pydantic 验证
+
+> 如果项目使用 Pydantic v2，推荐使用 `@field_validator` / `@model_validator`；本文原有示例中的 `@validator` / `@root_validator` 仍常见于旧项目或兼容模式。
+
 
 #### 1. 字段验证
 
@@ -543,13 +577,168 @@ def publish_content(
 
 ---
 
+## 访问上下文
+
+当前官方文档强调：工具不仅能接收模型生成的参数，还可以访问 Agent/Runtime 中的上下文信息。这样可以避免把用户 ID、权限、数据库连接、长期记忆等敏感或运行时数据暴露给模型。
+
+### 1. 访问短期记忆（State）
+
+在 Agent 中，短期状态通常包含 `messages` 和自定义 state 字段。工具可以通过注入方式读取这些状态。
+
+```python
+from typing import Annotated
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+
+@tool
+def get_conversation_length(
+    state: Annotated[dict, InjectedState]
+) -> str:
+    """获取当前对话消息数量。"""
+    return f"当前对话包含 {len(state['messages'])} 条消息"
+```
+
+#### 访问自定义 State 字段
+
+```python
+from typing import Annotated, TypedDict
+from langchain.agents import AgentState, create_agent
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+
+class CustomState(AgentState):
+    user_id: str
+    plan: list[str]
+
+@tool
+def get_current_user(
+    state: Annotated[CustomState, InjectedState]
+) -> str:
+    """获取当前用户 ID。"""
+    return state["user_id"]
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[get_current_user],
+    state_schema=CustomState,
+)
+```
+
+### 2. 更新 State：返回 Command
+
+工具不仅可以读取状态，也可以通过返回 `Command(update=...)` 更新图状态。适合保存任务进度、表单字段、用户选择等。
+
+```python
+from typing import Annotated
+from langchain_core.tools import tool
+from langgraph.types import Command
+from langgraph.prebuilt import InjectedToolCallId
+from langchain_core.messages import ToolMessage
+
+@tool
+def update_user_name(
+    name: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """更新当前用户姓名。"""
+    return Command(update={
+        "user_name": name,
+        "messages": [ToolMessage(
+            content=f"已将用户姓名更新为 {name}",
+            tool_call_id=tool_call_id,
+        )],
+    })
+```
+
+### 3. 访问 Context（运行时上下文）
+
+`context` 适合存放单次调用相关的数据，例如用户 ID、权限、租户、feature flags、数据库连接等。它不应该进入模型上下文。
+
+```python
+from dataclasses import dataclass
+from langchain.agents import create_agent
+from langchain_core.tools import tool, ToolException
+
+@dataclass
+class Context:
+    user_id: str
+    permissions: list[str]
+
+@tool
+def delete_resource(resource_id: str, runtime) -> str:
+    """删除资源，需要 resource.delete 权限。"""
+    permissions = runtime.context.permissions
+    if "resource.delete" not in permissions:
+        raise ToolException("权限不足：需要 resource.delete")
+    return f"资源 {resource_id} 已删除"
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[delete_resource],
+    context_schema=Context,
+)
+```
+
+> 不同版本中运行时注入 API 可能有差异。核心思想是：**模型只生成业务参数，用户身份、权限、连接等运行时数据由应用注入**。
+
+### 4. 访问长期记忆（Store）
+
+Store 用于跨会话保存长期数据，例如用户偏好、历史资料、画像等。
+
+```python
+from typing import Annotated
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedStore
+
+@tool
+def save_user_preference(
+    key: str,
+    value: str,
+    store: Annotated[object, InjectedStore()],
+) -> str:
+    """保存用户偏好。"""
+    store.put(("preferences",), key, value)
+    return f"已保存偏好 {key}"
+```
+
+### 5. StreamWriter：工具内流式进度
+
+长时间运行的工具可以通过 stream writer 输出进度，让 UI 或调用方实时显示状态。
+
+```python
+from langchain_core.tools import tool
+from langgraph.types import StreamWriter
+
+@tool
+async def generate_report(topic: str, writer: StreamWriter) -> str:
+    """生成报告，并流式输出进度。"""
+    writer({"status": "start", "message": f"开始生成 {topic} 报告"})
+    # ... 执行任务
+    writer({"status": "progress", "message": "完成大纲"})
+    # ... 执行任务
+    writer({"status": "done", "message": "报告生成完成"})
+    return "报告内容..."
+```
+
+### 6. 执行信息与服务端信息
+
+工具还可以访问执行时信息，例如：
+
+- 当前 tool call ID
+- RunnableConfig 中的 tags/metadata/configurable
+- 当前线程或调用 ID
+- 运行环境、服务信息或注入依赖
+
+这类信息适合用于审计、追踪、权限校验和调试，不建议让模型直接生成。
+
+---
+
 ## 错误处理
 
 ### 1. 使用 ToolException
 
 ```python
 from langchain_core.tools import tool, ToolException
-# from langchain.tools import tool, ToolException
 
 @tool
 def divide(a: float, b: float) -> float:
@@ -730,7 +919,6 @@ def critical_operation(param: str) -> str:
 import asyncio
 import aiohttp
 from langchain_core.tools import tool
-# from langchain.tools import tool
 
 @tool
 async def async_web_search(query: str, limit: int = 10) -> str:
@@ -757,7 +945,6 @@ async def async_database_query(query: str) -> list:
 
 ```python
 from langchain_core.tools import BaseTool
-# from langchain.tools import tool
 from pydantic import BaseModel, Field
 from typing import Type
 
@@ -797,7 +984,7 @@ class WeatherTool(BaseTool):
 
 ```python
 import asyncio
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 @tool
 async def fetch_user_data(user_id: str) -> dict:
@@ -837,7 +1024,6 @@ agent = create_agent(
 ```python
 from langgraph.types import StreamWriter
 from langchain_core.tools import tool
-# from langchain.tools import tool
 
 @tool
 async def generate_report(topic: str, config=None) -> str:
@@ -889,7 +1075,6 @@ async for chunk in agent.astream(
 
 ```python
 from langchain_core.tools import tool
-# from langchain.tools import tool
 @tool
 async def stream_search_results(query: str, config=None) -> str:
     """流式返回搜索结果"""
@@ -1244,6 +1429,101 @@ gmail_tools = gmail_toolkit.get_tools()
 all_tools = file_tools + db_tools + gmail_tools
 agent = create_agent(model=model, tools=all_tools)
 ```
+
+---
+
+## 官方 v1.x 补充：工具执行与返回值
+
+### 1. Tool return values
+
+工具返回值会被转换成 `ToolMessage` 传回模型。返回值可以是字符串、对象，或用于更新状态的 `Command`。
+
+#### 返回字符串
+
+```python
+@tool
+def get_weather(city: str) -> str:
+    """获取城市天气。"""
+    return f"{city}: 晴，22°C"
+```
+
+#### 返回对象
+
+```python
+@tool
+def get_user(user_id: str) -> dict:
+    """获取用户信息。"""
+    return {"id": user_id, "name": "Alice", "level": "gold"}
+```
+
+对象返回值会被序列化后提供给模型。建议返回结构清晰、字段少而明确的数据；大对象应先摘要或分页。
+
+#### 返回 Command
+
+如果工具需要更新 LangGraph/Agent 状态，可以返回 `Command(update=...)`。这适合在工具执行后写入状态字段、追加消息或记录任务进度。
+
+```python
+from langgraph.types import Command
+
+@tool
+def mark_task_done(task_id: str) -> Command:
+    """标记任务完成。"""
+    return Command(update={"completed_tasks": [task_id]})
+```
+
+### 2. State injection
+
+State injection 可以让工具读取 Agent 状态，而不要求模型生成这些参数。典型用途：读取历史消息、当前用户、任务上下文、计划等。
+
+```python
+from typing import Annotated
+from langgraph.prebuilt import InjectedState
+
+@tool
+def summarize_current_state(state: Annotated[dict, InjectedState]) -> str:
+    """总结当前状态。"""
+    return f"当前有 {len(state['messages'])} 条消息"
+```
+
+### 3. Dynamic tool selection
+
+生产环境中不应总是把所有工具暴露给模型。可以根据用户权限、任务阶段、环境、成本限制动态选择工具。
+
+```python
+from langchain.agents.middleware import wrap_model_call
+
+@wrap_model_call
+def select_tools_by_role(request, handler):
+    role = request.runtime.context.get("role", "viewer")
+
+    if role == "viewer":
+        request = request.override(
+            tools=[t for t in request.tools if t.name.startswith("read_")]
+        )
+
+    return handler(request)
+```
+
+### 4. Prebuilt tools
+
+LangChain 生态提供了大量预构建工具和工具包，例如搜索、文件系统、SQL、检索、Gmail、Slack 等。使用预构建工具前应检查：
+
+- 是否需要 API key 或 OAuth
+- 是否会执行写操作或外部副作用
+- 是否需要人工审批
+- 返回内容是否可能过长
+- 是否需要限制访问目录、域名或数据库表
+
+### 5. Server-side tool use
+
+部分模型 provider 支持服务端工具，例如 web search、code execution 等。它们由 provider 在服务端执行，不同于 LangChain 本地工具。
+
+| 类型 | 优点 | 注意事项 |
+|-----|------|---------|
+| LangChain 本地工具 | 可控、可审计、可接入内部系统 | 需要自己维护执行环境 |
+| Provider 服务端工具 | 与模型深度集成、配置简单 | 可观测性、权限边界、数据合规需要额外确认 |
+
+选择建议：内部系统、敏感数据、强审计需求优先使用 LangChain 本地工具；公共搜索或 provider 原生能力可考虑服务端工具。
 
 ---
 
@@ -1745,12 +2025,23 @@ def test_tool_validation():
    - 提供清晰的错误消息
    - 在中间件中统一处理
 
-5. **支持异步操作**
+5. **工具可以访问运行时上下文**
+   - State: 短期对话状态
+   - Context: 单次调用数据、权限、租户等
+   - Store: 长期记忆
+   - StreamWriter: 工具内流式进度
+
+6. **支持多种返回值**
+   - 字符串：简单结果
+   - 对象：结构化结果
+   - Command：更新 Agent/LangGraph 状态
+
+7. **支持异步操作**
    - 使用 `async def`
    - 并行执行提高性能
    - 同时支持同步和异步
 
-6. **安全第一**
+8. **安全第一**
    - 输入验证和清理
    - 权限检查
    - 审计日志
@@ -1821,8 +2112,8 @@ async def my_tool(param1: str, param2: int, config=None) -> str:
 
 ---
 
-**文档版本**: 1.0
-**最后更新**: 2025-11-23
-**基于**: LangChain v1.0 官方文档
+**文档版本**: 1.1
+**最后更新**: 2026-06-01
+**基于**: LangChain v1.x 官方文档
 
 如有问题或建议，欢迎反馈！
