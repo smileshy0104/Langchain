@@ -1,0 +1,24 @@
+{
+  "venvPath": "/opt/homebrew/Caskroom/miniconda/base/envs",
+  "venv": "langchain-env",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Darwin",
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.ipynb_checkpoints",
+    ".conda",
+    ".git"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "pythonVersion": "3.11",
+      "extraPaths": [
+        "/opt/homebrew/Caskroom/miniconda/base/envs/langchain-env/lib/python3.11/site-packages"
+      ]
+    }
+  ]
+}

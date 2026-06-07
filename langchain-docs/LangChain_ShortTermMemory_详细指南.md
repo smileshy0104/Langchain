@@ -1,6 +1,6 @@
 # LangChain Short-term Memory 详细指南
 
-> 基于官方文档 https://docs.langchain.com/oss/python/langchain/short-term-memory 的完整中文总结
+> 基于官方文档 https://docs.langchain.com/oss/python/langchain/short-term-memory 的完整中文总结（在原有内容基础上补充当前 v1.x 文档中的生产持久化、自定义 AgentState、工具/Prompt/模型前后访问短期记忆等内容）
 
 ---
 
@@ -9,12 +9,14 @@
 - [核心概念](#核心概念)
 - [为什么需要短期记忆](#为什么需要短期记忆)
 - [短期记忆的实现方式](#短期记忆的实现方式)
+- [生产环境持久化](#生产环境持久化)
 - [常见的记忆管理模式](#常见的记忆管理模式)
 - [消息修剪 (Trim Messages)](#消息修剪-trim-messages)
 - [消息删除 (Delete Messages)](#消息删除-delete-messages)
 - [消息总结 (Summarize Messages)](#消息总结-summarize-messages)
 - [自定义 Agent 记忆](#自定义-agent-记忆)
 - [Checkpointer 的使用](#checkpointer-的使用)
+- [访问短期记忆](#访问短期记忆)
 - [最佳实践](#最佳实践)
 - [性能优化](#性能优化)
 
@@ -24,7 +26,7 @@
 
 ### 什么是短期记忆 (Short-term Memory)？
 
-**短期记忆**是一种让应用程序在单个线程或对话中记住之前交互的系统。它是 AI Agent 记忆系统的重要组成部分，使 Agent 能够：
+**短期记忆**是一种让应用程序在单个线程（thread）或对话中记住之前交互的系统。它本质上是 Agent 的 **Graph State**，由 checkpointer 在每一步保存和恢复。它是 AI Agent 记忆系统的重要组成部分，使 Agent 能够：
 
 - 📝 记住之前的对话内容
 - 🔄 从用户反馈中学习
@@ -44,23 +46,23 @@
 
 ### 线程 (Thread) 的概念
 
-**Thread（线程）** 组织单个会话中的多个交互，类似于电子邮件中的对话线程。
+**Thread（线程）** 组织单个会话中的多个交互，类似于电子邮件中的对话线程。调用 Agent 时，`thread_id` 决定读取和写入哪一份短期记忆；相同 `thread_id` 会恢复历史状态，不同 `thread_id` 彼此隔离。
 
 ```python
 from langchain.agents import create_agent
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
-agent = create_agent(model="gpt-5.0", tools=[], checkpointer=checkpointer)
+checkpointer = InMemorySaver()
+agent = create_agent(model="gpt-5.4", tools=[], checkpointer=checkpointer)
 
 # 同一线程的多次交互
 config = {"configurable": {"thread_id": "conversation_1"}}
 
 # 第一轮对话
-agent.invoke({"messages": "你好，我叫 Alice"}, config)
+agent.invoke({"messages": [{"role": "user", "content": "你好，我叫 Alice"}]}, config)
 
 # 第二轮对话 - Agent 记住之前的对话
-agent.invoke({"messages": "我叫什么名字?"}, config)
+agent.invoke({"messages": [{"role": "user", "content": "我叫什么名字?"}]}, config)
 # 输出: "你叫 Alice"
 ```
 
@@ -72,9 +74,9 @@ agent.invoke({"messages": "我叫什么名字?"}, config)
 
 大多数 LLM 都有最大上下文窗口限制：
 
-- **gpt-5.0**: 400K tokens
-- **Claude 4.5 Sonnet**: 200K tokens  
-- **Gemini 3.0 Pro**: 1M tokens
+- **gpt-5.4**: 400K tokens
+- **Claude 4.6 Sonnet**: 200K tokens  
+- **Gemini 3.5 Pro**: 1M tokens
 
 长对话可能超出这些限制，导致：
 - ❌ 上下文丢失或错误
@@ -176,15 +178,15 @@ print(result["messages"])
 使用 **Checkpointer** 在多次调用之间保持状态：
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents import create_agent
 
 # 创建内存保存器
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 # 创建 Agent
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     checkpointer=checkpointer
 )
@@ -193,12 +195,67 @@ agent = create_agent(
 config = {"configurable": {"thread_id": "1"}}
 
 # 第一次调用
-agent.invoke({"messages": "我喜欢 Python"}, config)
+agent.invoke({"messages": [{"role": "user", "content": "我喜欢 Python"}]}, config)
 
 # 第二次调用 - 会记住之前的对话
-agent.invoke({"messages": "我喜欢什么?"}, config)
+agent.invoke({"messages": [{"role": "user", "content": "我喜欢什么?"}]}, config)
 # 输出: "你喜欢 Python"
 ```
+
+---
+
+## 生产环境持久化
+
+官方文档强调：短期记忆要跨请求生效，必须配置 checkpointer。开发环境可以使用内存 checkpointer；生产环境应使用持久化 checkpointer，例如 Postgres。
+
+### 开发环境：InMemorySaver
+
+```python
+from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[],
+    checkpointer=InMemorySaver(),
+)
+
+config = {"configurable": {"thread_id": "thread-1"}}
+agent.invoke({"messages": [{"role": "user", "content": "我叫 Alice"}]}, config)
+agent.invoke({"messages": [{"role": "user", "content": "我叫什么？"}]}, config)
+```
+
+`InMemorySaver` 适合本地开发和测试，进程结束后数据会丢失。
+
+### 生产环境：PostgresSaver
+
+```python
+from langchain.agents import create_agent
+from langgraph.checkpoint.postgres import PostgresSaver
+
+DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
+
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    # 首次使用时创建表结构；生产中建议通过迁移脚本管理
+    checkpointer.setup()
+
+    agent = create_agent(
+        model="anthropic:claude-sonnet-4-6",
+        tools=[],
+        checkpointer=checkpointer,
+    )
+
+    config = {"configurable": {"thread_id": "user-123-session-1"}}
+    agent.invoke({"messages": [{"role": "user", "content": "你好"}]}, config)
+```
+
+生产建议：
+
+- 使用稳定且可追踪的 `thread_id`
+- 将 `thread_id` 与用户、租户、会话关联
+- 定期清理过期 thread
+- 使用 LangSmith 追踪消息状态变化
+- 对 checkpointer 数据库做备份和访问控制
 
 ---
 
@@ -316,7 +373,7 @@ def trim_messages(state: AgentState, runtime: Runtime) -> dict | None:
     }
 
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     middleware=[trim_messages],
     checkpointer=InMemorySaver(),
@@ -327,7 +384,7 @@ config = {"configurable": {"thread_id": "1"}}
 agent.invoke({"messages": "你好，我叫 Bob"}, config)
 agent.invoke({"messages": "写一首关于猫的诗"}, config)
 agent.invoke({"messages": "现在写一首关于狗的诗"}, config)
-result = agent.invoke({"messages": "我叫什么名字?"}, config)
+result = agent.invoke({"messages": [{"role": "user", "content": "我叫什么名字?"}]}, config)
 
 result["messages"][-1].pretty_print()
 # 输出: "你叫 Bob。你之前告诉过我。"
@@ -339,9 +396,9 @@ result["messages"][-1].pretty_print()
 from langchain_core.messages import trim_messages
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, START, MessagesState
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
+model = ChatAnthropic(model="claude-sonnet-4-6")
 
 def call_model(state: MessagesState):
     # 在调用模型前修剪消息
@@ -356,7 +413,7 @@ def call_model(state: MessagesState):
     response = model.invoke(trimmed)
     return {"messages": [response]}
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 builder = StateGraph(MessagesState)
 builder.add_node("call_model", call_model)
 builder.add_edge(START, "call_model")
@@ -422,7 +479,7 @@ def delete_old_messages(state: AgentState, runtime: Runtime) -> dict | None:
     return None
 
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     middleware=[delete_old_messages],
     checkpointer=InMemorySaver(),
@@ -431,8 +488,8 @@ agent = create_agent(
 config = {"configurable": {"thread_id": "1"}}
 
 agent.invoke({"messages": "你好，我叫 Bob"}, config)
-agent.invoke({"messages": "我喜欢 Python"}, config)
-agent.invoke({"messages": "我叫什么名字?"}, config)
+agent.invoke({"messages": [{"role": "user", "content": "我喜欢 Python"}]}, config)
+agent.invoke({"messages": [{"role": "user", "content": "我叫什么名字?"}]}, config)
 ```
 
 #### 删除所有消息
@@ -452,9 +509,9 @@ def clear_conversation(state):
 from langchain.messages import RemoveMessage
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, START, MessagesState
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-4-6")
 
 def delete_messages(state: MessagesState):
     messages = state["messages"]
@@ -467,7 +524,7 @@ def call_model(state: MessagesState):
     response = model.invoke(state["messages"])
     return {"messages": [response]}
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 builder = StateGraph(MessagesState)
 builder.add_node("call_model", call_model)
 builder.add_node("delete_messages", delete_messages)
@@ -527,11 +584,11 @@ from langgraph.checkpoint.memory import InMemorySaver
 checkpointer = InMemorySaver()
 
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-5.0-mini",              # 用于总结的模型
+            model="gpt-5.4-mini",              # 用于总结的模型
             max_tokens_before_summary=4000,   # 触发总结的阈值
             messages_to_keep=20,              # 总结后保留的消息数
         )
@@ -544,7 +601,7 @@ config = {"configurable": {"thread_id": "1"}}
 agent.invoke({"messages": "你好，我叫 Bob"}, config)
 agent.invoke({"messages": "写一首关于猫的诗"}, config)
 agent.invoke({"messages": "现在写一首关于狗的诗"}, config)
-result = agent.invoke({"messages": "我叫什么名字?"}, config)
+result = agent.invoke({"messages": [{"role": "user", "content": "我叫什么名字?"}]}, config)
 
 result["messages"][-1].pretty_print()
 # 输出: "你叫 Bob！"
@@ -554,7 +611,7 @@ result["messages"][-1].pretty_print()
 
 ```python
 SummarizationMiddleware(
-    model="gpt-5.0-mini",              # 总结模型
+    model="gpt-5.4-mini",              # 总结模型
     max_tokens_before_summary=4000,   # Token 阈值
     messages_to_keep=20,              # 保留的最近消息数
     token_counter=None,               # 自定义 token 计数器
@@ -570,7 +627,7 @@ from langchain.messages import AnyMessage, SystemMessage, HumanMessage, RemoveMe
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import InMemorySaver
 
-model = init_chat_model("claude-3-5-sonnet-20241022")
+model = init_chat_model("claude-sonnet-4-6")
 
 # 扩展状态以包含总结
 class State(MessagesState):
@@ -648,7 +705,7 @@ from langmem.short_term import SummarizationNode, RunningSummary
 from langchain_core.messages.utils import count_tokens_approximately
 from typing import TypedDict
 
-model = init_chat_model("claude-3-5-sonnet-20241022")
+model = init_chat_model("claude-sonnet-4-6")
 summarization_model = model.bind(max_tokens=128)
 
 class State(MessagesState):
@@ -707,74 +764,72 @@ class CustomState(AgentState):
     preferences: dict[str, str]
 
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     state_schema=CustomState,
 )
 
 # 使用自定义状态
 result = agent.invoke({
-    "messages": "你好",
+    "messages": [{"role": "user", "content": "你好"}],
     "user_id": "user_123",
     "preferences": {"theme": "dark"}
 })
 ```
 
-#### 方法 2: 使用 Middleware (推荐)
+#### 方法 2: 通过 Middleware 扩展状态
+
+如果自定义状态和某个中间件强相关，可以在中间件中声明或维护对应状态字段。这样状态扩展逻辑与业务逻辑更内聚。
 
 ```python
-from langchain.agents import create_agent, create_middleware
-from langgraph.checkpoint.memory import MemorySaver
-import z from "zod"
+from langchain.agents import AgentState, create_agent
+from langchain.agents.middleware import before_model
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.runtime import Runtime
 
-# 定义自定义状态 schema
-custom_state_schema = {
-    "user_id": str,
-    "preferences": dict[str, Any],
-}
+class CustomState(AgentState):
+    user_id: str
+    preferences: dict[str, str]
 
-# 创建状态扩展中间件
-state_extension_middleware = create_middleware(
-    name="StateExtension",
-    state_schema=custom_state_schema,
-)
+@before_model
+def ensure_preferences(state: CustomState, runtime: Runtime) -> dict | None:
+    """确保状态中总有 preferences 字段。"""
+    if "preferences" not in state:
+        return {"preferences": {}}
+    return None
 
-checkpointer = MemorySaver()
 agent = create_agent(
-    model="gpt-5.0",
+    model="anthropic:claude-sonnet-4-6",
     tools=[],
-    middleware=[state_extension_middleware],
-    checkpointer=checkpointer,
+    state_schema=CustomState,
+    middleware=[ensure_preferences],
+    checkpointer=InMemorySaver(),
 )
-
-# 调用时传递自定义状态
-result = agent.invoke({
-    "messages": [{"role": "user", "content": "你好"}],
-    "user_id": "user_123",
-    "preferences": {"theme": "dark"},
-})
 ```
+
+> 当前 Python 文档中最直接、最稳定的自定义短期记忆方式仍是扩展 `AgentState` 并通过 `state_schema` 传给 `create_agent`。
 
 ### 在工具中访问自定义状态
 
 ```python
+from typing import Annotated
 from langchain_core.tools import tool
-from langchain.tools import ToolRuntime
+from langgraph.prebuilt import InjectedState
 
 @tool
 def get_user_preference(
     preference_name: str,
-    runtime: ToolRuntime
+    state: Annotated[CustomState, InjectedState],
 ) -> str:
     """获取用户偏好设置"""
-    preferences = runtime.state.get("preferences", {})
+    preferences = state.get("preferences", {})
     return preferences.get(preference_name, "未设置")
 
 agent = create_agent(
-    model="gpt-5.0",
+    model="anthropic:claude-sonnet-4-6",
     tools=[get_user_preference],
-    middleware=[state_extension_middleware],
-    checkpointer=checkpointer,
+    state_schema=CustomState,
+    checkpointer=InMemorySaver(),
 )
 ```
 
@@ -791,9 +846,9 @@ agent = create_agent(
 用于开发和测试，数据存储在内存中：
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 ```
 
 **特点**:
@@ -837,12 +892,12 @@ checkpointer = PostgresSaver.from_conn_string(
 
 ```python
 from langchain.agents import create_agent
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     checkpointer=checkpointer
 )
@@ -877,17 +932,108 @@ for snapshot in history:
 
 ---
 
+## 访问短期记忆
+
+官方文档把“访问短期记忆”分为几类常见位置：工具中、Prompt 中、模型调用前、模型调用后。
+
+### 1. 在工具中读取短期记忆
+
+工具可以读取当前 Agent state，例如消息历史或自定义字段。这样工具无需让模型显式传入用户 ID、偏好等内部状态。
+
+```python
+from typing import Annotated
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+
+@tool
+def get_user_name(state: Annotated[dict, InjectedState]) -> str:
+    """从短期状态中读取用户姓名。"""
+    return state.get("user_name", "未知用户")
+```
+
+### 2. 在工具中写入短期记忆
+
+工具可以返回 `Command(update=...)` 来更新 state，同时追加 `ToolMessage` 告诉模型工具执行结果。
+
+```python
+from typing import Annotated
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedToolCallId
+from langgraph.types import Command
+
+@tool
+def remember_user_name(
+    name: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """记住用户姓名。"""
+    return Command(update={
+        "user_name": name,
+        "messages": [ToolMessage(
+            content=f"已记住用户姓名：{name}",
+            tool_call_id=tool_call_id,
+        )],
+    })
+```
+
+### 3. 在 Prompt 中使用短期记忆
+
+可以通过动态 prompt 或 `before_model` 中间件，把 state 中的摘要、用户偏好、任务状态注入到模型上下文中。
+
+```python
+from langchain.agents.middleware import dynamic_prompt, ModelRequest
+
+@dynamic_prompt
+def prompt_with_memory(request: ModelRequest) -> str:
+    user_name = request.state.get("user_name", "用户")
+    return f"你是一个有帮助的助手。当前用户是 {user_name}。"
+```
+
+### 4. 在模型调用前读取/修改记忆
+
+`before_model` 适合做消息修剪、注入系统消息、加载摘要、检查状态完整性等。
+
+```python
+from langchain.agents.middleware import before_model
+
+@before_model
+def add_memory_hint(state, runtime):
+    if state.get("summary"):
+        return {
+            "messages": [
+                {"role": "system", "content": f"历史摘要：{state['summary']}"},
+                *state["messages"],
+            ]
+        }
+    return None
+```
+
+### 5. 在模型调用后更新记忆
+
+`after_model` 适合做审计、删除敏感消息、更新统计信息、触发总结等。
+
+```python
+from langchain.agents.middleware import after_model
+
+@after_model
+def count_turns(state, runtime):
+    return {"turn_count": state.get("turn_count", 0) + 1}
+```
+
+---
+
 ## 最佳实践
 
 ### 1. 选择合适的记忆管理策略
 
 ```python
 # 短对话 (< 10 轮) - 不需要特殊处理
-agent = create_agent(model="gpt-5.0", tools=[], checkpointer=checkpointer)
+agent = create_agent(model="gpt-5.4", tools=[], checkpointer=checkpointer)
 
 # 中等对话 (10-50 轮) - 使用消息修剪
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     middleware=[trim_messages_middleware],
     checkpointer=checkpointer,
@@ -895,11 +1041,11 @@ agent = create_agent(
 
 # 长对话 (> 50 轮) - 使用消息总结
 agent = create_agent(
-    model="gpt-5.0",
+    model="gpt-5.4",
     tools=[],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-5.0-mini",
+            model="gpt-5.4-mini",
             max_tokens_before_summary=4000,
             messages_to_keep=20,
         )
@@ -934,7 +1080,7 @@ def trim_messages(state: AgentState, runtime: Runtime):
 from langchain_core.messages import trim_messages
 from langchain_anthropic import ChatAnthropic
 
-model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
+model = ChatAnthropic(model="claude-sonnet-4-6")
 
 # ✅ 使用模型的 token 计数器
 trimmed = trim_messages(
@@ -1022,19 +1168,19 @@ from langchain.agents import create_agent
 @pytest.fixture
 def agent_with_trim():
     return create_agent(
-        model="gpt-5.0",
+        model="gpt-5.4",
         tools=[],
         middleware=[trim_middleware],
-        checkpointer=MemorySaver(),
+        checkpointer=InMemorySaver(),
     )
 
 @pytest.fixture
 def agent_with_summary():
     return create_agent(
-        model="gpt-5.0",
+        model="gpt-5.4",
         tools=[],
         middleware=[SummarizationMiddleware(...)],
-        checkpointer=MemorySaver(),
+        checkpointer=InMemorySaver(),
     )
 
 def test_long_conversation_trim(agent_with_trim):
@@ -1062,13 +1208,13 @@ def test_long_conversation_summary(agent_with_summary):
 ```python
 # ✅ 好的做法
 SummarizationMiddleware(
-    model="gpt-5.0-mini",  # 快速、便宜的模型
+    model="gpt-5.4-mini",  # 快速、便宜的模型
     max_tokens_before_summary=4000,
 )
 
 # ❌ 避免
 SummarizationMiddleware(
-    model="gpt-5.0",  # 慢、贵
+    model="gpt-5.4",  # 慢、贵
     max_tokens_before_summary=4000,
 )
 ```
@@ -1162,9 +1308,9 @@ def monitor_token_usage(state: AgentState):
 
 ```python
 # 1. 启用基本记忆
-from langgraph.checkpoint.memory import MemorySaver
-checkpointer = MemorySaver()
-agent = create_agent(model="gpt-5.0", tools=[], checkpointer=checkpointer)
+from langgraph.checkpoint.memory import InMemorySaver
+checkpointer = InMemorySaver()
+agent = create_agent(model="gpt-5.4", tools=[], checkpointer=checkpointer)
 
 # 2. 修剪消息
 from langchain.agents.middleware import before_model
@@ -1175,7 +1321,7 @@ def trim(state, runtime):
 
 # 3. 总结消息
 from langchain.agents.middleware import SummarizationMiddleware
-middleware = [SummarizationMiddleware(model="gpt-5.0-mini", max_tokens_before_summary=4000)]
+middleware = [SummarizationMiddleware(model="gpt-5.4-mini", max_tokens_before_summary=4000)]
 
 # 4. 删除消息
 from langchain.messages import RemoveMessage
@@ -1198,8 +1344,8 @@ history = list(graph.get_state_history(config))
 
 ---
 
-**文档版本**: 1.0  
-**最后更新**: 2025年1月  
-**基于**: LangChain v0.3+, Python 3.9+
+**文档版本**: 1.1  
+**最后更新**: 2026-06-01  
+**基于**: LangChain v1.x 官方文档, Python 3.9+
 
 本文档涵盖了 LangChain Short-term Memory 的核心概念、实现方式、管理策略和最佳实践，包含 60+ 实用代码示例。
