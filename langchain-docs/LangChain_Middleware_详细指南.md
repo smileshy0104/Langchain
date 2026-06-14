@@ -1,5 +1,9 @@
 # LangChain Middleware 详细指南
 
+> 基于官方文档 https://docs.langchain.com/oss/python/langchain/middleware/built-in 的完整中文总结（在原有内容基础上补充当前 v1.x 文档中的全部预置 Middleware 列表，包括 ModelCallLimit、ToolCallLimit、ModelFallback、TodoList、LLMToolSelector、ToolRetry、ModelRetry、LLMToolEmulator、ShellTool、FilesystemFileSearch、FilesystemMiddleware、SubAgentMiddleware 等，并对齐新版 trigger/keep 配置）
+
+---
+
 ## 目录
 
 1. [概述](#概述)
@@ -10,6 +14,8 @@
 6. [装饰器式 Middleware](#装饰器式-middleware)
 7. [类式 Middleware](#类式-middleware)
 8. [预置 Middleware](#预置-middleware)
+8.1. [v1.x 官方预置中间件全景](#v1x-官方预置中间件全景)
+8.2. [Provider 专属中间件](#provider-专属中间件)
 9. [自定义 Middleware 实战](#自定义-middleware-实战)
 10. [自定义状态管理](#自定义状态管理)
 11. [Runtime 访问](#runtime-访问)
@@ -613,9 +619,9 @@ agent = create_agent(
     tools=[],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-4o-mini",              # 用于总结的模型
-            max_tokens_before_summary=4000,   # 触发总结的阈值
-            messages_to_keep=20,              # 总结后保留的消息数
+            model="gpt-5.4-mini",
+            trigger=("tokens", 4000),         # v1.x 推荐：trigger 三元组
+            keep=("messages", 20),            # v1.x 推荐：keep 三元组
             summary_prompt="自定义总结提示词...",  # 可选
         )
     ]
@@ -640,9 +646,9 @@ agent = create_agent(
     tools=[],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-4o-mini",
-            max_tokens_before_summary=4000,
-            messages_to_keep=20,
+            model="gpt-5.4-mini",
+            trigger=("tokens", 4000),
+            keep=("messages", 20),
         )
     ],
     checkpointer=checkpointer,
@@ -742,6 +748,355 @@ agent = create_agent(
     ]
 )
 ```
+
+### 5. ModelCallLimitMiddleware - 模型调用次数限制
+
+限制 Agent 在单次调用或同一 thread 中触发模型的次数，防止失控循环或控制成本。
+
+```python
+from langchain.agents import create_agent
+from langchain.agents.middleware import ModelCallLimitMiddleware
+from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[],
+    checkpointer=InMemorySaver(),  # 使用 thread_limit 时必需
+    middleware=[
+        ModelCallLimitMiddleware(
+            thread_limit=10,    # 整个 thread 中最多 10 次模型调用
+            run_limit=5,        # 单次 invoke 最多 5 次模型调用
+            exit_behavior="end",  # "end" 优雅终止 / "error" 抛异常
+        ),
+    ],
+)
+```
+
+### 6. ToolCallLimitMiddleware - 工具调用次数限制
+
+可以做全局工具调用限流，也可以针对单个工具限流。同一 thread 内的限额需要 checkpointer 支持。
+
+```python
+from langchain.agents import create_agent
+from langchain.agents.middleware import ToolCallLimitMiddleware
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[search_tool, database_tool],
+    middleware=[
+        ToolCallLimitMiddleware(thread_limit=20, run_limit=10),                    # 全局
+        ToolCallLimitMiddleware(tool_name="search", thread_limit=5, run_limit=3),  # 单工具
+    ],
+)
+```
+
+`exit_behavior` 选项：
+
+- `"continue"`（默认）：被限流的工具调用返回错误消息，模型自行决定如何收尾
+- `"error"`：抛出 `ToolCallLimitExceededError`
+- `"end"`：仅在限制单一工具时可用，立即终止并写入 ToolMessage + AI message
+
+### 7. ModelFallbackMiddleware - 模型回退
+
+主模型失败时按顺序尝试备用模型，常用于多 provider 容灾或成本优化。
+
+```python
+from langchain.agents.middleware import ModelFallbackMiddleware
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[],
+    middleware=[
+        ModelFallbackMiddleware(
+            "gpt-5.4-mini",
+            "anthropic:claude-sonnet-4-6",
+        ),
+    ],
+)
+```
+
+### 8. TodoListMiddleware - 任务清单
+
+为 Agent 注入 `write_todos` 工具与配套提示词，适合多步骤、跨工具协作的复杂任务。
+
+```python
+from langchain.agents.middleware import TodoListMiddleware
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[read_file, write_file, run_tests],
+    middleware=[TodoListMiddleware()],
+)
+```
+
+可选参数：`system_prompt`（自定义任务规划提示词）、`tool_description`（自定义 `write_todos` 描述）。
+
+### 9. LLMToolSelectorMiddleware - 智能工具筛选
+
+当 Agent 工具数量很多（10+）时，可以让一个轻量模型先筛选出与本次请求相关的工具，再交给主模型，减少上下文消耗。
+
+```python
+from langchain.agents.middleware import LLMToolSelectorMiddleware
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[tool1, tool2, tool3, tool4, tool5],
+    middleware=[
+        LLMToolSelectorMiddleware(
+            model="gpt-5.4-mini",
+            max_tools=3,
+            always_include=["search"],   # 始终保留的工具
+        ),
+    ],
+)
+```
+
+### 10. ToolRetryMiddleware - 工具调用重试
+
+为工具调用提供指数退避重试。
+
+```python
+from langchain.agents.middleware import ToolRetryMiddleware
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[search_tool, database_tool],
+    middleware=[
+        ToolRetryMiddleware(
+            max_retries=3,
+            backoff_factor=2.0,
+            initial_delay=1.0,
+            max_delay=60.0,
+            jitter=True,                          # ±25% 抖动
+            tools=["api_tool"],                   # 仅作用于指定工具
+            retry_on=(ConnectionError, TimeoutError),
+            on_failure="return_message",          # 或 "raise" / 自定义函数
+        ),
+    ],
+)
+```
+
+### 11. ModelRetryMiddleware - 模型调用重试
+
+与工具重试类似，但作用于模型调用本身。`on_failure` 默认为 `"continue"`，会返回带错误信息的 `AIMessage`，让 Agent 仍有机会优雅处理。
+
+```python
+from langchain.agents.middleware import ModelRetryMiddleware
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[search_tool],
+    middleware=[
+        ModelRetryMiddleware(
+            max_retries=3,
+            backoff_factor=2.0,
+            initial_delay=1.0,
+            on_failure="continue",  # "continue" / "error" / 自定义函数
+        ),
+    ],
+)
+```
+
+### 12. LLMToolEmulator - 工具仿真
+
+测试场景下，用 LLM 生成工具的“模拟”返回值，避免真实调用外部系统。
+
+```python
+from langchain.agents.middleware import LLMToolEmulator
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[get_weather, search_database, send_email],
+    middleware=[
+        LLMToolEmulator(),                       # 默认仿真所有工具
+        # LLMToolEmulator(tools=["get_weather"]),  # 仿真指定工具
+        # LLMToolEmulator(model="claude-sonnet-4-6"),  # 自定义仿真模型
+    ],
+)
+```
+
+### 13. ContextEditingMiddleware（v1.x 推荐配置）
+
+当前文档中 `ContextEditingMiddleware` 默认搭配 `ClearToolUsesEdit`，并暴露 `clear_at_least`、`exclude_tools`、`placeholder` 等参数：
+
+```python
+from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[search_tool, calculator_tool, database_tool],
+    middleware=[
+        ContextEditingMiddleware(
+            edits=[
+                ClearToolUsesEdit(
+                    trigger=100_000,         # token 阈值
+                    keep=3,                  # 至少保留最近 3 条工具结果
+                    clear_at_least=0,        # 至少清理多少 tokens
+                    clear_tool_inputs=False, # 是否同时清理 AI 消息中的工具入参
+                    exclude_tools=[],        # 不参与清理的工具名
+                    placeholder="[cleared]", # 替换占位符
+                ),
+            ],
+            token_count_method="approximate",  # "approximate" 或 "model"
+        ),
+    ],
+)
+```
+
+### 14. ShellToolMiddleware - 持久化 Shell
+
+为 Agent 提供一个持久 Shell 会话，用于命令执行、自动化、文件操作等。
+
+```python
+from langchain.agents.middleware import (
+    ShellToolMiddleware,
+    HostExecutionPolicy,
+    DockerExecutionPolicy,
+    RedactionRule,
+)
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[],
+    middleware=[
+        ShellToolMiddleware(
+            workspace_root="/workspace",
+            startup_commands=["pip install requests"],
+            execution_policy=HostExecutionPolicy(),      # 默认：宿主机执行
+            # execution_policy=DockerExecutionPolicy(image="python:3.11-slim"),
+            redaction_rules=[
+                RedactionRule(pii_type="api_key", detector=r"sk-[a-zA-Z0-9]{32}"),
+            ],
+        ),
+    ],
+)
+```
+
+> ⚠️ Shell 工具默认拥有较强权限，生产环境建议使用 `DockerExecutionPolicy` 或 `CodexSandboxExecutionPolicy` 做隔离。`redaction_rules` 是事后脱敏，无法防止机密外泄到主机。
+
+### 15. FilesystemFileSearchMiddleware - 文件搜索
+
+提供 `glob_search` 和 `grep_search` 两个工具，常用于代码探索、知识库检索等。
+
+```python
+from langchain.agents.middleware import FilesystemFileSearchMiddleware
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[],
+    middleware=[
+        FilesystemFileSearchMiddleware(
+            root_path="/workspace",
+            use_ripgrep=True,
+            max_file_size_mb=10,
+        ),
+    ],
+)
+```
+
+### 16. FilesystemMiddleware（Deep Agents）
+
+`deepagents` 提供的文件系统中间件，给 Agent 暴露 `ls / read_file / write_file / edit_file` 工具，并支持短期/长期存储路由。
+
+```python
+from deepagents.middleware import FilesystemMiddleware
+from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
+from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore()
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    store=store,
+    middleware=[
+        FilesystemMiddleware(
+            backend=CompositeBackend(
+                default=StateBackend(),
+                routes={"/memories/": StoreBackend()},  # /memories/ 进入长期 Store
+            ),
+            custom_tool_descriptions={
+                "ls": "Use the ls tool when...",
+                "read_file": "Use the read_file tool to...",
+            },
+        ),
+    ],
+)
+```
+
+### 17. SubAgentMiddleware（Deep Agents）
+
+把任务委派给子 Agent，并通过 `task` 工具调用。子 Agent 可以指定独立的 model、tools、system_prompt、middleware；也可以传入预编译好的 `CompiledSubAgent`。
+
+```python
+from deepagents.middleware.subagents import SubAgentMiddleware
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    middleware=[
+        SubAgentMiddleware(
+            default_model="anthropic:claude-sonnet-4-6",
+            default_tools=[],
+            subagents=[
+                {
+                    "name": "weather",
+                    "description": "This subagent can get weather in cities.",
+                    "system_prompt": "Use the get_weather tool to get the weather in a city.",
+                    "tools": [get_weather],
+                    "model": "gpt-5.4",
+                    "middleware": [],
+                }
+            ],
+        )
+    ],
+)
+```
+
+> 主 Agent 默认还能使用一个 `general-purpose` 子 Agent（与主 Agent 拥有相同 tools / instructions），用于把高耗 token 的中间步骤隔离到独立上下文中。
+
+---
+
+## v1.x 官方预置中间件全景
+
+下表对齐当前官方文档中所有 provider-agnostic 预置中间件，便于按用途快速选型。
+
+| 中间件 | 用途 | 关键参数 |
+|--------|------|----------|
+| `SummarizationMiddleware` | 上下文超限时自动摘要 | `model`、`trigger`、`keep`、`token_counter`、`summary_prompt` |
+| `HumanInTheLoopMiddleware` | 高风险工具调用前人工审批 | `interrupt_on={tool: {allowed_decisions}}` |
+| `ModelCallLimitMiddleware` | 模型调用次数限制 | `thread_limit`、`run_limit`、`exit_behavior` |
+| `ToolCallLimitMiddleware` | 工具调用次数限制 | `tool_name`、`thread_limit`、`run_limit`、`exit_behavior` |
+| `ModelFallbackMiddleware` | 模型失败时切换备用模型 | 任意数量备用模型标识符或实例 |
+| `PIIMiddleware` | PII 检测与处理 | `pii_type`、`strategy`、`detector`、`apply_to_*` |
+| `TodoListMiddleware` | 注入 `write_todos` 工具 | `system_prompt`、`tool_description` |
+| `LLMToolSelectorMiddleware` | LLM 预筛选可用工具 | `model`、`max_tools`、`always_include` |
+| `ToolRetryMiddleware` | 工具重试 | `max_retries`、`tools`、`retry_on`、`on_failure`、退避参数 |
+| `ModelRetryMiddleware` | 模型重试 | `max_retries`、`retry_on`、`on_failure`、退避参数 |
+| `LLMToolEmulator` | 用 LLM 仿真工具响应 | `tools`、`model` |
+| `ContextEditingMiddleware` | 清理旧工具输出释放上下文 | `edits`、`token_count_method` |
+| `ShellToolMiddleware` | 提供持久化 Shell | `workspace_root`、`execution_policy`、`redaction_rules` |
+| `FilesystemFileSearchMiddleware` | Glob/Grep 文件搜索 | `root_path`、`use_ripgrep`、`max_file_size_mb` |
+| `FilesystemMiddleware`（deepagents） | 短期/长期文件系统 | `backend`、`system_prompt`、`custom_tool_descriptions` |
+| `SubAgentMiddleware`（deepagents） | 子 Agent 委派 | `default_model`、`default_tools`、`subagents` |
+
+补充说明：
+
+- 大部分中间件可以与 `checkpointer` 协同工作；`HumanInTheLoopMiddleware`、`ModelCallLimitMiddleware(thread_limit=...)` 和 `ToolCallLimitMiddleware(thread_limit=...)` 必须配合 checkpointer。
+- `SummarizationMiddleware` 仅做文本上下文压缩，不会压缩图片/音频/视频负载；图像密集场景建议把媒体放到外部存储，消息中只传 URL 或 ID。
+- `PIIMiddleware(apply_to_output=True)` 在 `langchain>=1.3.2` 起也会通过流式 transformer 对 wire-output 做脱敏（文本增量、工具调用参数、工具输出、状态快照）。
+
+---
+
+## Provider 专属中间件
+
+某些中间件针对特定 provider 做了优化，需要查看对应集成文档：
+
+| Provider | 关键能力 |
+|----------|----------|
+| Anthropic | Prompt caching、bash 工具、文本编辑器、memory、文件搜索等 Claude 专属能力 |
+| AWS Bedrock | Prompt caching |
+| OpenAI | 内容审查（content moderation） |
+
+> Provider 专属中间件的字段、限制和能力可能随集成版本变化，使用前应查阅 `oss/python/integrations/middleware/<provider>` 对应文档。
 
 ---
 
@@ -1181,9 +1536,9 @@ agent = create_agent(
         
         # 对话总结
         SummarizationMiddleware(
-            model="gpt-4o-mini",
-            max_tokens_before_summary=3000,
-            messages_to_keep=15
+            model="gpt-5.4-mini",
+            trigger=("tokens", 3000),
+            keep=("messages", 15),
         ),
         
         # 敏感操作需要人工审核
@@ -1735,12 +2090,12 @@ def handle_errors(request, handler):
 ### 预置 Middleware 配置
 
 ```python
-# 总结
+# 总结（v1.x 推荐 trigger/keep 用法）
 SummarizationMiddleware(
-    model="gpt-4o-mini",
-    max_tokens_before_summary=4000,
-    messages_to_keep=20,
-    summary_prompt="可选自定义提示词"
+    model="gpt-5.4-mini",
+    trigger=("tokens", 4000),         # 也支持 "fraction"、"messages"，或列表/字典组合
+    keep=("messages", 20),            # 也支持 "tokens"、"fraction"
+    summary_prompt="可选自定义提示词",
 )
 
 # PII 保护
@@ -1790,3 +2145,22 @@ LangChain Middleware 提供了强大而灵活的 Agent 行为控制能力：
 - 自定义状态扩展 Agent 能力
 
 通过合理使用 Middleware，你可以构建高度定制化、可维护、安全的 LLM Agent 应用！
+
+---
+
+## 相关资源
+
+- 官方 Middleware 文档：<https://docs.langchain.com/oss/python/langchain/middleware>
+- 官方预置 Middleware 文档：<https://docs.langchain.com/oss/python/langchain/middleware/built-in>
+- 配套文档：
+  - [LangChain Agents 详细总结](./LangChain_Agents_详细总结.md)
+  - [LangChain Models 详细指南](./LangChain_Models_详细指南.md)
+  - [LangChain Tools 详细指南](./LangChain_Tools_详细指南.md)
+  - [LangChain Streaming 详细指南](./LangChain_Streaming_详细指南.md)
+  - [LangChain ShortTermMemory 详细指南](./LangChain_ShortTermMemory_详细指南.md)
+
+---
+
+**文档版本**: 1.1  
+**最后更新**: 2026-06-01  
+**基于**: LangChain v1.x 官方文档
