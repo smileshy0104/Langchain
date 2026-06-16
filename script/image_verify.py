@@ -13,11 +13,11 @@ from typing import Optional
 
 import aiohttp
 
-BASE_URL = os.getenv("IMAGE_BASE_URL", "https://ai-api-us.kkidc.com/v1")
-API_KEY = os.getenv("IMAGE_API_KEY", "sk-c7bdHEUPJMrGOhNkZL2OgoOfkgzBMJEiKdjKr7WeCEvQT5gl-107")
+BASE_URL = os.getenv("IMAGE_BASE_URL", "https://ai-api.kkidc.com/v1")
+API_KEY = os.getenv("IMAGE_API_KEY", "sk-c7bdHEUPJMrGOhNkZL2OgoOfkgzBMJEiKdjKr7WeCEvQT5gl-185")
 OUTPUT_DIR = Path(__file__).parent / "images" / "verify"
 
-MODEL = "gpt-image-2"
+MODEL = "gpt-image-2-t"
 PROMPT = "生成游戏《黑道之心》登陆界面截图，5个美女各为不同的种族，名字取自任意亚洲人名，高级的心动的UI设计"
 N_PER_REQUEST = 1
 RESPONSE_FORMAT = "b64_json"  # 文档要求固定 b64_json
