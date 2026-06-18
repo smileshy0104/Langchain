@@ -4,61 +4,52 @@
 
 1. [概述](#概述)
 2. [为什么需要上下文工程](#为什么需要上下文工程)
-3. [三种上下文类型](#三种上下文类型)
-4. [数据源详解](#数据源详解)
-5. [System Prompt 动态化](#system-prompt-动态化)
-6. [Messages 消息注入](#messages-消息注入)
-7. [Tools 动态工具选择](#tools-动态工具选择)
-8. [Model 动态模型选择](#model-动态模型选择)
-9. [Response Format 结构化输出](#response-format-结构化输出)
-10. [工具的上下文读写](#工具的上下文读写)
-11. [生命周期中间件](#生命周期中间件)
-12. [瞬态与持久化更新](#瞬态与持久化更新)
-13. [实战案例](#实战案例)
-14. [最佳实践](#最佳实践)
-15. [快速参考](#快速参考)
+3. [Agent 循环与可控点](#agent-循环与可控点)
+4. [三种上下文类型](#三种上下文类型)
+5. [三类数据源](#三类数据源)
+6. [Model Context：控制模型调用](#model-context控制模型调用)
+   - [System Prompt](#system-prompt)
+   - [Messages](#messages)
+   - [Tools](#tools)
+   - [Model](#model)
+   - [Response Format](#response-format)
+7. [Tool Context：工具读写上下文](#tool-context工具读写上下文)
+8. [Life-cycle Context：生命周期中间件](#life-cycle-context生命周期中间件)
+9. [瞬态与持久化更新](#瞬态与持久化更新)
+10. [实战案例](#实战案例)
+11. [最佳实践](#最佳实践)
+12. [快速参考](#快速参考)
 
 ---
 
 ## 概述
 
-### 什么是 Context Engineering（上下文工程）
+**Context Engineering（上下文工程）** 是指：在正确的时间，以正确的格式，向 LLM 提供正确的信息和工具，让它能够可靠地完成任务。
 
-**Context Engineering（上下文工程）** 是指"在正确的时间，以正确的格式，提供正确的信息和工具，使 LLM 能够成功完成任务"的过程。
+很多 Agent 原型看起来能跑，但进入真实业务后会频繁失败。失败通常不是因为“Agent 框架不够复杂”，而是因为模型在关键调用中没有拿到正确上下文：缺少用户身份、权限、当前状态、长期记忆、可用工具、输出格式或业务约束。
 
-这是 AI 工程师最核心的工作之一。
+> 上下文工程是 AI 工程师最核心的工作之一：你不是简单地“把所有内容都塞给模型”，而是设计哪些内容该出现、何时出现、以什么形式出现，以及哪些内容应该被持久化。
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    Context Engineering                       │
 │                                                             │
-│    正确的信息 + 正确的格式 + 正确的时机 = LLM 成功完成任务   │
+│   正确信息 + 正确工具 + 正确格式 + 正确时机 = 更可靠的 Agent │
 │                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   Prompt    │  │  Messages   │  │   Tools     │         │
-│  │  系统提示词  │  │   对话历史   │  │   可用工具   │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-│                           ↓                                 │
-│                    ┌───────────┐                           │
-│                    │    LLM    │                           │
-│                    └───────────┘                           │
-│                           ↓                                 │
-│                    ┌───────────┐                           │
-│                    │   输出    │                           │
-│                    └───────────┘                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │ System Prompt│  │   Messages   │  │    Tools     │       │
+│  │   行为指令    │  │   对话历史    │  │   行动能力    │       │
+│  └──────────────┘  └──────────────┘  └──────────────┘       │
+│            ┌──────────────┐  ┌──────────────┐               │
+│            │    Model     │  │ResponseFormat│               │
+│            │   模型选择    │  │  输出结构     │               │
+│            └──────────────┘  └──────────────┘               │
+│                            ↓                                │
+│                           LLM                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 核心理念
-
-上下文工程的本质是：**让 LLM 在每次调用时都能获得完成任务所需的最佳上下文**。
-
-这包括：
-- **动态调整 System Prompt** - 根据用户角色、场景定制提示词
-- **智能管理消息历史** - 修剪、总结、注入相关信息
-- **按需提供工具** - 根据权限和场景动态选择工具
-- **选择合适的模型** - 根据任务复杂度选择最佳模型
-- **定义输出格式** - 根据需求定制响应结构
+LangChain 的优势在于：它通过 **middleware（中间件）** 把上下文工程变成可组合的工程能力。你可以在模型调用前、模型调用后、工具调用前后、Agent 开始和结束时动态修改上下文、读写状态、注入长期记忆、过滤工具、选择模型或改变输出格式。
 
 ---
 
@@ -66,1315 +57,797 @@
 
 ### Agent 失败的两大原因
 
-当 AI Agent 表现不佳时，通常是以下两个原因之一：
+当 Agent 没有按预期执行时，通常有两个原因：
 
-| 原因 | 说明 | 解决方案 |
-|------|------|----------|
-| **LLM 能力不足** | 模型本身无法完成任务 | 换用更强大的模型 |
-| **上下文不正确** | 没有传递"正确"的信息给 LLM | **上下文工程** |
+| 原因 | 说明 | 解决方向 |
+|---|---|---|
+| LLM 能力不足 | 模型本身无法推理或执行该任务 | 换更强模型、拆分任务、增加工具 |
+| 上下文不正确 | 模型没有拿到完成任务所需的信息 | 做上下文工程 |
 
-**重要发现**：大多数 Agent 失败是因为上下文问题，而非模型能力问题。
+在真实系统中，第二类更常见。比如：
 
-### 典型的 Agent 循环
+- 模型不知道用户是否已登录，却调用了私有数据工具。
+- 模型不知道当前是生产环境，执行了危险操作。
+- 模型没有看到用户上传文件摘要，回答偏离文件内容。
+- 工具太多，模型选错工具或误用危险工具。
+- 对话太长，关键信息被挤出上下文窗口。
+- 输出格式没有约束，后续程序无法解析。
 
+### 上下文工程的目标
+
+上下文工程不是“给模型更多内容”，而是：
+
+1. **减少无关内容**：避免工具、历史消息、背景资料过载。
+2. **补齐关键内容**：让模型知道身份、权限、状态、约束、记忆。
+3. **结构化呈现内容**：用清晰格式表达文件、规则、偏好和工具说明。
+4. **控制持久化边界**：区分只影响本次调用的瞬态上下文和会影响后续回合的状态更新。
+5. **在生命周期中介入**：摘要、护栏、日志、工具审批等逻辑不应全部塞进 prompt。
+
+---
+
+## Agent 循环与可控点
+
+典型 Agent 循环由两步组成：
+
+1. **Model call（模型调用）**：把提示词、消息历史、工具列表、响应格式等传给模型；模型返回最终回答或工具调用请求。
+2. **Tool execution（工具执行）**：执行模型请求的工具，把工具结果返回给 Agent，继续下一轮模型调用。
+
+```text
+┌──────────────────────────────────────────────┐
+│                 Agent Loop                   │
+│                                              │
+│      ┌───────────────┐                       │
+│      │  Model Call   │                       │
+│      │  模型调用      │                       │
+│      └───────┬───────┘                       │
+│              │                               │
+│   ┌──────────┴──────────┐                    │
+│   │                     │                    │
+│   ↓                     ↓                    │
+│ Final Response      Tool Calls               │
+│ 最终响应             工具调用请求             │
+│                         │                    │
+│                         ↓                    │
+│                 ┌───────────────┐            │
+│                 │Tool Execution │            │
+│                 │ 工具执行       │            │
+│                 └───────┬───────┘            │
+│                         │                    │
+│                         ↓                    │
+│                    Tool Results              │
+│                    工具结果                   │
+│                         │                    │
+│                         └──── 回到模型调用     │
+└──────────────────────────────────────────────┘
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Agent 循环                              │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  步骤 1: 模型调用                                    │   │
-│  │                                                     │   │
-│  │  输入:                                              │   │
-│  │  • System Prompt (系统提示词)                       │   │
-│  │  • Messages (消息历史)                              │   │
-│  │  • Tools (可用工具)                                 │   │
-│  │  • Model Config (模型配置)                          │   │
-│  │                                                     │   │
-│  │  输出:                                              │   │
-│  │  • 直接响应 或 工具调用请求                          │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                           ↓                                 │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  步骤 2: 工具执行 (如果需要)                         │   │
-│  │                                                     │   │
-│  │  • 执行 LLM 请求的工具                              │   │
-│  │  • 返回工具结果                                     │   │
-│  │  • 继续循环或结束                                   │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                           ↓                                 │
-│                    继续循环 或 返回最终响应                   │
-└─────────────────────────────────────────────────────────────┘
-```
 
-**上下文工程的目标**：在这个循环的每个阶段，确保 LLM 获得最佳上下文。
+在这个循环里，你可以控制：
+
+| 上下文类型 | 你控制什么 | 瞬态还是持久化 |
+|---|---|---|
+| **Model Context** | 进入模型调用的内容：系统提示词、消息、工具、模型、响应格式 | 瞬态为主 |
+| **Tool Context** | 工具能读取什么、写入什么、返回什么 | 持久化为主 |
+| **Life-cycle Context** | 模型调用和工具调用之间发生什么：摘要、护栏、日志、状态更新 | 持久化为主 |
 
 ---
 
 ## 三种上下文类型
 
-LangChain 将上下文分为三种类型：
+### 1. Model Context（模型上下文）
 
-### 1. Model Context（模型上下文）- 瞬态
-
-每次模型调用时发送给 LLM 的内容，是**瞬态的**（临时的）。
+Model Context 是单次模型调用看到的内容，通常是**瞬态**的：你可以临时修改它，而不改变保存到 State 中的内容。
 
 | 组件 | 说明 | 示例 |
-|------|------|------|
-| **System Prompt** | 开发者给 LLM 的基础指令 | "你是一个专业的客服助手" |
-| **Messages** | 完整的对话历史 | 用户消息、AI 响应、工具结果 |
-| **Tools** | Agent 可访问的工具列表 | 搜索、计算、发邮件等 |
-| **Model** | 调用的模型及配置 | gpt-4o、claude-sonnet-4-5-20250929 等 |
-| **Response Format** | 响应的结构定义 | JSON Schema、Pydantic Model |
+|---|---|---|
+| System Prompt | 开发者给模型的基础行为指令 | “你是专业客服助手” |
+| Messages | 发送给模型的消息列表 | 对话历史、文件摘要、临时规则 |
+| Tools | 模型可用工具 | 搜索、订单查询、发邮件 |
+| Model | 实际调用的模型和配置 | `gpt-5.5`、`claude-sonnet-4-6` |
+| Response Format | 结构化输出 schema | Pydantic model、JSON schema |
 
-```python
-# 模型上下文示例
-model_context = {
-    "system_prompt": "你是一个专业的客服助手。",
-    "messages": [
-        {"role": "user", "content": "我想查询订单"},
-        {"role": "assistant", "content": "好的，请提供订单号"},
-    ],
-    "tools": [search_order, track_shipping],
-    "model": "gpt-4o",
-    "response_format": OrderResponse,
-}
-```
+适合在 `@dynamic_prompt` 或 `@wrap_model_call` 中动态控制。
 
-### 2. Tool Context（工具上下文）- 持久化
+### 2. Tool Context（工具上下文）
 
-工具执行时可以读取和写入的内容，是**持久化的**。
+Tool Context 是工具执行时可以读取和写入的上下文。工具不只接收模型提供的参数，也可以访问 Runtime、State 和 Store。
 
-**读取来源**：
-- State（当前会话状态）
-- Store（跨会话存储）
-- Runtime Context（运行时配置）
+| 能力 | 数据源 | 示例 |
+|---|---|---|
+| 读取用户身份 | Runtime Context | `runtime.context.user_id` |
+| 读取当前会话状态 | State | `runtime.state.get("authenticated")` |
+| 读取长期偏好 | Store | `runtime.store.get(("preferences",), user_id)` |
+| 写入当前状态 | State | 返回 `Command(update={...})` |
+| 写入长期记忆 | Store | `runtime.store.put(...)` |
 
-**写入目标**：
-- State（更新当前状态）
-- Store（保存长期数据）
+### 3. Life-cycle Context（生命周期上下文）
 
-```python
-from langchain.tools import tool, ToolRuntime
+Life-cycle Context 控制 Agent 生命周期中模型调用和工具执行之间发生的事情。它通常通过 middleware 钩子实现，并且会持久化影响后续回合。
 
-@tool
-def get_user_orders(runtime: ToolRuntime) -> str:
-    """工具可以读取上下文"""
-    # 从 Runtime Context 读取用户 ID
-    user_id = runtime.context.user_id
+常见用途：
 
-    # 从 Store 读取用户偏好
-    prefs = runtime.store.get(("preferences",), user_id)
-
-    # 执行业务逻辑...
-    return "订单列表..."
-
-@tool
-def save_preference(key: str, value: str, runtime: ToolRuntime) -> str:
-    """工具可以写入上下文"""
-    user_id = runtime.context.user_id
-
-    # 写入 Store（持久化）
-    runtime.store.put(("preferences",), user_id, {key: value})
-
-    return f"已保存: {key}={value}"
-```
-
-### 3. Life-cycle Context（生命周期上下文）- 持久化
-
-控制模型调用和工具执行之间发生的事情，是**持久化的**。
-
-**主要用途**：
-- 消息摘要总结
-- 护栏检查
-- 日志记录
-- 状态转换
-
-```python
-from langchain.agents.middleware import SummarizationMiddleware
-
-# 生命周期中间件示例：自动总结长对话
-agent = create_agent(
-    model="gpt-4o",
-    middleware=[
-        SummarizationMiddleware(
-            model="gpt-4o-mini",
-            trigger=("tokens", 4000),  # 超过 4000 tokens 时触发
-            keep=("messages", 20),      # 保留最近 20 条消息
-        ),
-    ],
-)
-```
-
-### 三种上下文对比
-
-| 类型 | 生命周期 | 作用范围 | 典型操作 |
-|------|----------|----------|----------|
-| Model Context | 瞬态 | 单次模型调用 | 动态 prompt、工具过滤、模型选择 |
-| Tool Context | 持久化 | 工具执行 | 读写 State/Store |
-| Life-cycle Context | 持久化 | 调用之间 | 摘要、护栏、日志 |
+- 长对话摘要（Summarization）
+- Guardrails 护栏检查
+- 日志、审计、指标埋点
+- 工具调用前审批
+- 状态字段更新
+- 根据条件跳转到生命周期其他步骤
 
 ---
 
-## 数据源详解
+## 三类数据源
 
-上下文工程涉及三个核心数据源：
+上下文工程经常围绕三个数据源展开：
 
-### 1. Runtime Context（运行时上下文）
+| 数据源 | 又称 | 作用域 | 典型内容 |
+|---|---|---|---|
+| **Runtime Context** | 静态配置 | 单次调用 / 会话级 | 用户 ID、API Key、数据库连接、权限、环境配置 |
+| **State** | 短期记忆 | 当前对话 / thread | messages、上传文件、认证状态、工具结果 |
+| **Store** | 长期记忆 | 跨对话 | 用户偏好、历史洞察、长期记忆、行为模式 |
 
-**别名**：静态配置
-**作用域**：会话范围（调用期间不变）
-**用途**：存储静态的配置和依赖
+### Runtime Context
+
+Runtime Context 是调用时注入的静态信息，适合放“本次调用期间稳定不变”的依赖。
 
 ```python
 from dataclasses import dataclass
+from typing import Any
+
+from langchain.agents import create_agent
+
 
 @dataclass
 class AppContext:
-    """运行时上下文定义"""
-    user_id: str           # 用户标识
-    user_name: str         # 用户名称
-    user_role: str         # 用户角色（admin/user/guest）
-    api_key: str           # API 密钥
-    database: any          # 数据库连接
-    environment: str       # 环境（production/staging/dev）
+    user_id: str
+    user_role: str
+    deployment_env: str
+    database: Any = None
 
-# 调用时传入
+
+agent = create_agent(
+    model="gpt-5.5",
+    tools=[...],
+    context_schema=AppContext,
+)
+
 agent.invoke(
-    {"messages": [...]},
+    {"messages": [{"role": "user", "content": "查询我的订单"}]},
     context=AppContext(
         user_id="user-123",
-        user_name="张三",
         user_role="admin",
-        api_key="sk-xxx",
+        deployment_env="production",
         database=db_conn,
-        environment="production",
-    )
+    ),
 )
 ```
 
-**典型内容**：
-- 用户 ID、用户名、角色
-- API 密钥、认证令牌
-- 数据库连接、缓存连接
-- 环境配置、功能开关
-- 权限列表
+### State
 
-### 2. State（状态）
-
-**别名**：短期记忆
-**作用域**：会话范围
-**用途**：存储当前会话的动态数据
+State 是当前对话的短期记忆。最重要的字段通常是 `messages`，也可以包含业务自定义字段。
 
 ```python
-# State 内容示例
 state = {
-    "messages": [           # 对话历史
-        {"role": "user", "content": "你好"},
-        {"role": "assistant", "content": "你好！有什么可以帮助你的？"},
+    "messages": [...],
+    "uploaded_files": [
+        {"name": "report.pdf", "type": "pdf", "summary": "年度财务报告"},
     ],
-    "uploaded_files": [     # 用户上传的文件
-        {"name": "report.pdf", "type": "pdf", "summary": "年度报告"},
-    ],
-    "authenticated": True,  # 认证状态
-    "current_order": "ORD-123",  # 当前操作的订单
+    "authenticated": True,
+    "current_order_id": "ORD-123",
 }
 ```
 
-**典型内容**：
-- 消息历史（messages）
-- 上传的文件和图片
-- 认证状态
-- 工具执行结果
-- 临时计算数据
+### Store
 
-### 3. Store（存储）
-
-**别名**：长期记忆
-**作用域**：跨会话
-**用途**：持久化存储用户数据和洞察
+Store 是跨对话的长期记忆，适合保存用户偏好、长期洞察、历史数据索引。
 
 ```python
-# Store 使用示例
 from langgraph.store.memory import InMemoryStore
 
 store = InMemoryStore()
 
-# 保存用户偏好
 store.put(
-    ("users", "user-123", "preferences"),
-    "theme",
-    {"value": "dark", "updated_at": "2024-01-01"}
+    ("preferences",),
+    "user-123",
+    {"communication_style": "concise", "language": "zh"},
 )
 
-# 保存用户历史见解
-store.put(
-    ("users", "user-123", "insights"),
-    "communication_style",
-    {"value": "formal", "confidence": 0.9}
-)
-
-# 读取数据
-prefs = store.get(("users", "user-123", "preferences"), "theme")
-print(prefs.value)  # {"value": "dark", "updated_at": "2024-01-01"}
+prefs = store.get(("preferences",), "user-123")
+print(prefs.value)
 ```
-
-**典型内容**：
-- 用户偏好设置
-- 提取的用户见解
-- 历史交互记录
-- 学习到的用户特征
-- 跨会话的上下文
-
-### 数据源对比
-
-| 数据源 | 别名 | 生命周期 | 可变性 | 典型用途 |
-|--------|------|----------|--------|----------|
-| Runtime Context | 静态配置 | 单次调用 | 不可变 | 用户 ID、API 密钥、连接 |
-| State | 短期记忆 | 会话范围 | 可变 | 消息历史、临时数据 |
-| Store | 长期记忆 | 跨会话 | 可变 | 用户偏好、历史见解 |
 
 ---
 
-## System Prompt 动态化
+## Model Context：控制模型调用
 
-### 为什么需要动态 Prompt
+Model Context 决定模型在某一次调用中看到什么。它对可靠性、成本和延迟影响极大。
 
-静态的 System Prompt 无法适应所有场景：
+### System Prompt
 
-| 场景 | 静态 Prompt 问题 | 动态 Prompt 解决方案 |
-|------|------------------|----------------------|
-| 多角色用户 | 同一提示词服务所有用户 | 根据角色定制提示词 |
-| 多语言支持 | 写死一种语言 | 根据用户语言切换 |
-| 上下文感知 | 不知道对话进展 | 根据对话长度调整 |
-| 个性化 | 无法个性化 | 从 Store 读取偏好 |
+System Prompt 决定模型的行为基线。它可以从 State、Store、Runtime Context 中读取信息动态生成。
 
-### 使用 @dynamic_prompt 装饰器
+#### 从 State 读取：对话长度感知
+
+```python
+from langchain.agents import create_agent
+from langchain.agents.middleware import ModelRequest, dynamic_prompt
+
+
+@dynamic_prompt
+def state_aware_prompt(request: ModelRequest) -> str:
+    message_count = len(request.messages)
+
+    base = "你是一个有帮助的助手。"
+
+    if message_count > 10:
+        base += "\n这是一个较长对话，请更加简洁，并优先引用已有上下文。"
+
+    return base
+
+
+agent = create_agent(
+    model="gpt-5.5",
+    tools=[...],
+    middleware=[state_aware_prompt],
+)
+```
+
+#### 从 Store 读取：用户偏好感知
 
 ```python
 from dataclasses import dataclass
+
 from langchain.agents import create_agent
-from langchain.agents.middleware import dynamic_prompt, ModelRequest
+from langchain.agents.middleware import ModelRequest, dynamic_prompt
+from langgraph.store.memory import InMemoryStore
+
 
 @dataclass
 class Context:
-    user_name: str
-    user_role: str
-    language: str = "zh"
+    user_id: str
 
-@dynamic_prompt
-def personalized_prompt(request: ModelRequest) -> str:
-    """根据用户信息生成个性化提示词"""
-    ctx = request.runtime.context
 
-    # 基础提示词
-    base = f"你是一个专业的助手。用户名是 {ctx.user_name}。"
-
-    # 根据角色添加指令
-    if ctx.user_role == "admin":
-        base += "\n用户是管理员，可以执行所有操作。"
-    elif ctx.user_role == "guest":
-        base += "\n用户是访客，只能进行查询操作。"
-    else:
-        base += "\n用户是普通用户。"
-
-    # 根据语言调整
-    if ctx.language == "en":
-        base += "\nPlease respond in English."
-    else:
-        base += "\n请用中文回复。"
-
-    return base
-
-agent = create_agent(
-    model="gpt-4o",
-    tools=[...],
-    middleware=[personalized_prompt],
-    context_schema=Context,
-)
-
-# 使用
-agent.invoke(
-    {"messages": [{"role": "user", "content": "帮我查询订单"}]},
-    context=Context(user_name="张三", user_role="admin", language="zh"),
-)
-```
-
-### 从不同数据源读取
-
-#### 从 State 读取
-
-```python
-@dynamic_prompt
-def state_aware_prompt(request: ModelRequest) -> str:
-    """根据对话状态调整提示词"""
-    messages = request.messages  # 等同于 request.state["messages"]
-    message_count = len(messages)
-
-    base = "你是一个专业的助手。"
-
-    if message_count > 20:
-        base += "\n这是一个长对话，请保持简洁。"
-    elif message_count > 10:
-        base += "\n对话已有一定进展，可以引用之前的上下文。"
-    else:
-        base += "\n这是对话开始，请友好地打招呼。"
-
-    # 检查是否有上传文件
-    uploaded_files = request.state.get("uploaded_files", [])
-    if uploaded_files:
-        file_names = [f["name"] for f in uploaded_files]
-        base += f"\n用户上传了以下文件: {', '.join(file_names)}"
-
-    return base
-```
-
-#### 从 Store 读取
-
-```python
 @dynamic_prompt
 def store_aware_prompt(request: ModelRequest) -> str:
-    """从长期记忆读取用户偏好"""
     user_id = request.runtime.context.user_id
     store = request.runtime.store
-
-    base = "你是一个专业的助手。"
-
-    # 读取用户偏好
     user_prefs = store.get(("preferences",), user_id)
+
+    base = "你是一个有帮助的助手。"
+
     if user_prefs:
         style = user_prefs.value.get("communication_style", "balanced")
-        tone = user_prefs.value.get("tone", "professional")
-        base += f"\n用户偏好 {style} 风格和 {tone} 语气。"
-
-    # 读取历史见解
-    insights = store.get(("insights",), user_id)
-    if insights:
-        expertise = insights.value.get("expertise_level", "intermediate")
-        base += f"\n用户专业水平: {expertise}。"
+        base += f"\n用户偏好 {style} 风格的回复。"
 
     return base
+
+
+agent = create_agent(
+    model="gpt-5.5",
+    tools=[...],
+    middleware=[store_aware_prompt],
+    context_schema=Context,
+    store=InMemoryStore(),
+)
 ```
 
-#### 从 Runtime Context 读取
+#### 从 Runtime Context 读取：角色和环境感知
 
 ```python
+from dataclasses import dataclass
+
+from langchain.agents.middleware import ModelRequest, dynamic_prompt
+
+
 @dataclass
 class Context:
     user_role: str
     deployment_env: str
-    feature_flags: dict
+
 
 @dynamic_prompt
 def context_aware_prompt(request: ModelRequest) -> str:
-    """根据运行时上下文调整"""
     ctx = request.runtime.context
 
-    base = "你是一个专业的助手。"
+    base = "你是一个有帮助的助手。"
 
-    # 根据用户角色
     if ctx.user_role == "admin":
-        base += "\n你有管理员权限，可以执行敏感操作。"
+        base += "\n用户是管理员，可以执行管理操作，但高风险操作仍需确认。"
     elif ctx.user_role == "viewer":
-        base += "\n你只有查看权限，请引导用户使用只读操作。"
+        base += "\n用户只有只读权限，不要建议写入或删除操作。"
 
-    # 根据部署环境
     if ctx.deployment_env == "production":
-        base += "\n这是生产环境，请格外小心数据操作。"
-    elif ctx.deployment_env == "staging":
-        base += "\n这是测试环境，可以自由测试。"
-
-    # 根据功能开关
-    if ctx.feature_flags.get("enable_experimental"):
-        base += "\n实验功能已启用。"
+        base += "\n当前是生产环境，任何数据修改都必须谨慎。"
 
     return base
 ```
 
----
+### Messages
 
-## Messages 消息注入
+Messages 是传给模型的消息列表。消息管理的关键是：**只把当前模型调用需要的信息放进去**。
 
-### 为什么需要消息注入
+常见策略：
 
-有时我们需要在发送给模型的消息中临时注入额外信息，但不想永久保存到对话历史中。
+- 注入上传文件摘要
+- 注入用户写作风格
+- 注入合规规则
+- 注入当前任务上下文
+- 修剪或摘要过长历史
 
-**典型场景**：
-- 注入用户上传文件的摘要
-- 注入用户的写作风格
-- 注入相关的背景知识
-- 注入实时数据
+#### 瞬态注入文件上下文
 
-### 使用 @wrap_model_call 注入消息
-
-```python
-# 导入必要的模块
-from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse  # 模型包装装饰器和类型
-from typing import Callable  # 可调用对象类型注解
-
-@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
-def inject_file_context(
-    request: ModelRequest,  # 模型请求对象，包含消息、状态、上下文等信息
-    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
-) -> ModelResponse:
-    """注入用户上传文件的上下文
-    
-    这个中间件函数演示了如何从请求状态中获取用户上传的文件信息，
-    并在模型调用前将文件上下文注入到消息中。这样可以让模型
-    基于用户上传的文件内容来回答问题，实现文件驱动的对话。
-    """
-
-    # 从请求状态中获取用户上传的文件列表
-    # 使用 get 方法提供默认值，避免键不存在时的错误
-    uploaded_files = request.state.get("uploaded_files", [])
-
-    # 检查是否有上传的文件
-    if uploaded_files:
-        # 构建文件描述列表，为每个文件创建可读的描述信息
-        file_descriptions = []
-        for file in uploaded_files:
-            # 为每个文件创建格式化的描述字符串
-            file_descriptions.append(
-                f"- {file['name']} ({file['type']}): {file['summary']}"
-                # 文件名、文件类型、文件摘要的格式化显示
-            )
-
-        # 构建文件上下文提示词，告知模型可以访问的文件信息
-        file_context = f"""你可以访问以下用户上传的文件:
-{chr(10).join(file_descriptions)}  # 使用换行符连接文件描述
-
-请根据这些文件内容回答用户的问题。"""
-
-        # 创建新的消息列表：保留原有消息 + 注入文件上下文
-        messages = [
-            *request.messages,  # 解包原有消息，保持对话历史
-            {"role": "user", "content": file_context},  # 添加用户级文件上下文信息
-        ]
-
-        # 使用 override 创建新的请求对象（瞬态修改）
-        # 这会创建一个新的请求对象，包含修改后的消息列表
-        request = request.override(messages=messages)
-
-    # 调用处理函数执行实际的模型调用
-    # 如果没有上传文件，直接使用原始请求
-    return handler(request)
-```
-
-### 从 Store 注入用户偏好
+`wrap_model_call` 中使用 `request.override(messages=...)` 可以只影响当前模型调用，不把注入消息保存到 State。
 
 ```python
-@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
-def inject_writing_style(
-    request: ModelRequest,  # 模型请求对象，包含消息、上下文等信息
-    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
-) -> ModelResponse:
-    """从 Store 读取并注入用户的写作风格
-    
-    这个中间件函数演示了如何从持久化存储中读取用户偏好，
-    并在模型调用前动态注入个性化的写作风格指令。
-    这样可以让每个用户都获得符合其偏好的个性化体验。
-    """
+from typing import Callable
 
-    # 从运行时上下文获取用户 ID - 确定当前会话的用户身份
-    user_id = request.runtime.context.user_id
-    # 从运行时获取 Store 组件 - 用于访问持久化存储
-    store = request.runtime.store
+from langchain.agents.middleware import ModelRequest, ModelResponse, wrap_model_call
 
-    # 从 Store 读取用户的写作风格设置
-    # 使用元组 ("writing_style",) 作为键，user_id 作为值进行查询
-    writing_style = store.get(("writing_style",), user_id)
-
-    # 检查是否找到了用户的写作风格设置
-    if writing_style:
-        # 获取存储的风格配置对象
-        style = writing_style.value
-        # 构建个性化的写作风格指令字符串
-        style_context = f"""请使用以下写作风格回复:
-- 语气: {style.get('tone', '专业')}  # 语气：专业、友好、幽默等
-- 开场白: "{style.get('greeting', '你好')}"  # 个性化开场白
-- 结束语: "{style.get('sign_off', '祝好')}"  # 个性化结束语
-- 正式程度: {style.get('formality', '中等')}"""  # 正式程度：低、中等、高
-
-        # 构建新的消息列表：保留原有消息 + 添加系统级风格指令
-        messages = [
-            *request.messages,  # 解包原有消息，保持对话历史
-            {"role": "system", "content": style_context}  # 添加系统级风格指令
-        ]
-
-        # 使用 override 创建新的请求对象（瞬态修改）
-        # 这会创建一个新的请求对象，包含修改后的消息列表
-        request = request.override(messages=messages)
-
-    # 调用处理函数执行实际的模型调用
-    # 如果没有找到用户风格设置，直接使用原始请求
-    return handler(request)
-```
-
-### 注入实时数据
-
-```python
-# 导入日期时间模块
-import datetime  # 用于获取和处理实时时间信息
-
-@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
-def inject_realtime_context(
-    request: ModelRequest,  # 模型请求对象，包含消息、状态、上下文等信息
-    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
-) -> ModelResponse:
-    """注入实时上下文信息
-    
-    这个中间件函数演示了如何在模型调用前注入实时的上下文信息，
-    如当前时间、星期、工作时段等。这样可以让模型根据时间
-    提供更相关、更个性化的响应。
-    """
-
-    # 获取当前时间对象，包含完整的日期和时间信息
-    now = datetime.datetime.now()
-
-    # 构建实时上下文信息字符串，为模型提供时间相关的背景
-    realtime_context = f"""当前上下文信息:
-- 当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}  # 格式化显示年月日时分秒
-- 星期: {['周一', '周二', '周三', '周四', '周五', '周六', '周日'][now.weekday()]}  # 将数字星期转换为中文
-- 时段: {'工作时间' if 9 <= now.hour < 18 else '非工作时间'}  # 根据小时判断工作时段"""
-
-    # 构建新的消息列表：实时上下文 + 原有消息
-    messages = [
-        {"role": "system", "content": realtime_context},  # 添加系统级实时上下文信息
-        *request.messages,  # 解包原有消息，保持对话历史
-    ]
-
-    # 使用 override 创建新的请求对象（瞬态修改）
-    # 这会创建一个新的请求对象，包含修改后的消息列表
-    request = request.override(messages=messages)
-    
-    # 调用处理函数执行实际的模型调用
-    return handler(request)
-```
-
----
-
-## Tools 动态工具选择
-
-### 为什么需要动态工具
-
-不同场景下，Agent 需要访问不同的工具：
-
-| 场景 | 工具选择策略 |
-|------|--------------|
-| 未认证用户 | 只提供公开工具 |
-| 管理员用户 | 提供所有工具 |
-| 特定任务 | 只提供相关工具 |
-| 敏感操作 | 隐藏危险工具 |
-
-### 基于 State 选择工具
-
-```python
-@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
-def state_based_tools(
-    request: ModelRequest,  # 模型请求对象，包含消息、状态、工具等信息
-    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
-) -> ModelResponse:
-    """根据认证状态选择工具
-    
-    这个中间件函数演示了如何根据用户的认证状态动态选择
-    可用工具。未认证用户只能使用公开工具，已认证用户
-    可以使用所有工具，实现基于权限的工具访问控制。
-    """
-
-    # 从请求状态中获取状态信息
-    state = request.state
-    # 检查用户的认证状态，默认为未认证
-    is_authenticated = state.get("authenticated", False)
-
-    # 根据认证状态决定可用工具
-    if not is_authenticated:
-        # 未认证用户：只提供公开工具
-        # 使用列表推导式过滤出以"public_"开头的工具
-        public_tools = [t for t in request.tools if t.name.startswith("public_")]
-        # 使用 override 创建新的请求对象，只包含公开工具
-        request = request.override(tools=public_tools)
-    else:
-        # 已认证用户：提供所有工具，无需修改
-        pass  # 保持原有工具列表不变
-
-    # 调用处理函数执行实际的模型调用
-    return handler(request)
-```
-
-### 基于 Runtime Context 选择工具
-
-```python
-@dataclass  # 装饰器：自动生成初始化方法、比较方法等
-class Context:
-    """用户上下文数据类
-    
-    定义用户角色的数据结构，用于基于角色的权限控制。
-    """
-    user_role: str  # 用户角色类型："admin" (管理员), "editor" (编辑者), "viewer" (查看者)
-
-@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
-def role_based_tools(
-    request: ModelRequest,  # 模型请求对象，包含消息、上下文、工具等信息
-    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
-) -> ModelResponse:
-    """根据用户角色选择工具
-    
-    这个中间件函数演示了如何根据用户的角色动态选择
-    可用工具。不同角色有不同的权限级别，实现细粒度的
-    访问控制和安全保障。
-    """
-
-    # 从运行时上下文获取用户角色信息
-    user_role = request.runtime.context.user_role
-    # 获取所有可用工具的列表
-    all_tools = request.tools
-
-    # 根据用户角色决定可用工具
-    if user_role == "admin":
-        # 管理员：拥有所有工具的完全访问权限
-        tools = all_tools
-    elif user_role == "editor":
-        # 编辑者：可以创建和修改，但不能删除
-        # 使用列表推导式排除以"delete_"开头的危险工具
-        tools = [t for t in all_tools if not t.name.startswith("delete_")]
-    else:
-        # 查看者：只能进行只读操作
-        # 只保留以"read_"或"get_"开头的读取工具
-        tools = [t for t in all_tools if t.name.startswith("read_") or t.name.startswith("get_")]
-
-    # 使用 override 创建新的请求对象，只包含角色允许的工具
-    request = request.override(tools=tools)
-    
-    # 调用处理函数执行实际的模型调用
-    return handler(request)
-```
-
-### 基于对话内容选择工具
-
-```python
-@wrap_model_call  # 装饰器：包装模型调用，在调用前后执行自定义逻辑
-def context_based_tools(
-    request: ModelRequest,  # 模型请求对象，包含消息、上下文、工具等信息
-    handler: Callable[[ModelRequest], ModelResponse]  # 处理函数，实际的模型调用
-) -> ModelResponse:
-    """根据对话内容智能选择工具
-    
-    这个中间件函数演示了如何根据用户的对话内容动态选择
-    相关工具。通过分析用户消息中的关键词，智能推断用户意图，
-    只提供与当前任务相关的工具，提高响应的准确性和效率。
-    """
-
-    # 获取最后一条用户消息，用于分析用户意图
-    last_user_msg = ""
-    # 使用 reversed 倒序遍历消息，找到最近的用户消息
-    for msg in reversed(request.messages):
-        if msg.get("role") == "user":
-            # 获取消息内容并转换为小写，便于关键词匹配
-            last_user_msg = msg.get("content", "").lower()
-            break  # 找到后立即退出循环
-
-    # 获取所有可用工具的列表
-    all_tools = request.tools
-
-    # 根据关键词选择相关工具，实现智能工具过滤
-    if "订单" in last_user_msg or "购买" in last_user_msg:
-        # 订单相关：只提供订单和购买相关的工具
-        tools = [t for t in all_tools if "order" in t.name or "purchase" in t.name]
-    elif "账户" in last_user_msg or "密码" in last_user_msg:
-        # 账户相关：只提供账户和认证相关的工具
-        tools = [t for t in all_tools if "account" in t.name or "auth" in t.name]
-    elif "报告" in last_user_msg or "统计" in last_user_msg:
-        # 报告相关：只提供报告和统计相关的工具
-        tools = [t for t in all_tools if "report" in t.name or "stats" in t.name]
-    else:
-        # 默认情况：提供所有工具，让模型自行选择
-        tools = all_tools
-
-    # 使用 override 创建新的请求对象，只包含相关的工具
-    request = request.override(tools=tools)
-    
-    # 调用处理函数执行实际的模型调用
-    return handler(request)
-```
-
----
-
-## Model 动态模型选择
-
-### 为什么需要动态模型选择
-
-不同任务需要不同能力的模型：
-
-| 场景 | 推荐模型 | 原因 |
-|------|----------|------|
-| 简单问答 | gpt-4o-mini | 成本低、速度快 |
-| 复杂推理 | gpt-4o / claude-sonnet-4-5-20250929 | 能力强 |
-| 长对话 | claude-sonnet-4-5-20250929 | 上下文窗口大 |
-| 代码生成 | gpt-4o | 编程能力强 |
-
-### 基于对话长度选择模型
-
-```python
-from langchain.chat_models import init_chat_model
-from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
-
-# 预先初始化模型（避免每次调用都初始化）
-large_model = init_chat_model("claude-sonnet-4-5-20250929")  # 大上下文
-standard_model = init_chat_model("gpt-4o")             # 标准能力
-efficient_model = init_chat_model("gpt-4o-mini")       # 高效低成本
 
 @wrap_model_call
-def conversation_length_model(
+def inject_file_context(
     request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    handler: Callable[[ModelRequest], ModelResponse],
 ) -> ModelResponse:
-    """根据对话长度选择模型"""
+    """临时注入本会话上传文件摘要。"""
+    uploaded_files = request.state.get("uploaded_files", [])
 
-    message_count = len(request.messages)
+    if uploaded_files:
+        file_descriptions = [
+            f"- {file['name']} ({file['type']}): {file['summary']}"
+            for file in uploaded_files
+        ]
 
-    if message_count > 20:
-        # 长对话：使用大上下文模型
-        model = large_model
-        print(f"使用大上下文模型 (消息数: {message_count})")
-    elif message_count > 10:
-        # 中等对话：使用标准模型
-        model = standard_model
-        print(f"使用标准模型 (消息数: {message_count})")
-    else:
-        # 短对话：使用高效模型
-        model = efficient_model
-        print(f"使用高效模型 (消息数: {message_count})")
+        file_context = f"""本次对话可用文件：
+{chr(10).join(file_descriptions)}
 
-    request = request.override(model=model)
+回答文件相关问题时，请优先参考这些文件。"""
+
+        messages = [
+            *request.messages,
+            {"role": "user", "content": file_context},
+        ]
+        request = request.override(messages=messages)
+
     return handler(request)
 ```
 
-### 基于用户层级选择模型
+#### 注入 Store 中的写作风格
+
+```python
+@wrap_model_call
+def inject_writing_style(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    user_id = request.runtime.context.user_id
+    writing_style = request.runtime.store.get(("writing_style",), user_id)
+
+    if writing_style:
+        style = writing_style.value
+        style_context = f"""用户写作风格：
+- 语气：{style.get('tone', 'professional')}
+- 常用开头：{style.get('greeting', 'Hi')}
+- 常用结尾：{style.get('sign_off', 'Best')}
+- 示例邮件：
+{style.get('example_email', '')}"""
+
+        request = request.override(
+            messages=[*request.messages, {"role": "user", "content": style_context}]
+        )
+
+    return handler(request)
+```
+
+#### 注入 Runtime Context 中的合规规则
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class Context:
+    user_jurisdiction: str
+    industry: str
+    compliance_frameworks: list[str]
+
+
+@wrap_model_call
+def inject_compliance_rules(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    ctx = request.runtime.context
+
+    rules = []
+    if "GDPR" in ctx.compliance_frameworks:
+        rules.append("- 处理个人数据前必须获得明确同意")
+        rules.append("- 用户有权要求删除个人数据")
+    if "HIPAA" in ctx.compliance_frameworks:
+        rules.append("- 未授权不得分享患者健康信息")
+    if ctx.industry == "finance":
+        rules.append("- 不得在缺少免责声明时提供金融建议")
+
+    if rules:
+        compliance_context = f"""{ctx.user_jurisdiction} 的合规要求：
+{chr(10).join(rules)}"""
+        request = request.override(
+            messages=[*request.messages, {"role": "user", "content": compliance_context}]
+        )
+
+    return handler(request)
+```
+
+> 注意：把动态信息追加到消息尾部通常比修改系统提示词更适合“本次调用临时上下文”。如果某条信息需要长期影响对话，应通过 State 或 Store 持久化，而不是每次临时拼接。
+
+### Tools
+
+工具定义本身也是上下文。工具的名称、描述、参数名和参数描述会直接影响模型是否会正确使用工具。
+
+#### 定义清晰工具
+
+```python
+from langchain.tools import tool
+
+
+@tool(parse_docstring=True)
+def search_orders(user_id: str, status: str, limit: int = 10) -> str:
+    """Search for user orders by status.
+
+    Use this when the user asks about order history or wants to check
+    order status. Always filter by the provided status.
+
+    Args:
+        user_id: Unique identifier for the user
+        status: Order status: 'pending', 'shipped', or 'delivered'
+        limit: Maximum number of results to return
+    """
+    ...
+```
+
+工具描述建议包含：
+
+- 这个工具做什么
+- 什么时候应该调用
+- 什么时候不该调用
+- 参数含义和允许值
+- 高风险工具的约束条件
+
+#### 基于 State 过滤工具
+
+```python
+@wrap_model_call
+def state_based_tools(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    is_authenticated = request.state.get("authenticated", False)
+    message_count = len(request.state["messages"])
+
+    if not is_authenticated:
+        tools = [t for t in request.tools if t.name.startswith("public_")]
+        request = request.override(tools=tools)
+    elif message_count < 5:
+        tools = [t for t in request.tools if t.name != "advanced_search"]
+        request = request.override(tools=tools)
+
+    return handler(request)
+```
+
+#### 基于 Runtime Context 过滤工具
 
 ```python
 @dataclass
 class Context:
-    cost_tier: str       # "premium", "standard", "budget"
-    environment: str     # "production", "staging"
+    user_role: str
+
 
 @wrap_model_call
-def tier_based_model(
+def context_based_tools(
     request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    handler: Callable[[ModelRequest], ModelResponse],
 ) -> ModelResponse:
-    """根据用户订阅层级选择模型"""
+    user_role = request.runtime.context.user_role
 
-    ctx = request.runtime.context
-    cost_tier = ctx.cost_tier
-    environment = ctx.environment
+    if user_role == "admin":
+        return handler(request)
 
-    if environment == "production" and cost_tier == "premium":
-        # 生产环境 + 高级用户：最强模型
-        model = init_chat_model("claude-sonnet-4-5-20250929")
-    elif cost_tier == "budget":
-        # 预算层级：经济模型
-        model = init_chat_model("gpt-4o-mini")
+    if user_role == "editor":
+        tools = [t for t in request.tools if t.name != "delete_data"]
     else:
-        # 标准层级
-        model = init_chat_model("gpt-4o")
+        tools = [t for t in request.tools if t.name.startswith("read_")]
 
-    request = request.override(model=model)
-    return handler(request)
+    return handler(request.override(tools=tools))
 ```
 
-### 基于任务类型选择模型
+#### 基于 Store 过滤工具
 
 ```python
 @wrap_model_call
-def task_based_model(
+def store_based_tools(
     request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    handler: Callable[[ModelRequest], ModelResponse],
 ) -> ModelResponse:
-    """根据任务类型选择最适合的模型"""
+    user_id = request.runtime.context.user_id
+    feature_flags = request.runtime.store.get(("features",), user_id)
 
-    # 分析最后一条用户消息
-    last_msg = request.messages[-1].get("content", "").lower()
+    if feature_flags:
+        enabled_tools = set(feature_flags.value.get("enabled_tools", []))
+        tools = [t for t in request.tools if t.name in enabled_tools]
+        request = request.override(tools=tools)
 
-    # 代码相关任务
-    if any(kw in last_msg for kw in ["代码", "编程", "函数", "debug", "code"]):
-        model = init_chat_model("gpt-4o")  # GPT-4o 编程能力强
-
-    # 创意写作任务
-    elif any(kw in last_msg for kw in ["写作", "故事", "诗", "创意", "文案"]):
-        model = init_chat_model("claude-sonnet-4-5-20250929")  # Claude 创意能力强
-
-    # 数学/逻辑任务
-    elif any(kw in last_msg for kw in ["计算", "数学", "推理", "分析"]):
-        model = init_chat_model("gpt-4o")
-
-    # 简单问答
-    else:
-        model = init_chat_model("gpt-4o-mini")
-
-    request = request.override(model=model)
     return handler(request)
 ```
 
----
+### Model
 
-## Response Format 结构化输出
+不同模型有不同成本、速度、上下文窗口和能力。上下文工程可以根据任务动态选择模型。
 
-### 为什么需要结构化输出
+```python
+from typing import Callable
 
-让 LLM 返回结构化数据而非自由文本，便于：
-- 程序解析和处理
-- 数据验证
-- 界面展示
-- 后续流程集成
+from langchain.agents.middleware import ModelRequest, ModelResponse, wrap_model_call
+from langchain.chat_models import init_chat_model
 
-### 定义输出格式
+large_model = init_chat_model("claude-sonnet-4-6")
+standard_model = init_chat_model("gpt-5.5")
+efficient_model = init_chat_model("gpt-5.4-mini")
 
-使用 Pydantic 定义结构化输出：
+
+@wrap_model_call
+def state_based_model(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    message_count = len(request.messages)
+
+    if message_count > 20:
+        model = large_model
+    elif message_count > 10:
+        model = standard_model
+    else:
+        model = efficient_model
+
+    return handler(request.override(model=model))
+```
+
+基于 Runtime Context 的成本层级选择：
+
+```python
+@dataclass
+class Context:
+    cost_tier: str
+    environment: str
+
+
+premium_model = init_chat_model("claude-sonnet-4-6")
+standard_model = init_chat_model("gpt-5.5")
+budget_model = init_chat_model("gpt-5.4-mini")
+
+
+@wrap_model_call
+def context_based_model(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    ctx = request.runtime.context
+
+    if ctx.environment == "production" and ctx.cost_tier == "premium":
+        model = premium_model
+    elif ctx.cost_tier == "budget":
+        model = budget_model
+    else:
+        model = standard_model
+
+    return handler(request.override(model=model))
+```
+
+### Response Format
+
+结构化输出让模型最终回答符合指定 schema，便于下游系统解析。
 
 ```python
 from pydantic import BaseModel, Field
-from typing import Literal
+
 
 class CustomerSupportTicket(BaseModel):
-    """客户支持工单结构"""
+    """Structured ticket information extracted from customer message."""
 
-    category: Literal["billing", "technical", "account", "product"] = Field(
-        description="问题类别"
-    )
-    priority: Literal["low", "medium", "high", "critical"] = Field(
-        description="紧急程度"
-    )
-    summary: str = Field(
-        description="问题摘要（一句话）"
-    )
-    customer_sentiment: Literal["frustrated", "neutral", "satisfied"] = Field(
-        description="客户情绪"
-    )
-    suggested_actions: list[str] = Field(
-        description="建议的处理步骤"
-    )
-
-class OrderAnalysis(BaseModel):
-    """订单分析结构"""
-
-    order_id: str = Field(description="订单编号")
-    status: str = Field(description="订单状态")
-    issues: list[str] = Field(description="发现的问题")
-    recommendations: list[str] = Field(description="处理建议")
-    estimated_resolution_time: str = Field(description="预计解决时间")
+    category: str = Field(description="Issue category: billing, technical, account, or product")
+    priority: str = Field(description="Urgency level: low, medium, high, or critical")
+    summary: str = Field(description="One-sentence summary of the customer's issue")
+    customer_sentiment: str = Field(description="Customer's emotional tone")
 ```
 
-### 动态选择输出格式
+动态选择响应格式：
 
 ```python
 class SimpleResponse(BaseModel):
-    """简单响应（对话初期）"""
-    answer: str = Field(description="简要回答")
+    answer: str = Field(description="A brief answer")
+
 
 class DetailedResponse(BaseModel):
-    """详细响应（深入对话）"""
-    answer: str = Field(description="详细回答")
-    reasoning: str = Field(description="推理过程")
-    confidence: float = Field(description="置信度 (0-1)")
-    follow_up_questions: list[str] = Field(description="追问建议")
+    answer: str = Field(description="A detailed answer")
+    reasoning: str = Field(description="Explanation of reasoning")
+    confidence: float = Field(description="Confidence score 0-1")
+
 
 @wrap_model_call
-def adaptive_output_format(
+def state_based_output(
     request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    handler: Callable[[ModelRequest], ModelResponse],
 ) -> ModelResponse:
-    """根据对话阶段选择输出格式"""
-
-    message_count = len(request.messages)
-
-    if message_count < 3:
-        # 对话初期：简单响应
+    if len(request.messages) < 3:
         request = request.override(response_format=SimpleResponse)
     else:
-        # 深入对话：详细响应
         request = request.override(response_format=DetailedResponse)
 
     return handler(request)
 ```
 
-### 根据任务类型选择格式
-
-```python
-class SearchResult(BaseModel):
-    """搜索结果格式"""
-    results: list[dict] = Field(description="搜索结果列表")
-    total_count: int = Field(description="总数")
-    query_interpretation: str = Field(description="查询理解")
-
-class AnalysisResult(BaseModel):
-    """分析结果格式"""
-    findings: list[str] = Field(description="发现")
-    conclusion: str = Field(description="结论")
-    data_quality: str = Field(description="数据质量评估")
-
-class ActionResult(BaseModel):
-    """操作结果格式"""
-    success: bool = Field(description="是否成功")
-    action_taken: str = Field(description="执行的操作")
-    next_steps: list[str] = Field(description="后续步骤")
-
-@wrap_model_call
-def task_based_format(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
-) -> ModelResponse:
-    """根据任务类型选择输出格式"""
-
-    last_msg = request.messages[-1].get("content", "").lower()
-
-    if any(kw in last_msg for kw in ["搜索", "查找", "查询"]):
-        request = request.override(response_format=SearchResult)
-    elif any(kw in last_msg for kw in ["分析", "评估", "总结"]):
-        request = request.override(response_format=AnalysisResult)
-    elif any(kw in last_msg for kw in ["执行", "操作", "处理"]):
-        request = request.override(response_format=ActionResult)
-
-    return handler(request)
-```
-
 ---
 
-## 工具的上下文读写
+## Tool Context：工具读写上下文
 
-### 工具读取上下文
+工具是上下文工程中最容易被低估的部分。工具不仅返回结果给模型，还可以读取 Runtime / State / Store，并写入 State / Store。
 
-工具可以通过 `ToolRuntime` 访问各种上下文数据：
+### 读取 State
 
 ```python
-from langchain.tools import tool, ToolRuntime
+from langchain.tools import ToolRuntime, tool
+
 
 @tool
-def get_user_preferences(
-    category: str,
-    runtime: ToolRuntime
-) -> str:
-    """从 Store 读取用户偏好"""
-
-    # 从 Runtime Context 获取用户 ID
-    user_id = runtime.context.user_id
-
-    # 从 Store 读取偏好
-    store = runtime.store
-    prefs = store.get(("preferences", category), user_id)
-
-    if prefs:
-        return f"用户 {category} 偏好: {prefs.value}"
-    else:
-        return f"未找到 {category} 偏好设置"
-
-@tool
-def search_with_context(
-    query: str,
-    runtime: ToolRuntime
-) -> str:
-    """带上下文的搜索"""
-
-    # 从 Runtime Context 读取配置
-    api_key = runtime.context.api_key
-    search_region = runtime.context.get("search_region", "cn")
-
-    # 从 State 读取当前上下文
-    current_topic = runtime.state.get("current_topic", "")
-
-    # 执行搜索（带上下文增强）
-    enhanced_query = f"{query} {current_topic}" if current_topic else query
-
-    # 实际搜索逻辑...
-    return f"搜索结果: {enhanced_query}"
+def check_authentication(runtime: ToolRuntime) -> str:
+    """Check if user is authenticated."""
+    is_authenticated = runtime.state.get("authenticated", False)
+    return "User is authenticated" if is_authenticated else "User is not authenticated"
 ```
 
-### 工具写入 State
+### 读取 Store
 
-使用 `Command` 更新 State：
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class Context:
+    user_id: str
+
+
+@tool
+def get_preference(preference_key: str, runtime: ToolRuntime[Context]) -> str:
+    """Get user preference from Store."""
+    user_id = runtime.context.user_id
+    existing_prefs = runtime.store.get(("preferences",), user_id)
+
+    if not existing_prefs:
+        return "No preferences found"
+
+    value = existing_prefs.value.get(preference_key)
+    return f"{preference_key}: {value}" if value else f"No preference set for {preference_key}"
+```
+
+### 读取 Runtime Context
+
+```python
+@dataclass
+class Context:
+    user_id: str
+    api_key: str
+    db_connection: str
+
+
+@tool
+def fetch_user_data(query: str, runtime: ToolRuntime[Context]) -> str:
+    """Fetch data using Runtime Context configuration."""
+    ctx = runtime.context
+    results = perform_database_query(ctx.db_connection, query, ctx.api_key)
+    return f"Found {len(results)} results for user {ctx.user_id}"
+```
+
+### 写入 State
+
+工具可以返回 `Command(update={...})` 来更新 State。
 
 ```python
 from langgraph.types import Command
 
-@tool
-def authenticate_user(
-    username: str,
-    password: str,
-    runtime: ToolRuntime
-) -> Command:
-    """认证用户并更新 State"""
-
-    # 验证逻辑
-    is_valid = verify_credentials(username, password)
-
-    if is_valid:
-        # 返回 Command 更新 State
-        return Command(
-            update={
-                "authenticated": True,
-                "username": username,
-                "login_time": datetime.now().isoformat(),
-            }
-        )
-    else:
-        return Command(
-            update={
-                "authenticated": False,
-                "auth_error": "用户名或密码错误",
-            }
-        )
 
 @tool
-def upload_file(
-    file_name: str,
-    file_content: str,
-    runtime: ToolRuntime
-) -> Command:
-    """上传文件并更新 State"""
-
-    # 处理文件
-    file_summary = summarize_file(file_content)
-
-    # 获取现有文件列表
-    existing_files = runtime.state.get("uploaded_files", [])
-
-    # 添加新文件
-    new_file = {
-        "name": file_name,
-        "summary": file_summary,
-        "uploaded_at": datetime.now().isoformat(),
-    }
-
-    return Command(
-        update={
-            "uploaded_files": existing_files + [new_file],
-            "last_upload": file_name,
-        }
-    )
+def authenticate_user(password: str, runtime: ToolRuntime) -> Command:
+    """Authenticate user and update State."""
+    return Command(update={"authenticated": password == "correct"})
 ```
 
-### 工具写入 Store
-
-直接操作 Store 进行持久化：
+### 写入 Store
 
 ```python
 @tool
-def save_user_preference(
-    key: str,
-    value: str,
-    runtime: ToolRuntime
+def save_preference(
+    preference_key: str,
+    preference_value: str,
+    runtime: ToolRuntime[Context],
 ) -> str:
-    """保存用户偏好到 Store（长期记忆）"""
-
+    """Save user preference to Store."""
     user_id = runtime.context.user_id
     store = runtime.store
 
-    # 读取现有偏好
-    existing = store.get(("preferences",), user_id)
-    prefs = existing.value if existing else {}
+    existing_prefs = store.get(("preferences",), user_id)
+    prefs = existing_prefs.value if existing_prefs else {}
+    prefs[preference_key] = preference_value
 
-    # 更新偏好
-    prefs[key] = value
-    prefs["updated_at"] = datetime.now().isoformat()
-
-    # 保存到 Store
     store.put(("preferences",), user_id, prefs)
-
-    return f"已保存偏好: {key} = {value}"
-
-@tool
-def record_interaction_insight(
-    insight_type: str,
-    insight_value: str,
-    confidence: float,
-    runtime: ToolRuntime
-) -> str:
-    """记录从交互中学到的见解"""
-
-    user_id = runtime.context.user_id
-    store = runtime.store
-
-    # 保存见解
-    store.put(
-        ("insights", user_id),
-        insight_type,
-        {
-            "value": insight_value,
-            "confidence": confidence,
-            "recorded_at": datetime.now().isoformat(),
-        }
-    )
-
-    return f"已记录见解: {insight_type}"
+    return f"Saved preference: {preference_key} = {preference_value}"
 ```
 
 ---
 
-## 生命周期中间件
+## Life-cycle Context：生命周期中间件
 
-### 消息摘要总结（SummarizationMiddleware）
+Life-cycle Context 控制核心 Agent 步骤之间发生的事情。它是跨切面能力的主要承载方式：摘要、护栏、日志、状态更新、跳转生命周期等。
 
-长对话会超出模型的上下文窗口，需要自动总结压缩。
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                     Middleware Hooks                         │
+│                                                             │
+│ before_agent                                                │
+│      ↓                                                      │
+│ before_model → wrap_model_call → after_model                │
+│      ↓                         ↑                            │
+│ wrap_tool_call  ← Tool execution                             │
+│      ↓                                                      │
+│ after_agent                                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### SummarizationMiddleware
+
+长对话最常见的生命周期模式是自动摘要。与 `wrap_model_call` 中临时裁剪消息不同，摘要会**持久化更新 State**：旧消息会被摘要替换，后续回合看到的是摘要后的历史。
 
 ```python
 from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware
-from langgraph.checkpoint.memory import InMemorySaver
 
 agent = create_agent(
-    model="gpt-4o",
+    model="gpt-5.5",
     tools=[...],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-4o-mini",           # 用于总结的模型
-            trigger=("tokens", 4000),       # 触发条件：超过 4000 tokens
-            keep=("messages", 20),          # 保留最近 20 条消息
+            model="gpt-5.4-mini",
+            trigger={"tokens": 4000},
+            keep={"messages": 20},
         ),
     ],
-    checkpointer=InMemorySaver(),  # 需要 checkpointer 持久化
 )
 ```
 
-**工作原理**：
+摘要流程：
 
-```
-对话历史超过 4000 tokens
-          ↓
-┌─────────────────────────────┐
-│  消息 1 (旧)                │
-│  消息 2 (旧)                │  ← 这些会被总结
-│  消息 3 (旧)                │
-│  ...                        │
-├─────────────────────────────┤
-│  [摘要消息]                 │  ← 用摘要替换
-├─────────────────────────────┤
-│  消息 N-19                  │
-│  消息 N-18                  │  ← 保留最近 20 条
-│  ...                        │
-│  消息 N (最新)              │
-└─────────────────────────────┘
+```text
+对话超过触发条件
+        ↓
+使用独立模型总结旧消息
+        ↓
+用摘要消息替换旧消息（写入 State）
+        ↓
+保留最近消息，继续后续对话
 ```
 
-**配置参数详解**：
+适合摘要的场景：
 
-```python
-SummarizationMiddleware(
-    # 用于生成摘要的模型
-    model="gpt-4o-mini",
+- 多轮客服对话
+- 长时间代码助手会话
+- 多步骤数据分析
+- 需要保留早期关键信息但不需要逐字历史的任务
 
-    # 触发条件（满足任一条件即触发）
-    trigger=("tokens", 4000),        # 超过 4000 tokens
-    # 或
-    trigger=("messages", 50),        # 超过 50 条消息
-    # 或
-    trigger=("fraction", 0.8),       # 超过上下文窗口的 80%
-    # 或多个条件
-    trigger=[("tokens", 4000), ("messages", 50)],  # OR 逻辑
+### 生命周期中间件的其他用途
 
-    # 保留策略
-    keep=("messages", 20),           # 保留最近 20 条消息
-    # 或
-    keep=("tokens", 2000),           # 保留最近 2000 tokens
-    # 或
-    keep=("fraction", 0.3),          # 保留上下文窗口的 30%
-
-    # 可选：自定义摘要提示词
-    summary_prompt="请总结以下对话的要点:\n{messages}",
-
-    # 可选：摘要前缀
-    summary_prefix="[对话摘要]",
-)
-```
-
-**完整示例**：
-
-```python
-from langchain.agents import create_agent
-from langchain.agents.middleware import SummarizationMiddleware
-from langgraph.checkpoint.memory import InMemorySaver
-
-checkpointer = InMemorySaver()
-
-agent = create_agent(
-    model="gpt-4o",
-    tools=[],
-    middleware=[
-        SummarizationMiddleware(
-            model="gpt-4o-mini",
-            trigger=("tokens", 4000),
-            keep=("messages", 20),
-        )
-    ],
-    checkpointer=checkpointer,
-)
-
-config = {"configurable": {"thread_id": "conversation-1"}}
-
-# 多轮对话
-agent.invoke({"messages": "你好，我叫张三"}, config)
-agent.invoke({"messages": "我在北京工作"}, config)
-agent.invoke({"messages": "我喜欢编程和摄影"}, config)
-# ... 很多轮对话后 ...
-
-# 即使早期消息被总结，模型仍能记住关键信息
-result = agent.invoke({"messages": "我叫什么名字？"}, config)
-print(result["messages"][-1].content)  # "你叫张三"
-```
-
-### 消息修剪（Message Trimming）
-
-简单的消息修剪，不进行总结：
-
-```python
-from langchain.agents.middleware import before_model, AgentState
-from langgraph.runtime import Runtime
-
-@before_model
-def trim_old_messages(state: AgentState, runtime: Runtime) -> dict | None:
-    """简单修剪：保留最近 N 条消息"""
-
-    messages = state["messages"]
-    MAX_MESSAGES = 20
-
-    if len(messages) > MAX_MESSAGES:
-        # 保留系统消息 + 最近的消息
-        system_msgs = [m for m in messages if m.get("role") == "system"]
-        recent_msgs = messages[-MAX_MESSAGES:]
-
-        return {"messages": system_msgs + recent_msgs}
-
-    return None
-
-# 基于 token 的修剪
-@before_model
-def trim_by_tokens(state: AgentState, runtime: Runtime) -> dict | None:
-    """基于 token 数量修剪消息"""
-
-    messages = state["messages"]
-    MAX_TOKENS = 4000
-
-    # 简单估算 token 数（每个字符约 0.5 token）
-    def estimate_tokens(msg):
-        return len(str(msg.get("content", ""))) // 2
-
-    total_tokens = sum(estimate_tokens(m) for m in messages)
-
-    if total_tokens > MAX_TOKENS:
-        # 从旧消息开始删除，直到低于限制
-        trimmed = []
-        current_tokens = 0
-
-        for msg in reversed(messages):
-            msg_tokens = estimate_tokens(msg)
-            if current_tokens + msg_tokens <= MAX_TOKENS:
-                trimmed.insert(0, msg)
-                current_tokens += msg_tokens
-            elif msg.get("role") == "system":
-                # 始终保留系统消息
-                trimmed.insert(0, msg)
-
-        return {"messages": trimmed}
-
-    return None
-```
+| 用途 | 推荐钩子 | 示例 |
+|---|---|---|
+| 输入护栏 | `before_agent` | 鉴权、速率限制、恶意请求阻断 |
+| 模型调用日志 | `before_model` / `after_model` | 记录消息数、token、模型名 |
+| 动态模型策略 | `wrap_model_call` | 按任务复杂度选择模型 |
+| 工具审批 | `wrap_tool_call` | 删除、发送、转账前人工确认 |
+| 最终审计 | `after_agent` | 记录最终响应、合规检查 |
 
 ---
 
@@ -1382,91 +855,49 @@ def trim_by_tokens(state: AgentState, runtime: Runtime) -> dict | None:
 
 ### 核心区别
 
-| 类型 | 实现方式 | 影响范围 | 持久化 | 典型用途 |
-|------|----------|----------|--------|----------|
-| **瞬态** | `wrap_model_call` | 单次调用 | 否 | 临时注入、过滤 |
-| **持久化** | 生命周期钩子 | 所有后续调用 | 是 | 摘要、状态更新 |
+| 类型 | 实现方式 | 是否写入 State | 影响范围 | 典型用途 |
+|---|---|---:|---|---|
+| 瞬态更新 | `wrap_model_call` + `request.override(...)` | 否 | 单次模型调用 | 临时注入消息、过滤工具、切换模型 |
+| 持久化更新 | 生命周期钩子或工具返回 `Command` | 是 | 后续回合 | 摘要、认证状态、计数器、上传文件记录 |
+| 长期持久化 | Store 写入 | 是，跨对话 | 跨会话 | 用户偏好、长期记忆、历史洞察 |
 
-### 瞬态更新
-
-使用 `@wrap_model_call` 进行瞬态修改：
+### 瞬态更新示例
 
 ```python
 @wrap_model_call
 def transient_modification(
     request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse]
+    handler: Callable[[ModelRequest], ModelResponse],
 ) -> ModelResponse:
-    """瞬态修改：只影响当前调用"""
-
-    # 1. 临时注入消息（不保存到 State）
     messages = [
         *request.messages,
-        {"role": "system", "content": "临时指令：本次请简洁回答"}
+        {"role": "user", "content": "临时要求：本次请用三句话以内回答。"},
     ]
-
-    # 2. 临时过滤工具
     tools = [t for t in request.tools if t.name != "dangerous_tool"]
 
-    # 3. 临时切换模型
-    from langchain.chat_models import init_chat_model
-    model = init_chat_model("gpt-4o-mini")
-
-    # 使用 override 创建修改后的请求
-    request = request.override(
-        messages=messages,
-        tools=tools,
-        model=model,
-    )
-
-    # 这些修改只影响本次调用，不会保存到 State
-    return handler(request)
+    return handler(request.override(messages=messages, tools=tools))
 ```
 
-### 持久化更新
-
-使用生命周期钩子进行持久化修改：
+### 持久化更新示例
 
 ```python
-from langchain.agents.middleware import before_model, after_model
+from langchain.agents.middleware import AgentState, after_model
+from langgraph.runtime import Runtime
 
-@before_model
-def persistent_before(state: AgentState, runtime: Runtime) -> dict | None:
-    """持久化修改：影响所有后续调用"""
-
-    # 返回的 dict 会合并到 State 中（持久化）
-    return {
-        "messages": modified_messages,  # 永久修改消息历史
-        "custom_field": "value",        # 添加自定义字段
-    }
 
 @after_model
-def persistent_after(state: AgentState, runtime: Runtime) -> dict | None:
-    """模型调用后的持久化修改"""
-
-    # 例如：记录调用次数
+def count_model_calls(state: AgentState, runtime: Runtime) -> dict | None:
     call_count = state.get("model_call_count", 0) + 1
-
-    return {
-        "model_call_count": call_count,
-        "last_call_time": datetime.now().isoformat(),
-    }
+    return {"model_call_count": call_count}
 ```
 
-### 选择指南
+选择指南：
 
-```
-需要修改上下文？
-      │
-      ├── 只影响本次调用 ──────→ 使用 @wrap_model_call（瞬态）
-      │   • 临时注入信息
-      │   • 临时过滤工具
-      │   • 临时切换模型
-      │
-      └── 影响所有后续调用 ────→ 使用生命周期钩子（持久化）
-          • 消息摘要
-          • 状态更新
-          • 计数器累加
+```text
+这个上下文是否应该影响后续回合？
+  ├─ 否 → 用 wrap_model_call 做瞬态修改
+  ├─ 是，但只在当前 thread 内有效 → 写入 State
+  └─ 是，而且跨会话有效 → 写入 Store
 ```
 
 ---
@@ -1477,112 +908,117 @@ def persistent_after(state: AgentState, runtime: Runtime) -> dict | None:
 
 ```python
 from dataclasses import dataclass
+from typing import Callable
+
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
-    dynamic_prompt,
-    wrap_model_call,
-    SummarizationMiddleware,
     ModelRequest,
     ModelResponse,
+    SummarizationMiddleware,
+    dynamic_prompt,
+    wrap_model_call,
 )
-from langchain.tools import tool, ToolRuntime
+from langchain.chat_models import init_chat_model
+from langchain.tools import ToolRuntime, tool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel, Field
 
-# 1. 定义上下文
+
 @dataclass
 class CustomerContext:
     customer_id: str
     customer_name: str
-    subscription_tier: str  # "free", "pro", "enterprise"
+    subscription_tier: str  # free / pro / enterprise
     language: str = "zh"
 
-# 2. 定义工具
+
 @tool
-def get_customer_orders(
-    limit: int,
-    runtime: ToolRuntime[CustomerContext]
-) -> str:
-    """获取客户订单"""
+def get_customer_orders(limit: int, runtime: ToolRuntime[CustomerContext]) -> str:
+    """Get recent orders for the current customer."""
     customer_id = runtime.context.customer_id
-    # 实际查询逻辑...
-    return f"客户 {customer_id} 的最近 {limit} 个订单: [...]"
+    return f"客户 {customer_id} 最近 {limit} 个订单：[...]"
+
 
 @tool
-def create_support_ticket(
-    issue: str,
-    priority: str,
-    runtime: ToolRuntime[CustomerContext]
-) -> str:
-    """创建支持工单"""
+def create_support_ticket(issue: str, priority: str, runtime: ToolRuntime[CustomerContext]) -> str:
+    """Create a customer support ticket."""
     ctx = runtime.context
-
-    # 企业客户自动升级优先级
     if ctx.subscription_tier == "enterprise" and priority == "normal":
         priority = "high"
+    return f"已为 {ctx.customer_name} 创建工单，优先级：{priority}，问题：{issue}"
 
-    return f"已为 {ctx.customer_name} 创建工单 (优先级: {priority})"
 
-# 3. 动态 System Prompt
 @dynamic_prompt
 def customer_service_prompt(request: ModelRequest) -> str:
     ctx = request.runtime.context
-
     tier_guide = {
-        "free": "提供基础支持",
-        "pro": "提供专业技术支持",
-        "enterprise": "提供最高级别支持，承诺 SLA",
+        "free": "提供基础支持，复杂问题建议升级套餐。",
+        "pro": "提供专业技术支持。",
+        "enterprise": "提供最高级别支持，优先处理，可承诺 SLA。",
     }
+    language = "中文" if ctx.language == "zh" else "English"
 
     return f"""你是专业客服助手。
 
-客户信息:
-- 姓名: {ctx.customer_name}
-- ID: {ctx.customer_id}
-- 套餐: {ctx.subscription_tier}
+客户信息：
+- 姓名：{ctx.customer_name}
+- ID：{ctx.customer_id}
+- 套餐：{ctx.subscription_tier}
 
-服务指南: {tier_guide.get(ctx.subscription_tier, tier_guide['free'])}
+服务指南：{tier_guide.get(ctx.subscription_tier, tier_guide['free'])}
+请使用{language}回复。"""
 
-请用{ctx.language == 'zh' and '中文' or 'English'}回复。"""
 
-# 4. 动态模型选择
+enterprise_model = init_chat_model("gpt-5.5")
+default_model = init_chat_model("gpt-5.4-mini")
+
+
 @wrap_model_call
-def tier_based_model(request: ModelRequest, handler) -> ModelResponse:
-    tier = request.runtime.context.subscription_tier
-
-    if tier == "enterprise":
-        from langchain.chat_models import init_chat_model
-        request = request.override(model=init_chat_model("gpt-4o"))
-
+def tier_based_model(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    if request.runtime.context.subscription_tier == "enterprise":
+        request = request.override(model=enterprise_model)
+    else:
+        request = request.override(model=default_model)
     return handler(request)
 
-# 5. 创建 Agent
-from langgraph.checkpoint.memory import InMemorySaver
+
+class TicketSummary(BaseModel):
+    category: str = Field(description="billing / technical / account / product")
+    priority: str = Field(description="low / medium / high / critical")
+    summary: str = Field(description="One-sentence summary")
+
+
+@wrap_model_call
+def support_output_format(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    last_message = request.messages[-1].content if request.messages else ""
+    if "工单" in str(last_message) or "ticket" in str(last_message).lower():
+        request = request.override(response_format=TicketSummary)
+    return handler(request)
+
 
 customer_service_agent = create_agent(
-    model="gpt-4o-mini",  # 默认模型
+    model="gpt-5.4-mini",
     tools=[get_customer_orders, create_support_ticket],
     middleware=[
         customer_service_prompt,
         tier_based_model,
+        support_output_format,
         SummarizationMiddleware(
-            model="gpt-4o-mini",
-            trigger=("tokens", 4000),
-            keep=("messages", 15),
+            model="gpt-5.4-mini",
+            trigger={"tokens": 4000},
+            keep={"messages": 15},
         ),
     ],
     context_schema=CustomerContext,
     checkpointer=InMemorySaver(),
-)
-
-# 6. 使用
-result = customer_service_agent.invoke(
-    {"messages": [{"role": "user", "content": "我想查看最近的订单"}]},
-    context=CustomerContext(
-        customer_id="C001",
-        customer_name="张三",
-        subscription_tier="enterprise",
-    ),
-    config={"configurable": {"thread_id": "support-123"}},
+    store=InMemoryStore(),
 )
 ```
 
@@ -1592,6 +1028,10 @@ result = customer_service_agent.invoke(
 from dataclasses import dataclass
 from typing import Literal
 
+from langchain.agents.middleware import dynamic_prompt
+from langchain.tools import ToolRuntime, tool
+
+
 @dataclass
 class LearnerContext:
     learner_id: str
@@ -1600,238 +1040,73 @@ class LearnerContext:
     learning_style: Literal["visual", "auditory", "reading", "kinesthetic"]
     preferred_language: str = "zh"
 
-# 工具：保存学习进度
+
 @tool
 def save_learning_progress(
     topic: str,
     mastery_level: float,
-    runtime: ToolRuntime[LearnerContext]
+    runtime: ToolRuntime[LearnerContext],
 ) -> str:
-    """保存学习进度到长期记忆"""
+    """Save learning progress to long-term Store."""
     learner_id = runtime.context.learner_id
-    store = runtime.store
-
-    store.put(
+    runtime.store.put(
         ("learning_progress", learner_id),
         topic,
-        {
-            "mastery": mastery_level,
-            "last_studied": datetime.now().isoformat(),
-        }
+        {"mastery": mastery_level},
     )
+    return f"已记录 {topic} 的学习进度：{mastery_level * 100:.0f}%"
 
-    return f"已记录 {topic} 的学习进度: {mastery_level*100:.0f}%"
 
-# 工具：获取学习历史
 @tool
-def get_learning_history(
-    topic: str,
-    runtime: ToolRuntime[LearnerContext]
-) -> str:
-    """从长期记忆获取学习历史"""
+def get_learning_history(topic: str, runtime: ToolRuntime[LearnerContext]) -> str:
+    """Get previous learning progress from Store."""
     learner_id = runtime.context.learner_id
-    store = runtime.store
-
-    progress = store.get(("learning_progress", learner_id), topic)
+    progress = runtime.store.get(("learning_progress", learner_id), topic)
 
     if progress:
-        return f"{topic} 学习历史: 掌握度 {progress.value['mastery']*100:.0f}%, 最后学习: {progress.value['last_studied']}"
-    else:
-        return f"没有 {topic} 的学习记录"
+        return f"{topic} 历史掌握度：{progress.value['mastery'] * 100:.0f}%"
+    return f"没有 {topic} 的学习记录"
 
-# 自适应提示词
+
 @dynamic_prompt
 def adaptive_learning_prompt(request: ModelRequest) -> str:
     ctx = request.runtime.context
-    store = request.runtime.store
 
-    # 基础指令
-    base = f"你是 {ctx.learner_name} 的个人学习助手。"
-
-    # 根据专业水平调整
     level_guide = {
-        "beginner": "使用简单语言，避免术语，多举例说明",
-        "intermediate": "可以使用专业术语，但需要适当解释",
-        "expert": "可以进行深入的技术讨论",
+        "beginner": "使用简单语言，避免术语，多举例说明。",
+        "intermediate": "可以使用专业术语，但需要适当解释。",
+        "expert": "可以进行深入技术讨论。",
     }
-    base += f"\n\n教学风格: {level_guide[ctx.expertise_level]}"
-
-    # 根据学习风格调整
     style_guide = {
-        "visual": "多使用图表、流程图、示意图描述",
-        "auditory": "使用对话式讲解，强调重点",
-        "reading": "提供详细的文字说明和参考资料",
-        "kinesthetic": "设计动手练习和实践项目",
+        "visual": "多使用图表、流程图、示意图描述。",
+        "auditory": "使用对话式讲解，强调重点。",
+        "reading": "提供详细文字说明和参考资料。",
+        "kinesthetic": "设计动手练习和实践任务。",
     }
-    base += f"\n学习风格偏好: {style_guide[ctx.learning_style]}"
 
-    # 从 Store 读取学习历史
-    # (简化示例)
+    return f"""你是 {ctx.learner_name} 的个人学习助手。
 
-    return base
+专业水平：{level_guide[ctx.expertise_level]}
+学习风格：{style_guide[ctx.learning_style]}
+回复语言：{ctx.preferred_language}
 
-# 动态响应格式
-class BeginnerResponse(BaseModel):
-    explanation: str = Field(description="通俗易懂的解释")
-    examples: list[str] = Field(description="生活中的例子")
-    key_takeaway: str = Field(description="一句话总结")
-
-class ExpertResponse(BaseModel):
-    explanation: str = Field(description="技术解释")
-    technical_details: str = Field(description="深入技术细节")
-    advanced_topics: list[str] = Field(description="相关进阶主题")
-    references: list[str] = Field(description="参考资料")
-
-@wrap_model_call
-def adaptive_response_format(request: ModelRequest, handler) -> ModelResponse:
-    level = request.runtime.context.expertise_level
-
-    if level == "beginner":
-        request = request.override(response_format=BeginnerResponse)
-    elif level == "expert":
-        request = request.override(response_format=ExpertResponse)
-
-    return handler(request)
-
-# 创建学习助手
-learning_assistant = create_agent(
-    model="gpt-4o",
-    tools=[save_learning_progress, get_learning_history],
-    middleware=[
-        adaptive_learning_prompt,
-        adaptive_response_format,
-        SummarizationMiddleware(
-            model="gpt-4o-mini",
-            trigger=("tokens", 6000),
-            keep=("messages", 30),
-        ),
-    ],
-    context_schema=LearnerContext,
-    checkpointer=InMemorySaver(),
-    store=InMemoryStore(),
-)
+如果用户询问已学内容，优先调用学习历史工具。"""
 ```
 
 ---
 
 ## 最佳实践
 
-### 1. 从简单开始
-
-```python
-# ✅ 好的做法：先用静态配置
-agent = create_agent(
-    model="gpt-4o",
-    tools=[tool1, tool2],
-    prompt="你是一个助手。",  # 先用静态 prompt
-)
-
-# 只在需要时添加动态功能
-# ❌ 不好的做法：一开始就过度工程化
-```
-
-### 2. 增量添加上下文工程
-
-```python
-# 第 1 步：基础 Agent
-agent = create_agent(model="gpt-4o", tools=[...])
-
-# 第 2 步：添加动态 prompt
-agent = create_agent(
-    model="gpt-4o",
-    tools=[...],
-    middleware=[dynamic_prompt_middleware],
-)
-
-# 第 3 步：添加消息管理
-agent = create_agent(
-    model="gpt-4o",
-    tools=[...],
-    middleware=[
-        dynamic_prompt_middleware,
-        SummarizationMiddleware(...),
-    ],
-)
-
-# 第 4 步：添加动态工具/模型选择
-# ...
-```
-
-### 3. 监控和调试
-
-```python
-@wrap_model_call
-def debug_middleware(request: ModelRequest, handler) -> ModelResponse:
-    """调试中间件：记录上下文信息"""
-
-    print(f"=== 模型调用 ===")
-    print(f"消息数: {len(request.messages)}")
-    print(f"工具数: {len(request.tools)}")
-    print(f"模型: {request.model}")
-
-    response = handler(request)
-
-    print(f"响应长度: {len(str(response))}")
-    print(f"================")
-
-    return response
-```
-
-### 4. 测试上下文工程
-
-```python
-def test_dynamic_prompt():
-    """测试动态 prompt 是否正确生成"""
-
-    # 模拟不同上下文
-    contexts = [
-        Context(user_role="admin"),
-        Context(user_role="viewer"),
-        Context(user_role="guest"),
-    ]
-
-    for ctx in contexts:
-        # 创建模拟请求
-        mock_request = MockModelRequest(runtime=MockRuntime(context=ctx))
-
-        # 调用动态 prompt 函数
-        prompt = my_dynamic_prompt(mock_request)
-
-        # 验证 prompt 内容
-        if ctx.user_role == "admin":
-            assert "管理员" in prompt
-        elif ctx.user_role == "viewer":
-            assert "只读" in prompt
-```
-
-### 5. 文档化上下文策略
-
-```python
-"""
-上下文工程策略文档
-==================
-
-1. System Prompt 策略
-   - 根据用户角色调整权限说明
-   - 根据订阅层级调整服务水平
-   - 根据语言偏好切换语言
-
-2. 消息管理策略
-   - 触发条件: 超过 4000 tokens
-   - 保留策略: 最近 20 条消息
-   - 摘要模型: gpt-4o-mini
-
-3. 工具选择策略
-   - 未认证: 只提供公开工具
-   - 普通用户: 排除管理工具
-   - 管理员: 所有工具
-
-4. 模型选择策略
-   - 短对话 (<10 消息): gpt-4o-mini
-   - 中等对话: gpt-4o
-   - 长对话 (>20 消息): claude-sonnet-4-5-20250929
-"""
-```
+1. **从简单开始**：先使用静态 prompt 和固定工具，只有出现明确问题时再加入动态上下文。
+2. **区分瞬态与持久化**：临时注入用 `wrap_model_call`，需要后续回合记住的写入 State，需要跨会话记住的写入 Store。
+3. **工具说明要写“何时调用”**：工具描述不是文档注释，而是模型选择工具的重要依据。
+4. **不要给模型过多工具**：工具过多会增加上下文负担和误用概率，应按权限、阶段、任务动态过滤。
+5. **动态 prompt 不要无限膨胀**：从 Store 读取记忆时要筛选，只注入与当前任务相关的内容。
+6. **摘要是持久化操作**：Summarization 会替换历史消息，摘要质量会影响后续所有回合。
+7. **监控上下文决策**：记录工具数量、消息长度、选择的模型、注入的上下文来源。
+8. **测试每个上下文策略**：为角色、权限、长对话、未认证、不同输出格式写测试。
+9. **保护敏感信息**：API Key 和数据库连接可以存在 Runtime Context，但不要注入到 messages 或模型可见文本中。
+10. **文档化策略**：明确哪些上下文来自 State、Store、Runtime，哪些是瞬态，哪些会持久化。
 
 ---
 
@@ -1839,80 +1114,73 @@ def test_dynamic_prompt():
 
 ### 数据源访问方式
 
-| 数据源 | 在中间件中访问 | 在工具中访问 |
-|--------|----------------|--------------|
-| Runtime Context | `request.runtime.context` | `runtime.context` |
-| State | `request.state` 或 `state` | `runtime.state` |
-| Store | `request.runtime.store` | `runtime.store` |
-| Messages | `request.messages` | - |
+| 数据源 | 中间件访问 | 工具访问 | 生命周期 |
+|---|---|---|---|
+| Runtime Context | `request.runtime.context` | `runtime.context` | 单次调用 / 会话级 |
+| State | `request.state` 或 hook 参数 `state` | `runtime.state` | 当前 thread |
+| Store | `request.runtime.store` | `runtime.store` | 跨会话 |
+| Messages | `request.messages` | 通常不直接访问 | 当前模型调用 |
 
-### 常用装饰器
+### 常用中间件装饰器
 
 ```python
 from langchain.agents.middleware import (
-    dynamic_prompt,      # 动态 System Prompt
-    wrap_model_call,     # 包装模型调用（瞬态）
-    before_model,        # 模型调用前（持久化）
-    after_model,         # 模型调用后（持久化）
-    before_agent,        # Agent 开始前
-    after_agent,         # Agent 结束后
-    wrap_tool_call,      # 包装工具调用
+    after_agent,
+    after_model,
+    before_agent,
+    before_model,
+    dynamic_prompt,
+    wrap_model_call,
+    wrap_tool_call,
 )
 ```
 
-### 请求修改方法
+### `request.override` 可修改内容
 
 ```python
-# 在 @wrap_model_call 中使用 override
 request = request.override(
-    messages=new_messages,      # 修改消息
-    tools=filtered_tools,       # 修改工具
-    model=different_model,      # 修改模型
-    response_format=MyFormat,   # 修改输出格式
+    messages=new_messages,
+    tools=filtered_tools,
+    model=selected_model,
+    response_format=MyResponseFormat,
 )
 ```
 
-### SummarizationMiddleware 配置
+### SummarizationMiddleware
 
 ```python
+from langchain.agents.middleware import SummarizationMiddleware
+
 SummarizationMiddleware(
-    model="gpt-4o-mini",
-
-    # 触发条件
-    trigger=("tokens", 4000),      # token 数
-    trigger=("messages", 50),      # 消息数
-    trigger=("fraction", 0.8),     # 上下文占比
-
-    # 保留策略
-    keep=("messages", 20),         # 保留消息数
-    keep=("tokens", 2000),         # 保留 token 数
-    keep=("fraction", 0.3),        # 保留占比
+    model="gpt-5.4-mini",
+    trigger={"tokens": 4000},
+    keep={"messages": 20},
 )
 ```
 
-### 工具上下文读写
+### 工具读写上下文
 
 ```python
-from langchain.tools import tool, ToolRuntime
+from langchain.tools import ToolRuntime, tool
 from langgraph.types import Command
 
-# 读取上下文
+
 @tool
 def read_context(runtime: ToolRuntime) -> str:
-    user_id = runtime.context.user_id      # Runtime Context
-    data = runtime.state.get("key")        # State
-    prefs = runtime.store.get(ns, key)     # Store
+    user_id = runtime.context.user_id
+    authenticated = runtime.state.get("authenticated")
+    prefs = runtime.store.get(("preferences",), user_id)
     return "..."
 
-# 写入 State
+
 @tool
 def write_state(runtime: ToolRuntime) -> Command:
-    return Command(update={"key": "value"})
+    return Command(update={"authenticated": True})
 
-# 写入 Store
+
 @tool
 def write_store(runtime: ToolRuntime) -> str:
-    runtime.store.put(namespace, key, value)
+    runtime.store.put(("preferences",), runtime.context.user_id, {"style": "concise"})
     return "saved"
 ```
 
@@ -1920,37 +1188,12 @@ def write_store(runtime: ToolRuntime) -> str:
 
 ## 总结
 
-**Context Engineering（上下文工程）** 是构建优秀 AI Agent 的核心技能。
+上下文工程是构建可靠 Agent 的核心能力。LangChain 将它拆成了清晰的工程面：
 
-### 核心要点
+- **Model Context**：控制每次模型调用看到什么。
+- **Tool Context**：控制工具能读取和写入什么。
+- **Life-cycle Context**：控制模型和工具之间的生命周期逻辑。
+- **Runtime Context / State / Store**：分别承载静态配置、短期记忆和长期记忆。
+- **Middleware**：把这些能力连接起来，让上下文工程可组合、可测试、可维护。
 
-1. **三种上下文类型**
-   - Model Context（瞬态）：每次调用的输入
-   - Tool Context（持久化）：工具的读写
-   - Life-cycle Context（持久化）：调用之间的处理
-
-2. **三种数据源**
-   - Runtime Context：静态配置（用户 ID、API 密钥）
-   - State：短期记忆（消息历史、临时数据）
-   - Store：长期记忆（用户偏好、历史见解）
-
-3. **五大上下文工程技术**
-   - 动态 System Prompt
-   - 消息注入与管理
-   - 动态工具选择
-   - 动态模型选择
-   - 结构化输出格式
-
-4. **瞬态 vs 持久化**
-   - `wrap_model_call`：瞬态修改，只影响单次调用
-   - 生命周期钩子：持久化修改，影响所有后续调用
-
-### 最佳实践
-
-- 从简单开始，按需添加复杂性
-- 使用内置中间件（SummarizationMiddleware 等）
-- 监控和记录上下文决策
-- 充分测试不同场景
-- 文档化上下文策略
-
-通过掌握上下文工程，你可以让 LLM 在每次调用时都获得最佳上下文，从而构建出更智能、更可靠的 AI Agent！
+最重要的原则是：不要把所有东西都塞进 prompt。把临时信息、短期状态、长期记忆、工具能力和生命周期逻辑放在合适的位置，Agent 才会更可靠、更可控，也更容易演进。
