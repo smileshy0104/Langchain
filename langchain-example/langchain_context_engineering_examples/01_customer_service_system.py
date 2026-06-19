@@ -71,7 +71,6 @@ def get_custom_base_url() -> str:
         base_url = f"{base_url}/v1"
     return base_url
 
-
 def create_configured_model(model_name: str, temperature: float) -> Any:
     """根据环境变量创建模型。
 
@@ -151,8 +150,9 @@ def customer_service_prompt(request: ModelRequest) -> str:
 服务指南：{tier_guide.get(ctx.subscription_tier, tier_guide['free'])}
 请使用{language}回复。"""
 
-
+# 企业模型
 enterprise_model = create_configured_model(ENTERPRISE_MODEL_NAME, ENTERPRISE_TEMPERATURE)
+# 默认模型
 default_model = create_configured_model(DEFAULT_MODEL_NAME, DEFAULT_TEMPERATURE)
 
 
@@ -229,6 +229,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    # 命令行参数
     args = parse_args()
     # Runtime Context 在 invoke 时传入，只对本次会话/调用生效。
     context = CustomerContext(
@@ -250,7 +251,6 @@ def main() -> None:
     if structured_response is not None:
         print("\n结构化工单摘要：")
         print(structured_response)
-
 
 if __name__ == "__main__":
     main()
