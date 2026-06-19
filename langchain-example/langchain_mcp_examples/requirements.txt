@@ -1,0 +1,11 @@
+# LangChain MCP 示例依赖
+langchain>=1.0.0
+langchain-core>=1.0.0
+langchain-openai>=1.0.0
+langchain-mcp-adapters>=0.1.0
+langgraph>=1.0.0
+mcp>=1.28.0
+python-dotenv>=1.0.0
+
+# 使用 LANGCHAIN_MODEL_PROVIDER=zhipuai 时再安装
+# zhipuai>=2.0.0
