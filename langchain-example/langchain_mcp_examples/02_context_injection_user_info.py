@@ -28,7 +28,7 @@ class AppContext:
     user_id: str
     api_key: str = "demo-api-key"
 
-
+# 工具拦截器
 async def inject_user_context(request: MCPToolCallRequest, handler):
     """Inject runtime context into MCP tool args before the server sees the call."""
 
@@ -44,7 +44,7 @@ async def inject_user_context(request: MCPToolCallRequest, handler):
     )
     return await handler(request)
 
-
+# 运行
 async def run_agent(question: str, context: AppContext, thread_id: str) -> str:
     client = MultiServerMCPClient(
         {

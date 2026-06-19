@@ -39,7 +39,7 @@ async def run_agent(question: str) -> str:
             },
         }
     )
-
+    # 从MCP Server 获取工具
     tools = await client.get_tools()
     agent = create_agent(create_configured_model(), tools)
 
