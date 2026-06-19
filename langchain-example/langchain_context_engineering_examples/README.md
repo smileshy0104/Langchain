@@ -5,6 +5,7 @@
 ## 目录
 
 - [01_customer_service_system.py](01_customer_service_system.py) - 案例 1：智能客服系统
+- [02_adaptive_learning_assistant.py](02_adaptive_learning_assistant.py) - 案例 2：自适应学习助手
 
 ## 快速开始
 
@@ -58,6 +59,17 @@ python 01_customer_service_system.py \
   --question "请查一下我最近的订单，并帮我为延迟配送创建工单。"
 ```
 
+运行案例 2：
+
+```bash
+python 02_adaptive_learning_assistant.py \
+  --learner-id learner001 \
+  --learner-name 小林 \
+  --expertise-level beginner \
+  --learning-style visual \
+  --question "请用适合我的方式讲解 LangChain 的 Tool Context，并给我一个小练习。"
+```
+
 ## 案例说明
 
 ### 01_customer_service_system.py
@@ -70,3 +82,13 @@ python 01_customer_service_system.py \
 - `support_output_format`：涉及工单时动态启用 `TicketSummary` 结构化输出。
 - `get_customer_orders` / `create_support_ticket`：工具通过 `ToolRuntime[CustomerContext]` 读取客户上下文。
 - `InMemorySaver` / `InMemoryStore`：分别承载 thread 内短期记忆和跨步骤工单存储。
+
+### 02_adaptive_learning_assistant.py
+
+覆盖的上下文工程能力：
+
+- `LearnerContext`：定义 Runtime Context，包含学习者 ID、姓名、水平、学习风格和语言。
+- `adaptive_learning_prompt`：使用 `@dynamic_prompt` 根据学习者画像调整讲解方式。
+- `save_learning_progress`：工具通过 `ToolRuntime[LearnerContext]` 把学习进度写入 Store。
+- `get_learning_history`：工具从 Store 读取同一学习者的历史掌握度。
+- `InMemorySaver` / `InMemoryStore`：分别承载 thread 内短期记忆和跨步骤学习记录。
