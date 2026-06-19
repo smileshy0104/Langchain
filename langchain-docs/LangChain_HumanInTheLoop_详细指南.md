@@ -1,5 +1,7 @@
 # LangChain Human-in-the-Loop (人机协作) 详细指南
 
+> 基于官方文档 [https://docs.langchain.com/oss/python/langchain/human-in-the-loop](https://docs.langchain.com/oss/python/langchain/human-in-the-loop) 的中文增强版，补充 v1.x `HumanInTheLoopMiddleware`、`GraphOutput.interrupts`、四类决策、条件中断、流式恢复和生产实践。
+
 ## 目录
 
 1. [概述](#概述)
@@ -40,7 +42,8 @@
 │     │                                │                      │
 │     │                                ├─→ 批准 (approve)     │
 │     │                                ├─→ 修改 (edit)        │
-│     │                                └─→ 拒绝 (reject)     │
+│     │                                ├─→ 拒绝 (reject)     │
+│     │                                └─→ 响应 (respond)    │
 │     │                                │                      │
 │     │                                └─→ 继续执行            │
 │     │                                                       │
@@ -71,7 +74,7 @@
 
 ## 核心概念
 
-### 三大决策类型
+### 四大决策类型
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -88,6 +91,10 @@
 │  3. 拒绝 (reject) ──→ 拒绝执行并提供反馈                        │
 │     ├─ 用途：阻止不当操作，指导正确行为                         │
 │     └─ 示例：拒绝危险的删除操作，说明原因                       │
+│                                                             │
+│  4. 响应 (respond) ──→ 跳过工具执行，把人工回复作为工具结果       │
+│     ├─ 用途：由人工充当工具返回信息                             │
+│     └─ 示例：回答 ask_user 工具提出的问题                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -95,22 +102,32 @@
 
 | 组件 | 说明 | 来源 |
 |------|------|------|
-| `HumanInTheLoopMiddleware` | HITL 中间件 | `langchain.agents.middleware` |
-| `interrupt` | 中断原语 | `langgraph.types` |
-| `Command` | 命令对象（用于恢复执行） | `langgraph.types` |
-| `checkpointer` | 持久化层（必需） | `langgraph.checkpoint` |
+| `HumanInTheLoopMiddleware` | HITL 中间件，拦截指定工具调用 | `langchain.agents.middleware` |
+| `GraphOutput.interrupts` | `version="v2"` 调用返回的中断列表 | `create_agent(...).invoke(...)` |
+| `Command` | 命令对象，用于带决策恢复执行 | `langgraph.types` |
+| `interrupt` | LangGraph 底层中断原语 | `langgraph.types` |
+| `checkpointer` | 持久化层，HITL 必需 | `langgraph.checkpoint` |
+| `thread_id` | 会话标识，恢复时必须保持一致 | `config["configurable"]` |
 
 ### 中断机制
 
 HITL 使用 LangGraph 的 `interrupt` 原语来暂停执行：
 
 ```python
-# interrupt 会保存当前图状态
-# 执行可以在任何时候恢复
-interrupt({
-    "action_requests": [...],  # 需要审核的操作
-    "review_configs": [...]     # 每个操作的审核配置
-})
+# HumanInTheLoopMiddleware 内部基于 interrupt 暂停执行
+# 推荐在应用层使用 version="v2" 读取 GraphOutput.interrupts
+result = agent.invoke(input_data, config=config, version="v2")
+
+for interrupt in result.interrupts:
+    print(interrupt.value["action_requests"])
+    print(interrupt.value["review_configs"])
+
+# 恢复时使用同一个 thread_id
+agent.invoke(
+    Command(resume={"decisions": [{"type": "approve"}]}),
+    config=config,
+    version="v2",
+)
 ```
 
 ---
@@ -159,7 +176,7 @@ agent = create_agent(
         HumanInTheLoopMiddleware(
             interrupt_on={
                 # 所有敏感操作需要审核
-                "write_file": True,       # 允许所有决策类型
+                "write_file": True,       # 允许 approve/edit/reject/respond
                 "execute_sql": {
                     "allowed_decisions": ["approve", "reject"],  # 不允许修改
                 },
@@ -185,18 +202,21 @@ config = {"configurable": {"thread_id": "session-123"}}
 # 执行 Agent
 result = agent.invoke(
     {"messages": [{"role": "user", "content": "删除所有旧记录"}]},
-    config=config
+    config=config,
+    version="v2",
 )
 
 # 检查是否需要人工审核
-if "__interrupt__" in result:
+if result.interrupts:
     print("需要人工审核:")
-    print(result["__interrupt__"])
+    for interrupt in result.interrupts:
+        print(interrupt.value)
 
     # 批准操作
     result = agent.invoke(
         Command(resume={"decisions": [{"type": "approve"}]}),
-        config=config
+        config=config,
+        version="v2",
     )
 ```
 
@@ -216,7 +236,8 @@ agent.invoke(
             {"type": "approve"}
         ]
     }),
-    config=config
+    config=config,
+    version="v2",
 )
 ```
 
@@ -247,7 +268,8 @@ agent.invoke(
             }
         ]
     }),
-    config=config
+    config=config,
+    version="v2",
 )
 ```
 
@@ -258,7 +280,7 @@ agent.invoke(
 
 ### Reject（拒绝）
 
-拒绝执行工具调用，并提供反馈指导 Agent。
+拒绝执行工具调用，并提供反馈指导 Agent。拒绝会向对话中加入一条工具消息，告诉模型该工具调用没有被执行以及原因。
 
 ```python
 # 场景：拒绝危险的删除操作
@@ -271,7 +293,8 @@ agent.invoke(
             }
         ]
     }),
-    config=config
+    config=config,
+    version="v2",
 )
 ```
 
@@ -279,6 +302,33 @@ agent.invoke(
 - 操作存在安全风险
 - 不符合业务规则
 - 需要提供正确的操作指导
+
+### Respond（人工响应）
+
+跳过真实工具执行，把人工输入作为该工具调用的返回结果。它适合 `ask_user`、`request_clarification` 这类“向人提问”的工具。
+
+```python
+# 场景：Agent 调用了 ask_user，需要人工直接回答
+agent.invoke(
+    Command(resume={
+        "decisions": [
+            {
+                "type": "respond",
+                "message": "请选择标准版套餐，预算上限为 3000 元。"
+            }
+        ]
+    }),
+    config=config,
+    version="v2",
+)
+```
+
+**适用场景**：
+- 人工就是信息来源，例如回答 Agent 的澄清问题
+- 工具本身没有外部副作用，只是收集用户输入
+- 需要把人工回复作为 `ToolMessage` 继续交给模型推理
+
+**注意**：不要用 `respond` 来拒绝删除文件、转账、发邮件等有副作用的工具。`respond` 的消息会被视为成功的工具结果；拒绝操作应使用 `reject`。
 
 ### 多决策处理
 
@@ -299,10 +349,15 @@ agent.invoke(
             {
                 "type": "reject",  # 第三个操作：拒绝
                 "message": "此操作不符合公司政策"
+            },
+            {
+                "type": "respond",  # 第四个操作：人工回答 ask_user
+                "message": "使用季度预算，审批编号为 BUD-2026-Q2"
             }
         ]
     }),
-    config=config
+    config=config,
+    version="v2",
 )
 ```
 
@@ -316,9 +371,9 @@ agent.invoke(
 
 | 配置值 | 说明 | 示例 |
 |--------|------|------|
-| `True` | 启用所有决策类型 | `"write_file": True` |
+| `True` | 启用所有决策类型：`approve`、`edit`、`reject`、`respond` | `"write_file": True` |
 | `False` | 自动批准，无需审核 | `"read_data": False` |
-| `dict` | 自定义配置 | `{"allowed_decisions": [...]}` |
+| `dict` | 自定义配置，可设置 `allowed_decisions`、`description`、`when` | `{"allowed_decisions": [...]}` |
 
 ### 基本配置
 
@@ -348,7 +403,7 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 HumanInTheLoopMiddleware(
     interrupt_on={
         "delete_file": {
-            # 允许的决策类型
+            # 允许的决策类型：approve/edit/reject/respond
             "allowed_decisions": ["approve", "edit", "reject"],
 
             # 自定义描述（静态字符串）
@@ -360,6 +415,34 @@ HumanInTheLoopMiddleware(
                 f"此操作不可恢复！"
             ),
         }
+    }
+)
+```
+
+### 条件中断 when
+
+默认情况下，只要工具名出现在 `interrupt_on` 中，每次调用都会暂停。对于只想拦截部分调用的场景，可以在工具配置里添加 `when` 谓词。
+
+`when` 接收一个 `ToolCallRequest`，返回 `True` 表示中断，返回 `False` 表示自动批准。这个能力要求 `langchain>=1.3.3`。
+
+```python
+HumanInTheLoopMiddleware(
+    interrupt_on={
+        "execute_sql": {
+            "allowed_decisions": ["approve", "reject"],
+            "description": "危险 SQL 需要审批",
+            "when": lambda request: any(
+                keyword in request.tool_call["args"]["query"].upper()
+                for keyword in ["DELETE", "UPDATE", "DROP", "TRUNCATE"]
+            ),
+        },
+        "send_email": {
+            "allowed_decisions": ["approve", "edit", "reject"],
+            "when": lambda request: any(
+                not email.endswith("@company.com")
+                for email in request.tool_call["args"].get("to", [])
+            ),
+        },
     }
 )
 ```
@@ -423,17 +506,24 @@ agent = create_agent(
 
 ### 检测中断
 
+推荐使用 `version="v2"`。此时 `invoke()` 返回 `GraphOutput`，其中：
+
+- `result.value`：当前图输出值
+- `result.interrupts`：待人工审核的中断列表
+
 ```python
 config = {"configurable": {"thread_id": "session-123"}}
 
 result = agent.invoke(
     {"messages": [{"role": "user", "content": "执行敏感操作"}]},
-    config=config
+    config=config,
+    version="v2",
 )
 
 # 检查是否有中断
-if "__interrupt__" in result:
-    interrupt_data = result["__interrupt__"]
+if result.interrupts:
+    interrupt = result.interrupts[0]
+    interrupt_data = interrupt.value
 
     # 遍历需要审核的操作
     for action_request in interrupt_data["action_requests"]:
@@ -448,33 +538,35 @@ if "__interrupt__" in result:
         print(f"允许的决策: {review_config['allowed_decisions']}")
 ```
 
+如果你在维护旧版代码，可能会看到 `result["__interrupt__"]`。旧结构通常是一个列表，第一项的 `.value` 或 `["value"]` 才是实际中断数据。新代码优先使用 `GraphOutput.interrupts`，会少很多结构判断。
+
 ### 中断数据结构
 
 ```python
-{
-    "__interrupt__": [
-        {
-            "value": {
-                "action_requests": [
-                    {
-                        "name": "execute_sql",
-                        "arguments": {"query": "DELETE FROM ..."},
-                        "description": "工具执行需要审批\n\n工具: execute_sql\n参数: {...}"
-                    }
-                ],
-                "review_configs": [
-                    {
-                        "action_name": "execute_sql",
-                        "allowed_decisions": ["approve", "reject"]
-                    }
-                ]
-            }
+result.interrupts == (
+    Interrupt(
+        value={
+            "action_requests": [
+                {
+                    "name": "execute_sql",
+                    "arguments": {"query": "DELETE FROM ..."},
+                    "description": "工具执行需要审批\n\n工具: execute_sql\n参数: {...}",
+                }
+            ],
+            "review_configs": [
+                {
+                    "action_name": "execute_sql",
+                    "allowed_decisions": ["approve", "reject"],
+                }
+            ],
         }
-    ]
-}
+    ),
+)
 ```
 
 ### 响应决策
+
+恢复执行时必须使用同一个 `thread_id`，并且 `decisions` 的数量和顺序要与 `action_requests` 一一对应。
 
 ```python
 from langgraph.types import Command
@@ -482,7 +574,8 @@ from langgraph.types import Command
 # 方式 1: 批准
 agent.invoke(
     Command(resume={"decisions": [{"type": "approve"}]}),
-    config=config
+    config=config,
+    version="v2",
 )
 
 # 方式 2: 修改
@@ -496,7 +589,8 @@ agent.invoke(
             }
         }]
     }),
-    config=config
+    config=config,
+    version="v2",
 )
 
 # 方式 3: 拒绝
@@ -507,42 +601,59 @@ agent.invoke(
             "message": "不能删除数据，请使用 SELECT 查询"
         }]
     }),
-    config=config
+    config=config,
+    version="v2",
+)
+
+# 方式 4: 人工响应
+agent.invoke(
+    Command(resume={
+        "decisions": [{
+            "type": "respond",
+            "message": "用户确认：只处理 2026 年第二季度数据"
+        }]
+    }),
+    config=config,
+    version="v2",
 )
 ```
 
 ### 审核工作流示例
 
 ```python
+from langgraph.types import Command
+
 def review_workflow(agent, user_message, config):
     """完整的审核工作流"""
     # 第一步：执行 Agent
     result = agent.invoke(
         {"messages": [{"role": "user", "content": user_message}]},
-        config=config
+        config=config,
+        version="v2",
     )
 
     # 第二步：检查是否需要审核
-    while "__interrupt__" in result:
-        interrupt = result["__interrupt__"]
+    while result.interrupts:
+        interrupt = result.interrupts[0]
+        payload = interrupt.value
 
         # 第三步：展示待审核操作
         print("\n=== 需要审核的操作 ===")
-        for i, action in enumerate(interrupt["value"]["action_requests"]):
+        for i, action in enumerate(payload["action_requests"]):
             print(f"\n[{i+1}] {action['name']}")
             print(f"参数: {action['arguments']}")
             print(f"描述: {action['description']}")
 
         # 第四步：收集决策
         decisions = []
-        for i, action in enumerate(interrupt["value"]["action_requests"]):
-            review_config = interrupt["value"]["review_configs"][i]
+        for i, action in enumerate(payload["action_requests"]):
+            review_config = payload["review_configs"][i]
             allowed = review_config["allowed_decisions"]
 
             print(f"\n操作 {i+1}: {action['name']}")
             print(f"允许的决策: {allowed}")
 
-            decision_type = input("选择决策 (approve/edit/reject): ").strip()
+            decision_type = input("选择决策 (approve/edit/reject/respond): ").strip()
 
             if decision_type == "approve":
                 decisions.append({"type": "approve"})
@@ -563,11 +674,18 @@ def review_workflow(agent, user_message, config):
                     "type": "reject",
                     "message": message
                 })
+            elif decision_type == "respond":
+                message = input("人工响应内容: ")
+                decisions.append({
+                    "type": "respond",
+                    "message": message
+                })
 
         # 第五步：恢复执行
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
-            config=config
+            config=config,
+            version="v2",
         )
 
     # 返回最终结果
@@ -578,7 +696,9 @@ def review_workflow(agent, user_message, config):
 
 ## 流式处理
 
-### 使用 stream() 处理中断
+### 使用 stream_events() 处理中断
+
+官方文档推荐用 `stream_events()` 获取实时事件。`stream.messages` 适合显示模型 token，`stream.values` 适合检查状态快照和中断。当前文档示例使用 `version="v3"`。
 
 ```python
 from langgraph.types import Command
@@ -589,38 +709,36 @@ config = {"configurable": {"thread_id": "session-123"}}
 interrupts = []
 
 # 流式执行，收集 tokens 和中断
-for mode, chunk in agent.stream(
+for event in agent.stream_events(
     {"messages": [{"role": "user", "content": "执行敏感操作"}]},
     config=config,
-    stream_mode=["updates", "messages"],
+    version="v3",
 ):
-    if mode == "messages":
-        # LLM token 流式输出
-        token, metadata = chunk
-        if hasattr(token, 'content') and token.content:
-            print(token.content, end="", flush=True)
+    if event["event"] == "stream.messages":
+        chunk = event["data"]["chunk"]
+        if getattr(chunk, "content", None):
+            print(chunk.content, end="", flush=True)
 
-    elif mode == "updates":
-        # 检查中断
-        if "__interrupt__" in chunk:
+    elif event["event"] == "stream.values":
+        output = event["data"]
+        if getattr(output, "interrupts", None):
             print("\n\n检测到中断:")
-            interrupts.append(chunk["__interrupt__"])
-            print(chunk["__interrupt__"])
+            interrupts.extend(output.interrupts)
 
 # 处理中断
 if interrupts:
     for interrupt in interrupts:
         decisions = collect_user_decisions(interrupt)
         # 继续流式执行
-        for mode, chunk in agent.stream(
+        for event in agent.stream_events(
             Command(resume={"decisions": decisions}),
             config=config,
-            stream_mode=["updates", "messages"],
+            version="v3",
         ):
-            if mode == "messages":
-                token, metadata = chunk
-                if hasattr(token, 'content') and token.content:
-                    print(token.content, end="", flush=True)
+            if event["event"] == "stream.messages":
+                chunk = event["data"]["chunk"]
+                if getattr(chunk, "content", None):
+                    print(chunk.content, end="", flush=True)
 ```
 
 ### 完整的流式处理示例
@@ -628,58 +746,55 @@ if interrupts:
 ```python
 async def streaming_with_hitl(agent, user_message, config):
     """带 HITL 的流式处理"""
-    import asyncio
-
-    config = {"configurable": {"thread_id": "session-123"}}
+    next_input = {"messages": [{"role": "user", "content": user_message}]}
 
     while True:
-        interrupts = []
+        pending_interrupts = []
 
-        # 流式执行直到中断或完成
-        async for mode, chunk in agent.astream(
-            {"messages": [{"role": "user", "content": user_message}]},
+        async for event in agent.astream_events(
+            next_input,
             config=config,
-            stream_mode=["updates", "messages"],
+            version="v3",
         ):
-            if mode == "messages":
-                token, metadata = chunk
-                if hasattr(token, 'content') and token.content:
-                    print(token.content, end="", flush=True)
-            elif mode == "updates":
-                if "__interrupt__" in chunk:
-                    print("\n\n--- 需要审核 ---")
-                    interrupts.append(chunk["__interrupt__"])
+            if event["event"] == "stream.messages":
+                chunk = event["data"]["chunk"]
+                if getattr(chunk, "content", None):
+                    print(chunk.content, end="", flush=True)
 
-        # 如果没有中断，完成
-        if not interrupts:
+            elif event["event"] == "stream.values":
+                output = event["data"]
+                if getattr(output, "interrupts", None):
+                    pending_interrupts.extend(output.interrupts)
+
+        if not pending_interrupts:
             break
 
-        # 收集所有决策
         all_decisions = []
-        for interrupt in interrupts:
-            decisions = await collect_decisions_async(interrupt)
-            all_decisions.extend(decisions)
+        for interrupt in pending_interrupts:
+            all_decisions.extend(await collect_decisions_async(interrupt))
 
-        # 用决策恢复执行
-        user_message = Command(resume={"decisions": all_decisions})
+        next_input = Command(resume={"decisions": all_decisions})
 
 async def collect_decisions_async(interrupt):
     """异步收集决策"""
     decisions = []
-    for action in interrupt["value"]["action_requests"]:
+    for action in interrupt.value["action_requests"]:
         # 在实际应用中，这里会显示 UI 收集用户输入
         print(f"\n需要审核: {action['name']}")
         print(f"参数: {action['arguments']}")
 
         # 模拟异步等待用户输入
         await asyncio.sleep(0.1)
-        decision = input("决策 (approve/edit/reject): ").strip()
+        decision = input("决策 (approve/edit/reject/respond): ").strip()
 
         if decision == "approve":
             decisions.append({"type": "approve"})
         elif decision == "reject":
             message = input("拒绝原因: ")
             decisions.append({"type": "reject", "message": message})
+        elif decision == "respond":
+            message = input("人工响应: ")
+            decisions.append({"type": "respond", "message": message})
         # ... edit 处理
 
     return decisions
@@ -689,9 +804,9 @@ async def collect_decisions_async(interrupt):
 
 | 流模式 | 说明 | 用途 |
 |--------|------|------|
-| `messages` | LLM token 流式输出 | 实时显示生成内容 |
-| `updates` | 图状态更新 | 检测中断、查看进度 |
-| `values` | 完整状态值 | 获取当前状态 |
+| `stream.messages` | LLM token 流式输出 | 实时显示生成内容 |
+| `stream.values` | 完整状态快照 | 检测 `output.interrupts`、查看当前状态 |
+| `stream.updates` | 图节点增量更新 | 调试节点执行过程 |
 
 ---
 
@@ -727,11 +842,12 @@ async def collect_decisions_async(interrupt):
 │     │     │     │                                           │
 │     │     │     └─→ 等待人工决策                             │
 │     │     │           │                                     │
-│     │     │           └─→ 收集 HITLResponse 决策            │
+│     │     │           └─→ 收集 decisions 决策               │
 │     │     │                   │                             │
 │     │     │                   ├─→ approve: 执行工具         │
 │     │     │                   ├─→ edit: 修改后执行          │
-│     │     │                   └─→ reject: 生成 ToolMessage │
+│     │     │                   ├─→ reject: 生成拒绝 ToolMessage │
+│     │     │                   └─→ respond: 人工回复作为工具结果 │
 │     │     │                                                 │
 │     │     └─→ [否] ──→ 直接执行工具                           │
 │     │                                                       │
@@ -836,13 +952,15 @@ config = {"configurable": {"thread_id": thread_id}}
 # 执行 Agent
 result = agent.invoke(
     {"messages": [{"role": "user", "content": "..."}]},
-    config=config
+    config=config,
+    version="v2",
 )
 
 # 同一会话可以恢复
 result = agent.invoke(
     Command(resume={"decisions": [...]}),
-    config=config  # 使用相同的 thread_id
+    config=config,  # 使用相同的 thread_id
+    version="v2",
 )
 ```
 
@@ -908,7 +1026,12 @@ agent = asyncio.run(setup_production_agent())
 
 ### Subagents 模式
 
-在 Subagents 模式中，可以为子 Agent 的工具添加 HITL：
+在 Subagents 模式中有两种常见选择：
+
+1. 在顶层 Supervisor 统一拦截“委派工具”，审批通过后再调用子 Agent。
+2. 在子 Agent 内部拦截真实业务工具。此时子 Agent 本身也必须有 `checkpointer` 和稳定的 `thread_id`，并且包装函数要能处理子 Agent 的中断。
+
+下面示例演示第二种模式。为避免示例过长，包装函数遇到子 Agent 中断时直接返回提示；生产系统应把该中断透传给 UI 或在子流程内完成审批。
 
 ```python
 from langchain.agents import create_agent
@@ -938,6 +1061,7 @@ calendar_agent = create_agent(
             }
         )
     ],
+    checkpointer=InMemorySaver(),
 )
 
 email_agent = create_agent(
@@ -950,30 +1074,39 @@ email_agent = create_agent(
             }
         )
     ],
+    checkpointer=InMemorySaver(),
 )
 
 # 包装为工具
 @tool
 def schedule_event(request: str) -> str:
     """安排日程"""
-    result = calendar_agent.invoke({
-        "messages": [{"role": "user", "content": request}]
-    })
-    return result["messages"][-1].content
+    result = calendar_agent.invoke(
+        {"messages": [{"role": "user", "content": request}]},
+        config={"configurable": {"thread_id": f"calendar-{hash(request)}"}},
+        version="v2",
+    )
+    if result.interrupts:
+        return "日程创建需要人工审批，请在子流程中处理该中断。"
+    return result.value["messages"][-1].content
 
 @tool
 def manage_email(request: str) -> str:
     """发送邮件"""
-    result = email_agent.invoke({
-        "messages": [{"role": "user", "content": request}]
-    })
-    return result["messages"][-1].content
+    result = email_agent.invoke(
+        {"messages": [{"role": "user", "content": request}]},
+        config={"configurable": {"thread_id": f"email-{hash(request)}"}},
+        version="v2",
+    )
+    if result.interrupts:
+        return "邮件发送需要人工审批，请在子流程中处理该中断。"
+    return result.value["messages"][-1].content
 
-# 创建主管 Agent（只需要 checkpointer）
+# 创建主管 Agent（顶层也需要 checkpointer，用于保存整体会话）
 supervisor_agent = create_agent(
     model="gpt-4o",
     tools=[schedule_event, manage_email],
-    checkpointer=InMemorySaver(),  # 只在顶层添加
+    checkpointer=InMemorySaver(),
 )
 ```
 
@@ -987,26 +1120,15 @@ query = (
     "并发送邮件提醒他们审核新原型"
 )
 
-interrupts = []
-
-# 流式执行，收集所有中断
-for step in supervisor_agent.stream(
+# 执行并收集中断
+result = supervisor_agent.invoke(
     {"messages": [{"role": "user", "content": query}]},
     config=config,
-):
-    for update in step.values():
-        if isinstance(update, dict):
-            # 正常消息
-            for message in update.get("messages", []):
-                message.pretty_print()
-        else:
-            # 中断
-            interrupt_ = update[0]
-            interrupts.append(interrupt_)
-            print(f"\nINTERRUPTED: {interrupt_.id}")
+    version="v2",
+)
 
 # 处理所有中断
-for interrupt_ in interrupts:
+for interrupt_ in result.interrupts:
     for request in interrupt_.value["action_requests"]:
         print(f"\n待审核: {request['name']}")
         print(f"描述: {request['description']}")
@@ -1017,7 +1139,8 @@ for interrupt_ in interrupts:
     # 恢复执行
     result = supervisor_agent.invoke(
         Command(resume={"decisions": decisions}),
-        config=config
+        config=config,
+        version="v2",
     )
 ```
 
@@ -1150,18 +1273,20 @@ async def main():
     # 调用 Agent 执行任务
     result = agent.invoke(
         {"messages": [{"role": "user", "content": "导出所有用户数据"}]},  # 用户请求
-        config=config  # 传递配置
+        config=config,  # 传递配置
+        version="v2",
     )
 
     # 检查是否需要人工审批
-    if "__interrupt__" in result:
+    if result.interrupts:
         # 审批流程：显示审批信息
-        print(result["__interrupt__"])
+        print(result.interrupts)
 
         # 批准操作：恢复 Agent 执行
         result = agent.invoke(
             Command(resume={"decisions": [{"type": "approve"}]}),  # 批准决策
-            config=config  # 传递配置
+            config=config,  # 传递配置
+            version="v2",
         )
 
 # 运行主函数
@@ -1249,12 +1374,13 @@ def email_review_interface(agent, user_request, config):
     # 调用 Agent 执行任务
     result = agent.invoke(
         {"messages": [{"role": "user", "content": user_request}]},  # 用户请求
-        config=config  # 传递配置
+        config=config,  # 传递配置
+        version="v2",
     )
 
     # 循环处理所有待审核操作
-    while "__interrupt__" in result:
-        interrupt = result["__interrupt__"]
+    while result.interrupts:
+        interrupt = result.interrupts[0]
 
         # 显示审核界面标题
         print("\n" + "="*60)
@@ -1262,7 +1388,7 @@ def email_review_interface(agent, user_request, config):
         print("="*60)
 
         # 显示所有待审核的操作
-        for i, action in enumerate(interrupt["value"]["action_requests"]):
+        for i, action in enumerate(interrupt.value["action_requests"]):
             print(f"\n[{i+1}] {action['name']}")  # 显示操作名称
             print(action['description'])  # 显示操作描述
 
@@ -1278,8 +1404,8 @@ def email_review_interface(agent, user_request, config):
 
         # 收集用户决策
         decisions = []
-        for i, action in enumerate(interrupt["value"]["action_requests"]):
-            print(f"\n操作 {i+1}/{len(interrupt['value']['action_requests'])}")
+        for i, action in enumerate(interrupt.value["action_requests"]):
+            print(f"\n操作 {i+1}/{len(interrupt.value['action_requests'])}")
 
             # 获取用户输入
             choice = input("操作 (a=批准/e=编辑/r=拒绝/v=查看详情): ").lower()
@@ -1327,7 +1453,8 @@ def email_review_interface(agent, user_request, config):
         # 恢复 Agent 执行，传递用户决策
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
-            config=config
+            config=config,
+            version="v2",
         )
 
     return result
@@ -1416,12 +1543,13 @@ def finance_approval_workflow(agent, request, config):
     # 调用 Agent 执行任务
     result = agent.invoke(
         {"messages": [{"role": "user", "content": request}]},  # 用户请求
-        config=config  # 传递配置
+        config=config,  # 传递配置
+        version="v2",
     )
 
     # 循环处理所有待审批操作
-    while "__interrupt__" in result:
-        interrupt = result["__interrupt__"]
+    while result.interrupts:
+        interrupt = result.interrupts[0]
 
         # 显示审批界面标题
         print("\n" + "="*60)
@@ -1429,7 +1557,7 @@ def finance_approval_workflow(agent, request, config):
         print("="*60)
 
         # 显示所有待审批的操作
-        for action in interrupt["value"]["action_requests"]:
+        for action in interrupt.value["action_requests"]:
             print(f"\n操作: {action['name']}")  # 显示操作名称
             print(action['description'])  # 显示操作描述
 
@@ -1448,8 +1576,8 @@ def finance_approval_workflow(agent, request, config):
 
         # 收集用户决策
         decisions = []
-        for i, action in enumerate(interrupt["value"]["action_requests"]):
-            config_info = interrupt["value"]["review_configs"][i]  # 获取审批配置
+        for i, action in enumerate(interrupt.value["action_requests"]):
+            config_info = interrupt.value["review_configs"][i]  # 获取审批配置
             allowed = config_info["allowed_decisions"]  # 获取允许的决策类型
 
             print(f"\n操作 {i+1}: {action['name']}")
@@ -1510,7 +1638,8 @@ def finance_approval_workflow(agent, request, config):
         # 恢复 Agent 执行，传递用户决策
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
-            config=config
+            config=config,
+            version="v2",
         )
 
     return result
@@ -1561,7 +1690,7 @@ class AuditMiddleware:
                     "tool": action["name"],  # 工具名称
                     "arguments": action["arguments"]  # 工具参数
                 }
-                for action in interrupt["value"]["action_requests"]
+                for action in interrupt.value["action_requests"]
             ],
             "decisions": decisions,  # 用户做出的决策
         }
@@ -1606,12 +1735,13 @@ def audited_approval_workflow(agent, request, config, user_id):
     # 调用 Agent 执行任务
     result = agent.invoke(
         {"messages": [{"role": "user", "content": request}]},  # 用户请求
-        config=config  # 传递配置
+        config=config,  # 传递配置
+        version="v2",
     )
 
     # 循环处理所有待审批操作
-    while "__interrupt__" in result:
-        interrupt = result["__interrupt__"]
+    while result.interrupts:
+        interrupt = result.interrupts[0]
 
         # 收集用户决策（这里假设有一个收集决策的函数）
         decisions = collect_user_decisions(interrupt)
@@ -1622,7 +1752,8 @@ def audited_approval_workflow(agent, request, config, user_id):
         # 恢复 Agent 执行，传递用户决策
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
-            config=config
+            config=config,
+            version="v2",
         )
 
     return result
@@ -1720,18 +1851,19 @@ def batch_approval(agent, requests, config):
     for request in requests:
         result = agent.invoke(
             {"messages": [{"role": "user", "content": request}]},
-            config=config
+            config=config,
+            version="v2",
         )
 
         # 收集中断
         interrupts = []
-        while "__interrupt__" in result:
-            interrupts.append(result["__interrupt__"])
+        while result.interrupts:
+            interrupts.append(result.interrupts[0])
 
             # 批量收集所有决策
             all_decisions = []
             for interrupt in interrupts:
-                for action in interrupt["value"]["action_requests"]:
+                for action in interrupt.value["action_requests"]:
                     # 自动决策规则
                     if is_safe_action(action):
                         all_decisions.append({"type": "approve"})
@@ -1748,7 +1880,8 @@ def batch_approval(agent, requests, config):
             # 批量恢复
             result = agent.invoke(
                 Command(resume={"decisions": all_decisions}),
-                config=config
+                config=config,
+                version="v2",
             )
 
         all_results.append(result)
@@ -1766,10 +1899,11 @@ def approval_with_timeout(agent, request, config, timeout_seconds=300):
     """带超时的审批流程"""
     result = agent.invoke(
         {"messages": [{"role": "user", "content": request}]},
-        config=config
+        config=config,
+        version="v2",
     )
 
-    if "__interrupt__" not in result:
+    if not result.interrupts:
         return result
 
     # 启动超时定时器
@@ -1786,7 +1920,7 @@ def approval_with_timeout(agent, request, config, timeout_seconds=300):
 
     # 收集决策
     decisions = []
-    for action in result["__interrupt__"]["value"]["action_requests"]:
+    for action in result.interrupts[0].value["action_requests"]:
         if timeout_occurred:
             decisions.append({
                 "type": "reject",
@@ -1805,7 +1939,8 @@ def approval_with_timeout(agent, request, config, timeout_seconds=300):
     # 恢复执行
     return agent.invoke(
         Command(resume={"decisions": decisions}),
-        config=config
+        config=config,
+        version="v2",
     )
 ```
 
@@ -1905,10 +2040,11 @@ def test_safe_operation_auto_approves(hitl_agent):
 
     result = hitl_agent.invoke(
         {"messages": [{"role": "user", "content": "执行 safe_operation"}]},
-        config=config
+        config=config,
+        version="v2",
     )
 
-    assert "__interrupt__" not in result
+    assert not result.interrupts
 
 def test_sensitive_operation_requires_approval(hitl_agent):
     """测试敏感操作需要审批"""
@@ -1916,11 +2052,12 @@ def test_sensitive_operation_requires_approval(hitl_agent):
 
     result = hitl_agent.invoke(
         {"messages": [{"role": "user", "content": "执行 sensitive_operation"}]},
-        config=config
+        config=config,
+        version="v2",
     )
 
-    assert "__interrupt__" in result
-    assert result["__interrupt__"]["value"]["action_requests"][0]["name"] == "sensitive_operation"
+    assert result.interrupts
+    assert result.interrupts[0].value["action_requests"][0]["name"] == "sensitive_operation"
 
 def test_approve_flow(hitl_agent):
     """测试批准流程"""
@@ -1931,18 +2068,20 @@ def test_approve_flow(hitl_agent):
     # 第一次调用：触发中断
     result = hitl_agent.invoke(
         {"messages": [{"role": "user", "content": "执行 sensitive_operation"}]},
-        config=config
+        config=config,
+        version="v2",
     )
 
-    assert "__interrupt__" in result
+    assert result.interrupts
 
     # 第二次调用：批准
     result = hitl_agent.invoke(
         Command(resume={"decisions": [{"type": "approve"}]}),
-        config=config
+        config=config,
+        version="v2",
     )
 
-    assert "__interrupt__" not in result
+    assert not result.interrupts
 
 def test_reject_flow(hitl_agent):
     """测试拒绝流程"""
@@ -1953,10 +2092,11 @@ def test_reject_flow(hitl_agent):
     # 第一次调用：触发中断
     result = hitl_agent.invoke(
         {"messages": [{"role": "user", "content": "执行 sensitive_operation"}]},
-        config=config
+        config=config,
+        version="v2",
     )
 
-    assert "__interrupt__" in result
+    assert result.interrupts
 
     # 第二次调用：拒绝
     result = hitl_agent.invoke(
@@ -1966,11 +2106,12 @@ def test_reject_flow(hitl_agent):
                 "message": "测试拒绝"
             }]
         }),
-        config=config
+        config=config,
+        version="v2",
     )
 
     # 拒绝后应继续执行（不执行工具）
-    assert "__interrupt__" not in result
+    assert not result.interrupts
 
 def test_edit_flow(hitl_agent):
     """测试修改流程"""
@@ -1981,10 +2122,11 @@ def test_edit_flow(hitl_agent):
     # 第一次调用：触发中断
     result = hitl_agent.invoke(
         {"messages": [{"role": "user", "content": "执行 sensitive_operation"}]},
-        config=config
+        config=config,
+        version="v2",
     )
 
-    assert "__interrupt__" in result
+    assert result.interrupts
 
     # 第二次调用：修改参数
     result = hitl_agent.invoke(
@@ -1997,10 +2139,11 @@ def test_edit_flow(hitl_agent):
                 }
             }]
         }),
-        config=config
+        config=config,
+        version="v2",
     )
 
-    assert "__interrupt__" not in result
+    assert not result.interrupts
 ```
 
 ---
@@ -2044,16 +2187,18 @@ config = {"configurable": {"thread_id": "session-123"}}
 # 执行并检测中断
 result = agent.invoke(
     {"messages": [{"role": "user", "content": "..."}]},
-    config=config
+    config=config,
+    version="v2",
 )
 
-if "__interrupt__" in result:
-    interrupt = result["__interrupt__"]
+if result.interrupts:
+    interrupt = result.interrupts[0]
 
     # 批准
     result = agent.invoke(
         Command(resume={"decisions": [{"type": "approve"}]}),
-        config=config
+        config=config,
+        version="v2",
     )
 
     # 修改
@@ -2067,7 +2212,8 @@ if "__interrupt__" in result:
                 }
             }]
         }),
-        config=config
+        config=config,
+        version="v2",
     )
 
     # 拒绝
@@ -2078,7 +2224,8 @@ if "__interrupt__" in result:
                 "message": "拒绝原因"
             }]
         }),
-        config=config
+        config=config,
+        version="v2",
     )
 ```
 
@@ -2087,27 +2234,30 @@ if "__interrupt__" in result:
 ```python
 config = {"configurable": {"thread_id": "session-123"}}
 
-for mode, chunk in agent.stream(
+for event in agent.stream_events(
     {"messages": [{"role": "user", "content": "..."}]},
     config=config,
-    stream_mode=["updates", "messages"],
+    version="v3",
 ):
-    if mode == "messages":
-        token, metadata = chunk
-        if hasattr(token, 'content') and token.content:
-            print(token.content, end="", flush=True)
-    elif mode == "updates":
-        if "__interrupt__" in chunk:
+    if event["event"] == "stream.messages":
+        chunk = event["data"]["chunk"]
+        if getattr(chunk, "content", None):
+            print(chunk.content, end="", flush=True)
+
+    elif event["event"] == "stream.values":
+        output = event["data"]
+        if getattr(output, "interrupts", None):
             # 处理中断
-            decisions = collect_decisions(chunk["__interrupt__"])
+            decisions = collect_decisions(output.interrupts[0])
 
             # 继续流式处理
-            for mode, chunk in agent.stream(
+            for resume_event in agent.stream_events(
                 Command(resume={"decisions": decisions}),
                 config=config,
-                stream_mode=["updates", "messages"],
+                version="v3",
             ):
                 # ...
+                pass
 ```
 
 ### 生产环境配置
@@ -2139,6 +2289,7 @@ async def create_production_agent():
 | approve | `{"type": "approve"}` | 按原样执行 |
 | edit | `{"type": "edit", "edited_action": {...}}` | 修改后执行 |
 | reject | `{"type": "reject", "message": "..."}` | 拒绝并提供反馈 |
+| respond | `{"type": "respond", "message": "..."}` | 人工回复作为工具结果 |
 
 ---
 
@@ -2148,10 +2299,11 @@ async def create_production_agent():
 
 ### 核心要点
 
-1. **三种决策类型**
+1. **四种决策类型**
    - approve：批准执行
    - edit：修改后执行
    - reject：拒绝并反馈
+   - respond：人工响应作为工具结果
 
 2. **必需组件**
    - HumanInTheLoopMiddleware：中间件
