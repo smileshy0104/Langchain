@@ -1,4 +1,4 @@
-"""Shared model configuration for Human-in-the-Loop examples."""
+"""Shared model configuration for retrieval and memory examples."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from langchain.chat_models import init_chat_model
 
 
 def load_env_files() -> None:
-    """Load .env files from this example folder and nearby examples."""
+    """Load .env files from this folder and nearby LangChain examples."""
 
     try:
         from dotenv import load_dotenv
@@ -20,8 +20,7 @@ def load_env_files() -> None:
     current_dir = Path(__file__).parent
     for env_path in (
         current_dir / ".env",
-        current_dir.parent / "langchain_context_engineering_examples" / ".env",
-        current_dir.parent / "langchain" / ".env",
+        current_dir.parent / ".env",
     ):
         if env_path.exists():
             load_dotenv(env_path, override=False)
@@ -53,14 +52,7 @@ def create_configured_model(
     model_name: str | None = None,
     temperature: float | None = None,
 ) -> Any:
-    """Create a chat model from environment variables.
-
-    For OpenAI-compatible vendors, set:
-    - LANGCHAIN_MODEL_PROVIDER=custom
-    - CUSTOM_MODEL_BASE_URL=https://ai-api.kkidc.com
-    - CUSTOM_MODEL_API_KEY=...
-    - LANGCHAIN_DEFAULT_MODEL=gpt-5.5
-    """
+    """Create a chat model from environment variables."""
 
     model_name = model_name or DEFAULT_MODEL_NAME
     temperature = DEFAULT_TEMPERATURE if temperature is None else temperature
