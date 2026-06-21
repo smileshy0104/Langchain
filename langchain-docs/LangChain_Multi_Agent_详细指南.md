@@ -1,5 +1,7 @@
 # LangChain Multi-Agent（多智能体）详细指南
 
+> 基于官方文档 [https://docs.langchain.com/oss/python/langchain/multi-agent](https://docs.langchain.com/oss/python/langchain/multi-agent) 及 Subagents、Handoffs、Skills、Router 分页整理的中文增强版，补充 Deep Agents、context engineering、`Command`/`Send`、状态持久化和新版 HITL 决策写法。
+
 ## 目录
 
 1. [概述](#概述)
@@ -24,7 +26,7 @@
 
 **Multi-Agent（多智能体系统）** 是一种架构模式，通过多个专业化 Agent 协作来完成复杂任务。每个 Agent 专注于特定领域或功能，通过协调机制实现整体目标。
 
-**核心思想**：不是"堆多个模型"，而是**用更清晰的职责分工和上下文管理**完成复杂任务。
+**核心思想**：不是"堆多个模型"，而是**用更清晰的职责分工、上下文工程和状态边界**完成复杂任务。
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -47,6 +49,12 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### 官方建议：先考虑 Deep Agents
+
+官方文档特别提示：如果你需要开箱即用的多智能体能力，优先考虑 **Deep Agents**。它是构建在 LangChain/LangGraph 之上的更高层封装，内置 subagents、skills、planning、虚拟文件系统和上下文管理。
+
+这篇指南仍然聚焦 LangChain/LangGraph 原语，因为它们适合你需要完全掌控 Agent 拓扑、状态、路由和业务集成的场景。
+
 ### 为什么需要 Multi-Agent
 
 | 单 Agent 问题 | Multi-Agent 解决方案 |
@@ -66,7 +74,7 @@
 - **团队协作（分布式开发）**：不同团队维护不同能力，组合成完整系统
 - **专业化分工**：任务需要不同类型的专业知识
 
-**重要提醒**：很多复杂任务，一个"单智能体 + 正确工具/提示词"也能完成。
+**重要提醒**：很多复杂任务，一个"单智能体 + 正确工具/动态提示词"也能完成。Multi-Agent 的收益主要来自上下文隔离、并行化和团队边界，而不是 Agent 数量本身。
 
 ---
 
@@ -80,8 +88,10 @@ LangChain Multi-Agent 的核心构件：
 |------|------|------|
 | `create_agent` | Agent 工厂函数 | `langchain.agents` |
 | `AgentState` | 基础状态结构 | `langchain.agents` |
-| `ToolRuntime` | 工具运行时上下文 | `langchain.tools` |
+| `tool` | 工具装饰器 | `langchain_core.tools` |
+| `ToolRuntime` | 工具运行时上下文，可访问 state、context、tool_call_id | `langchain.tools` |
 | `Command` | 状态更新和跳转 | `langgraph.types` |
+| `Send` | 并行 fan-out 到多个节点 | `langgraph.types` |
 | `StateGraph` | 工作流图构建 | `langgraph.graph` |
 | `checkpointer` | 状态持久化 | `langgraph.checkpoint` |
 
@@ -136,16 +146,16 @@ class MultiAgentState(AgentState):
 
 ## 多智能体模式对比
 
-官方文档提供的五种核心模式：
+官方文档提供的五种核心模式。它们不是互斥选项，可以在一个系统中混合使用：
 
 ### 模式对比表
 
 | 模式 | 核心机制 | 控制流 | 典型场景 | 子Agent直面用户 |
 |------|----------|--------|----------|----------------|
-| **Subagents** | 监督者调用子Agent工具(子代理作为工具) | 集中式 | 多域、多工具协调 | 否 |
-| **Handoffs** | 状态驱动切换配置/Agent | 分散式 | 顺序对话流程 | 是 |
+| **Subagents** | 监督者把子 Agent 当工具调用 | 集中式 | 多域、多工具协调、并行子任务 | 否 |
+| **Handoffs** | 工具更新状态，触发配置或 Agent 切换 | 分散式/状态驱动 | 顺序对话流程、专家接管 | 是 |
 | **Skills** | 按需加载提示词/知识 | 单Agent | 大量技能、渐进式暴露 | 是 |
-| **Router** | 路由器分类后并行派发 | 分发式 | 多垂直领域查询 | 部分 |
+| **Router** | 路由步骤分类后单路由或并行 fan-out | 分发式 | 多垂直领域查询、结果综合 | 部分 |
 | **Custom Workflow** | LangGraph自定义流程 | 自由 | 复杂流程、需定制 | 可变 |
 
 ### 详细对比
@@ -214,8 +224,8 @@ class MultiAgentState(AgentState):
 ### 特点
 
 - ✅ **集中式控制**：统一调度，主 Agent 决定何时调用谁
-- ✅ **上下文隔离**：子 Agent 无状态，避免上下文污染
-- ✅ **并行执行**：支持同时调用多个子 Agent
+- ✅ **上下文隔离**：子 Agent 默认无状态，每次调用在干净上下文中执行
+- ✅ **并行执行**：主 Agent 可以在同一轮中调用多个子 Agent
 - ✅ **可组合性**：子 Agent 返回结果供主 Agent 使用
 - ❌ **间接交互**：子 Agent 不直接与用户对话
 
@@ -224,7 +234,6 @@ class MultiAgentState(AgentState):
 ```python
 from langchain_core.tools import tool
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 
 # ============================================================================
 # 步骤 1: 定义底层 API 工具
@@ -264,11 +273,11 @@ def get_available_time_slots(
 # 步骤 2: 创建专门的子 Agent
 # ============================================================================
 
-llm = init_chat_model("gpt-4o")
+model = "gpt-4o"
 
 # 日程 Agent
 calendar_agent = create_agent(
-    llm,
+    model=model,
     tools=[create_calendar_event, get_available_time_slots],
     system_prompt=(
         "你是一个日程安排助手。"
@@ -280,7 +289,7 @@ calendar_agent = create_agent(
 
 # 邮件 Agent
 email_agent = create_agent(
-    llm,
+    model=model,
     tools=[send_email],
     system_prompt=(
         "你是一个邮件助手。"
@@ -333,7 +342,7 @@ SUPERVISOR_PROMPT = (
 )
 
 supervisor_agent = create_agent(
-    llm,
+    model=model,
     tools=[schedule_event, manage_email],
     system_prompt=SUPERVISOR_PROMPT,
 )
@@ -362,21 +371,17 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langgraph.checkpoint.memory import InMemorySaver
 
 supervisor_agent = create_agent(
-    llm,
+    model=model,
     tools=[schedule_event, manage_email],
     system_prompt=SUPERVISOR_PROMPT,
     middleware=[
         HumanInTheLoopMiddleware(
             interrupt_on={
                 "schedule_event": {
-                    "allow_accept": True,
-                    "allow_edit": True,
-                    "allow_respond": True,
+                    "allowed_decisions": ["approve", "edit", "reject"],
                 },
                 "manage_email": {
-                    "allow_accept": True,
-                    "allow_edit": True,
-                    "allow_respond": True,
+                    "allowed_decisions": ["approve", "edit", "reject"],
                 },
             }
         ),
@@ -389,16 +394,18 @@ config = {"configurable": {"thread_id": "session-123"}}
 
 result = supervisor_agent.invoke(
     {"messages": [{"role": "user", "content": query}]},
-    config=config
+    config=config,
+    version="v2",
 )
 
 # 检查是否需要人工确认
-if result.get("__interrupt__"):
+if result.interrupts:
     # 用户确认后恢复
     from langgraph.types import Command
     result = supervisor_agent.invoke(
-        Command(resume={"decisions": [{"type": "accept"}]}),
-        config=config
+        Command(resume={"decisions": [{"type": "approve"}]}),
+        config=config,
+        version="v2",
     )
 ```
 
@@ -427,6 +434,36 @@ if result.get("__interrupt__"):
 **4) 子 Agent 发现**
 - 对小规模：系统 prompt 列出可用子 Agent
 - 对大规模：提供 list_agents / search_agents 工具
+
+**5) Checkpointing 与状态**
+- 默认模式：子 Agent 继承父图 checkpointer，但每次调用以新鲜状态开始，适合并行执行和强上下文隔离
+- Continuations 模式：如果子 Agent 需要跨调用保留自己的对话历史，可单独配置持久化或在子图编译时启用持久化
+- 经验法则：多数 Supervisor 场景保持子 Agent 无状态，把长期记忆留给主 Agent 或共享状态；只有子 Agent 本身是长期对话专家时才给它独立历史
+
+### 子 Agent 输入输出边界
+
+```python
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
+from typing_extensions import NotRequired
+
+class CustomState(AgentState):
+    customer_id: NotRequired[str]
+
+@tool
+def call_billing_agent(query: str, runtime: ToolRuntime[None, CustomState]) -> str:
+    """调用账单子 Agent，只传入账单任务所需上下文。"""
+    customer_id = runtime.state.get("customer_id", "unknown")
+    result = billing_agent.invoke({
+        "messages": [{
+            "role": "user",
+            "content": f"customer_id={customer_id}\nquery={query}"
+        }]
+    })
+    return result["messages"][-1].content
+```
+
+子 Agent 的返回值也应尽量结构化。简单场景返回最终文本即可；如果要把结果写回父 Agent 状态，可以让工具返回 `Command(update={...})`。
 
 ---
 
@@ -466,13 +503,68 @@ if result.get("__interrupt__"):
 - ✅ **专业化**：专家 Agent 接管对话
 - ❌ **状态复杂**：需要管理活跃 Agent 状态
 
+### 两种实现路径
+
+官方文档把 Handoffs 拆成两种实现路径：
+
+| 实现方式 | 核心做法 | 适合场景 |
+|----------|----------|----------|
+| **单 Agent + Middleware** | 工具更新 `current_step`，middleware 根据状态切换 system prompt 和工具 | 大多数顺序客服/表单/流程场景 |
+| **多个 Agent 子图** | 每个 Agent 是图中的独立节点，handoff 工具返回 `Command(goto=..., graph=Command.PARENT)` | 不同 Agent 实现差异很大，或某个节点本身是复杂图 |
+
+优先使用单 Agent + Middleware：消息历史自然连续，状态管理更轻。只有当不同角色需要完全不同的 Agent 实现、工具集合或子图逻辑时，再使用多个 Agent 子图。
+
+### 单 Agent + Middleware 实现
+
+```python
+from langchain.agents import AgentState, create_agent
+from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
+from langgraph.types import Command
+
+class SupportState(AgentState):
+    current_step: str = "triage"
+
+@tool
+def transfer_to_specialist(runtime: ToolRuntime[None, SupportState]) -> Command:
+    """转移到专家处理阶段。"""
+    return Command(update={"current_step": "specialist"})
+
+@wrap_model_call
+def apply_step_config(request: ModelRequest, handler) -> ModelResponse:
+    """根据 current_step 动态切换提示词和工具。"""
+    step = request.state.get("current_step", "triage")
+
+    if step == "triage":
+        request = request.override(
+            system_prompt="你是一线客服。先判断问题类型，必要时转专家。",
+            tools=[transfer_to_specialist],
+        )
+    elif step == "specialist":
+        request = request.override(
+            system_prompt="你是高级技术专家。直接给出解决方案。",
+            tools=[],
+        )
+
+    return handler(request)
+
+agent = create_agent(
+    model="gpt-4o",
+    tools=[transfer_to_specialist],
+    state_schema=SupportState,
+    middleware=[apply_step_config],
+)
+```
+
 ### 基本实现
 
 ```python
 from typing import Literal
 from langchain.agents import AgentState, create_agent
-from langchain.messages import AIMessage, ToolMessage
-from langchain.tools import tool, ToolRuntime
+from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from typing_extensions import NotRequired
@@ -628,8 +720,9 @@ for msg in result["messages"]:
 ```python
 from typing import Literal
 from langchain.agents import AgentState, create_agent
-from langchain.tools import tool, ToolRuntime
-from langchain.messages import ToolMessage
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
+from langchain_core.messages import ToolMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from typing_extensions import NotRequired
@@ -763,7 +856,9 @@ agent = builder.compile()
 
 ### 概述
 
-**Skills Pattern** 允许 Agent 按需加载特定技能，避免一次性加载所有上下文。
+**Skills Pattern** 允许 Agent 按需加载特定技能，避免一次性加载所有上下文。技能通常是 **prompt-driven specialization**：它更像一段可调用的专业提示词、知识说明、schema、脚本/模板引用，而不是一个完整的子 Agent。
+
+官方文档指出，这个模式和 **Agent Skills**、**llms.txt** 的思想一致：用工具调用做渐进式暴露。区别在于，这里暴露的不只是文档页，也可以是专业 prompt、业务规则、文件位置和可执行资源说明。Deep Agents 也内置了 skills 支持。
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -789,11 +884,13 @@ agent = builder.compile()
 - ✅ **渐进式暴露**：类似"检索提示词"
 - ✅ **支持大量技能**：适合大规模技能集
 - ✅ **单线程对话**：保持对话连贯性
+- ✅ **轻量组合**：比完整子 Agent 更轻，适合 prompt/知识层面的专业化
+- ✅ **资源引用**：技能内容可以指向脚本、模板、示例文件，在需要时再读取
 
 ### 基本实现
 
 ```python
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langchain.agents import create_agent
 
 # 定义技能库
@@ -862,7 +959,8 @@ result = agent.invoke({
 ### 进阶：强约束
 
 ```python
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from typing import Literal
 
 # 定义支持的技能
@@ -898,21 +996,29 @@ def write_sql_query(
     )
 
 # 创建带状态管理的 Agent
-class AgentState(AgentState):
+class SkillAgentState(AgentState):
     skills_loaded: list[str]
 
 agent = create_agent(
     model="gpt-4o",
     tools=[load_skill, write_sql_query],
-    state_schema=AgentState,
+    state_schema=SkillAgentState,
 )
 ```
+
+### 扩展方式
+
+| 扩展方式 | 说明 | 适合场景 |
+|----------|------|----------|
+| 动态工具注册 | 加载技能时同时改变可用工具集合 | 数据库管理、部署、运维等工具差异大的领域 |
+| 层级技能 | 一个技能暴露子技能，如 `data_science -> pandas / visualization / stats` | 大型知识库、复杂开发助手 |
+| 资源引用 | 技能 prompt 告诉 Agent 何时读取脚本、模板、示例文件 | 文档生成、代码迁移、报告模板 |
 
 ### 自定义中间件
 
 ```python
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
-from langchain.messages import SystemMessage
+from langchain_core.messages import SystemMessage
 from typing import Callable
 
 class SkillMiddleware(AgentMiddleware):
@@ -1007,11 +1113,16 @@ agent = create_agent(
 
 ### 基本实现
 
+Router 的核心是先分类，再分发：
+
+- 单一路由：用条件边返回节点名，或在显式 router 节点中返回 `Command(goto="agent_name")`
+- 多路并行：返回多个 `Send("agent_name", state)` 做 fan-out
+- 最后通常需要一个 synthesize 节点把多个结果合成为一个回答
+
 ```python
 from typing import Literal
-from langchain.agents import create_agent
+from langchain.agents import AgentState, create_agent
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send
 
 # 1. 定义专门的 Agent
 research_agent = create_agent(
@@ -1080,6 +1191,15 @@ result = router_agent.invoke({
 })
 ```
 
+如果你把 router 建成一个显式节点，也可以在节点里返回 `Command(goto=...)`：
+
+```python
+from langgraph.types import Command
+
+def router_node(state) -> Command:
+    return Command(goto=classify_query(state))
+```
+
 ### 并行路由（Send）
 
 ```python
@@ -1133,6 +1253,22 @@ parallel_router = builder.compile()
 |------|------|----------|
 | **Stateless** | 每次独立分类、并行调用 | 一次性查询 |
 | **Stateful** | 需持久化历史 | 多轮对话（需包装成工具） |
+
+官方建议：Router 默认按 stateless 设计。若要多轮对话，最简单的做法是把 stateless router 包装成一个工具，由外层 conversational agent 负责记忆和上下文；不要轻易让多个并行 Agent 各自维护用户历史，否则语气、状态和上下文会很难统一。
+
+```python
+@tool
+def ask_knowledge_router(query: str) -> str:
+    """并行查询多个知识源并综合结果。"""
+    result = parallel_router.invoke({"query": query})
+    return result["answer"]
+
+conversational_agent = create_agent(
+    model="gpt-4o",
+    tools=[ask_knowledge_router],
+    system_prompt="你是一个带长期对话记忆的助手。需要跨知识源查询时调用 ask_knowledge_router。",
+)
+```
 
 ---
 
@@ -1219,8 +1355,8 @@ builder = StateGraph(AgentState)
 # 添加 Supervisor 模式作为节点
 builder.add_node("supervisor", supervisor_node)
 
-# 添加 Handoffs 模式作为子图
-builder.add_subgraph("handoffs", handoff_graph)
+# 添加 Handoffs 模式作为节点：节点内部调用子图
+builder.add_node("handoffs", lambda state: handoff_graph.invoke(state))
 
 # 添加 Router 模式作为节点
 builder.add_node("router", router_node)
@@ -1351,8 +1487,9 @@ handoff_step_tools = [
 ```python
 from typing import Literal
 from langchain.agents import AgentState, create_agent
-from langchain.tools import tool, ToolRuntime
-from langchain.messages import AIMessage, ToolMessage, HumanMessage
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
+from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from langgraph.checkpoint.memory import InMemorySaver
@@ -1473,7 +1610,7 @@ result = agent.invoke(
 # Supervisor + Skills 组合
 
 from langchain.agents import create_agent
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 # 技能定义
 ANALYSIS_SKILLS = {
@@ -1651,7 +1788,7 @@ def classify_query_structured(query: str) -> QueryClassification:
 ### Subagents 模式
 
 ```python
-# 1. 创建子 Agent
+# 1. 创建子 Agent（默认无状态，主 Agent 维护长期上下文）
 sub_agent = create_agent(model, tools=[...])
 
 # 2. 包装为工具
@@ -1665,6 +1802,25 @@ supervisor = create_agent(model, tools=[call_sub_agent])
 ```
 
 ### Handoffs 模式
+
+多数场景优先用单 Agent + Middleware：
+
+```python
+class State(AgentState):
+    current_step: str = "triage"
+
+@tool
+def transfer_to_specialist() -> Command:
+    return Command(update={"current_step": "specialist"})
+
+@wrap_model_call
+def apply_step_config(request, handler):
+    if request.state.get("current_step") == "specialist":
+        request = request.override(system_prompt="你是专家。", tools=[])
+    return handler(request)
+```
+
+需要多个独立 Agent 子图时，再用 `Command.PARENT`：
 
 ```python
 # 1. 定义状态
@@ -1712,22 +1868,25 @@ agent = create_agent(
 
 ### Router 模式
 
+单路由用条件边或 `Command`，并行 fan-out 用 `Send`：
+
 ```python
-# 1. 分类函数
 def classify_query(state) -> Literal["a", "b", "c"]:
     ...
 
-# 2. 构建图
 builder.add_conditional_edges(START, classify_query, ["a", "b", "c"])
-builder.add_edge("a", END)
-builder.add_edge("b", END)
-builder.add_edge("c", END)
+
+def fan_out(state):
+    return [
+        Send("github", {"query": state["query"]}),
+        Send("notion", {"query": state["query"]}),
+    ]
 ```
 
-### Command 对象
+### Command / Send 对象
 
 ```python
-from langgraph.types import Command
+from langgraph.types import Command, Send
 
 # 基本跳转
 Command(goto="next_agent")
@@ -1743,6 +1902,9 @@ Command(
     goto="other_agent",
     graph=Command.PARENT,
 )
+
+# 并行派发到节点
+Send("worker_agent", {"query": "..."})
 ```
 
 ---
