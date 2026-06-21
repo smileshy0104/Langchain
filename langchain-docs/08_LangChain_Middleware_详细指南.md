@@ -2174,11 +2174,11 @@ LangChain Middleware 提供了强大而灵活的 Agent 行为控制能力：
 - 官方 Middleware 文档：[https://docs.langchain.com/oss/python/langchain/middleware](https://docs.langchain.com/oss/python/langchain/middleware)
 - 官方预置 Middleware 文档：[https://docs.langchain.com/oss/python/langchain/middleware/built-in](https://docs.langchain.com/oss/python/langchain/middleware/built-in)
 - 配套文档：
-  - [LangChain Agents 详细总结](./LangChain_Agents_详细总结.md)
-  - [LangChain Models 详细指南](./LangChain_Models_详细指南.md)
-  - [LangChain Tools 详细指南](./LangChain_Tools_详细指南.md)
-  - [LangChain Streaming 详细指南](./LangChain_Streaming_详细指南.md)
-  - [LangChain ShortTermMemory 详细指南](./LangChain_ShortTermMemory_详细指南.md)
+  - [LangChain Agents 详细总结](01_LangChain_Agents_详细总结.md)
+  - [LangChain Models 详细指南](02_LangChain_Models_详细指南.md)
+  - [LangChain Tools 详细指南](04_LangChain_Tools_详细指南.md)
+  - [LangChain Streaming 详细指南](06_LangChain_Streaming_详细指南.md)
+  - [LangChain ShortTermMemory 详细指南](05_LangChain_ShortTermMemory_详细指南.md)
 
 ---
 

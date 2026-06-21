@@ -1527,11 +1527,11 @@ LangChain Structured Output 提供了强大而灵活的方式来获取可预测�
 
 - 官方 Structured Output 文档：<https://docs.langchain.com/oss/python/langchain/structured-output>
 - 配套文档：
-  - [LangChain Models 详细指南](./LangChain_Models_详细指南.md)
-  - [LangChain Agents 详细总结](./LangChain_Agents_详细总结.md)
-  - [LangChain Tools 详细指南](./LangChain_Tools_详细指南.md)
-  - [LangChain Messages 详细指南](./LangChain_Messages_详细指南.md)
-  - [LangChain ShortTermMemory 详细指南](./LangChain_ShortTermMemory_详细指南.md)
+  - [LangChain Models 详细指南](02_LangChain_Models_详细指南.md)
+  - [LangChain Agents 详细总结](01_LangChain_Agents_详细总结.md)
+  - [LangChain Tools 详细指南](04_LangChain_Tools_详细指南.md)
+  - [LangChain Messages 详细指南](03_LangChain_Messages_详细指南.md)
+  - [LangChain ShortTermMemory 详细指南](05_LangChain_ShortTermMemory_详细指南.md)
 
 ---
 

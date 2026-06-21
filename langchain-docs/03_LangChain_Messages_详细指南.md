@@ -1351,9 +1351,9 @@ class ChatState(BaseModel):
 
 - **官方文档**: https://docs.langchain.com/oss/python/langchain/messages
 - **配套文档**:
-  - [LangChain Models 详细指南](./LangChain_Models_详细指南.md)
-  - [LangChain Agents 详细总结](./LangChain_Agents_详细总结.md)
-  - [LangChain Tools 详细指南](./LangChain_Tools_详细指南.md)
+  - [LangChain Models 详细指南](02_LangChain_Models_详细指南.md)
+  - [LangChain Agents 详细总结](01_LangChain_Agents_详细总结.md)
+  - [LangChain Tools 详细指南](04_LangChain_Tools_详细指南.md)
 
 ---
 

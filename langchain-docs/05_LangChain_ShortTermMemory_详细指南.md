@@ -1338,9 +1338,9 @@ history = list(graph.get_state_history(config))
 
 - **官方文档**: https://docs.langchain.com/oss/python/langchain/short-term-memory
 - **配套文档**:
-  - [LangChain Messages 详细指南](./LangChain_Messages_详细指南.md)
-  - [LangChain Models 详细指南](./LangChain_Models_详细指南.md)
-  - [LangChain Agents 详细总结](./LangChain_Agents_详细总结.md)
+  - [LangChain Messages 详细指南](03_LangChain_Messages_详细指南.md)
+  - [LangChain Models 详细指南](02_LangChain_Models_详细指南.md)
+  - [LangChain Agents 详细总结](01_LangChain_Agents_详细总结.md)
 
 ---
 
