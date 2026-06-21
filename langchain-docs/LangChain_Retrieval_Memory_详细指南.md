@@ -1,5 +1,7 @@
 # LangChain Retrieval & Memory（检索与记忆）详细指南
 
+> 基于官方文档 [https://docs.langchain.com/oss/python/langchain/retrieval](https://docs.langchain.com/oss/python/langchain/retrieval) 与 [Long-term memory](https://docs.langchain.com/oss/python/langchain/long-term-memory) 整理的中文增强版，补充 RAG 架构选型、已有知识库接入、LangGraph Store、`runtime.store`、`IndexConfig` 和生产持久化注意事项。
+
 ## 目录
 
 1. [概述](#概述)
@@ -61,7 +63,7 @@
 | 类型 | 范围 | 存储位置 | 持久性 |
 |------|------|----------|--------|
 | **短期记忆** | 单个会话 (thread) | Checkpointer | 跨调用保持 |
-| **长期记忆** | 跨会话 | Store | 永久存储 |
+| **长期记忆** | 跨 thread / 跨会话 | LangGraph Store | 持久存储 |
 
 ---
 
@@ -103,20 +105,32 @@
 
 | 组件 | 功能 | LangChain 实现 |
 |------|------|----------------|
-| **Document Loaders** | 从外部源加载数据 | `langchain.document_loaders` |
-| **Text Splitters** | 将大文档切分为小块 | `langchain.text_splitter` |
-| **Embedding Models** | 文本转换为向量 | `langchain.embeddings` |
-| **Vector Stores** | 存储和搜索向量 | `langchain.vectorstores` |
+| **Document Loaders** | 从外部源加载数据，返回 `Document` | `langchain_community.document_loaders` / 集成包 |
+| **Text Splitters** | 将大文档切分为可检索 chunk | `langchain_text_splitters` |
+| **Embedding Models** | 文本转换为向量 | `langchain_openai` / `langchain_huggingface` 等 |
+| **Vector Stores** | 存储和搜索向量 | `langchain_core.vectorstores` 抽象 + 各集成包 |
 | **Retrievers** | 检索接口 | `langchain_core.retrievers` |
 
 ---
 
 ## 知识库构建
 
+### 先判断是否需要重建知识库
+
+官方文档特别提醒：如果你已经有可查询的知识库，例如 SQL 数据库、CRM、内部文档系统、搜索 API，并不一定要重新构建向量库。
+
+| 已有系统 | 推荐接入方式 | 适用 RAG 形态 |
+|----------|--------------|---------------|
+| SQL / CRM / 内部 API | 封装为 Agent 工具 | Agentic RAG |
+| 搜索服务 / 文档系统 | 查询后把结果作为上下文 | 2-Step RAG |
+| 大规模文档库但无语义检索 | 构建 embeddings + vector store | 2-Step / Hybrid |
+
+重建向量库适合你需要统一非结构化文档、做语义搜索、或现有系统无法返回足够相关片段的场景。
+
 ### 基本构建流程
 
 ```python
-from langchain_core.document_loaders import TextLoader
+from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_openai import OpenAIEmbeddings
@@ -161,7 +175,7 @@ for doc in results:
 ### 文档加载器
 
 ```python
-from langchain_core.document_loaders import (
+from langchain_community.document_loaders import (
     TextLoader,
     PyPDFLoader,
     DirectoryLoader,
@@ -261,6 +275,8 @@ markdown_splitter = MarkdownHeaderTextSplitter(
 | **Agentic RAG** | Agent 自主决定何时检索 | 低 | 高 | 可变 | 复杂研究助手 |
 | **Hybrid RAG** | 混合两者，带验证步骤 | 中 | 中 | 可变 | 高质量问答 |
 
+**延迟说明**：2-Step RAG 的最大 LLM 调用次数固定，因此延迟最可预测；但真实延迟仍会受到检索 API、数据库、网络和 rerank 步骤影响。Agentic / Hybrid RAG 的调用次数取决于推理过程，灵活但更难估算成本和响应时间。
+
 ### 2-Step RAG
 
 最简单的 RAG 实现，检索和生成是固定的两个步骤。
@@ -312,7 +328,7 @@ Agent 自主决定何时检索、检索什么、如何使用检索结果。
 
 ```python
 from langchain.agents import create_agent
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 import requests
 
@@ -358,7 +374,7 @@ print(result["messages"][-1].content)
 
 ```python
 from langchain.agents import create_agent
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
@@ -686,6 +702,18 @@ assert vector1 == vector2
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### 长期记忆类型
+
+长期记忆通常可以分为三类，实际系统常常混合使用：
+
+| 类型 | 记住什么 | 示例 |
+|------|----------|------|
+| **Semantic memory（语义记忆）** | 关于用户或世界的事实 | 用户叫张三、偏好中文、公司使用 PostgreSQL |
+| **Episodic memory（情景记忆）** | 过去发生过的事件或交互 | 上周排查过登录失败、昨天讨论了 RAG 方案 |
+| **Procedural memory（程序记忆）** | 如何做事的规则和流程 | 回答要先给结论、生成周报必须使用公司模板 |
+
+Store 本身只负责持久化 JSON 文档；是否写入、何时写入、如何抽取记忆，需要由工具、middleware 或后台任务来决定。
+
 ### Store 结构
 
 LangGraph Store 使用 **namespace** 和 **key** 组织记忆：
@@ -714,7 +742,8 @@ Store 结构
 ```python
 from langgraph.store.memory import InMemoryStore
 from langchain.agents import create_agent
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from langchain_openai import ChatOpenAI
 from dataclasses import dataclass
 
@@ -722,8 +751,9 @@ from dataclasses import dataclass
 store = InMemoryStore()
 
 # 生产环境使用持久化 Store
-# from langgraph.store.postgres import AsyncPostgresStore
-# store = AsyncPostgresStore(conn_string="postgresql://...")
+# from langgraph.store.postgres import PostgresStore
+# with PostgresStore.from_conn_string(DB_URI) as store:
+#     store.setup()
 
 # 2. 定义 Context
 @dataclass
@@ -735,6 +765,7 @@ class Context:
 def get_user_preferences(runtime: ToolRuntime[Context]) -> str:
     """获取用户偏好设置"""
     # 从 runtime 访问 store
+    assert runtime.store is not None
     user_preferences = runtime.store.get(
         ("preferences", runtime.context.user_id),
         "settings"
@@ -758,6 +789,7 @@ def save_user_preferences(
     runtime: ToolRuntime[Context]
 ) -> str:
     """保存用户偏好设置"""
+    assert runtime.store is not None
     runtime.store.put(
         ("preferences", runtime.context.user_id),
         "settings",
@@ -824,12 +856,14 @@ items = store.search(
 )
 
 # 语义搜索（需要配置嵌入）
+from langgraph.store.base import IndexConfig
+
 def embed(texts: list[str]) -> list[list[float]]:
     # 实现嵌入函数
-    return [[0.1, 0.2] * len(texts)]
+    return [[0.1, 0.2] for _ in texts]
 
 store_with_search = InMemoryStore(
-    index={"embed": embed, "dims": 2}
+    index=IndexConfig(embed=embed, dims=2)
 )
 
 items = store_with_search.search(
@@ -840,8 +874,9 @@ items = store_with_search.search(
 # 4. delete - 删除数据
 store.delete(("users", "user_123"), "profile")
 
-# 批量删除
-store.delete(("users", "user_123"))
+# 批量删除：先搜索，再逐个删除
+for item in store.search(("users", "user_123"), limit=100):
+    store.delete(item.namespace, item.key)
 ```
 
 ---
@@ -918,9 +953,9 @@ checkpointer = InMemorySaver()
 
 # ... 运行 Agent 后 ...
 
-# 1. 获取当前状态
+# 1. 获取当前状态（推荐通过 Agent）
 config = {"configurable": {"thread_id": "thread_123"}}
-state = checkpointer.get(config)
+state = agent.get_state(config)
 
 print("当前状态:", state.values)
 
@@ -932,7 +967,7 @@ for checkpoint in checkpointer.list(config):
     print("---")
 
 # 3. 获取历史消息
-state = checkpointer.get(config)
+state = agent.get_state(config)
 messages = state.values.get("messages", [])
 
 for msg in messages:
@@ -974,21 +1009,17 @@ from langgraph.store.memory import InMemoryStore
 from typing import Any
 
 store = InMemoryStore()
+namespace: tuple[str, ...] = ("users", "user_123")
+key = "profile"
+value: dict[str, Any] = {"name": "张三"}
 
 # ===== put =====
 # 存储数据到指定 namespace 和 key
-store.put(
-    namespace: tuple[str, ...],  # 命名空间
-    key: str,                    # 键
-    value: dict | list | str | int | float | bool | None,  # 值
-)
+store.put(namespace, key, value)
 
 # ===== get =====
 # 获取单个值
-item = store.get(
-    namespace: tuple[str, ...],
-    key: str,
-)
+item = store.get(namespace, key)
 # 返回 StoreItem 对象
 # - item.value: 存储的值
 # - item.key: 键
@@ -999,22 +1030,37 @@ item = store.get(
 # ===== search =====
 # 搜索匹配的项
 items = store.search(
-    namespace: tuple[str, ...],
-    filter: dict[str, Any] | None = None,  # 过滤条件
-    query: str | None = None,  # 语义搜索查询
-    limit: int = 10,  # 返回数量限制
+    namespace,
+    filter={"name": "张三"},  # 可选：过滤条件
+    query="用户姓名",          # 可选：语义搜索查询，需要 index
+    limit=10,
 )
 # 返回 StoreItem 列表
 
 # ===== delete =====
 # 删除单个项
-store.delete(
-    namespace: tuple[str, ...],
-    key: str,
-)
+store.delete(namespace, key)
 
-# 删除整个命名空间
-store.delete(namespace: tuple[str, ...])
+# 删除整个命名空间：先搜索，再逐个删除
+for item in store.search(namespace):
+    store.delete(item.namespace, item.key)
+```
+
+### 生产环境 Store
+
+```python
+from langgraph.store.postgres import PostgresStore
+
+DB_URI = "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+
+with PostgresStore.from_conn_string(DB_URI) as store:
+    store.setup()
+    agent = create_agent(
+        model="gpt-4o",
+        tools=[...],
+        store=store,
+        context_schema=Context,
+    )
 ```
 
 ### Namespace 设计模式
@@ -1056,6 +1102,7 @@ store.put(("history",), "user_123_2024-01-15", {...})
 
 ```python
 from langgraph.store.memory import InMemoryStore
+from langgraph.store.base import IndexConfig
 from langchain_openai import OpenAIEmbeddings
 
 # 1. 创建嵌入函数
@@ -1066,10 +1113,7 @@ def embed(texts: list[str]) -> list[list[float]]:
 
 # 2. 创建带索引的 Store
 store = InMemoryStore(
-    index={
-        "embed": embed,
-        "dims": 1536,  # text-embedding-3-small 的维度
-    }
+    index=IndexConfig(embed=embed, dims=1536)  # text-embedding-3-small 的维度
 )
 
 # 3. 存储数据（自动嵌入）
@@ -1127,7 +1171,8 @@ for item in results:
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from langchain_openai import ChatOpenAI
 from dataclasses import dataclass
 from typing_extensions import TypedDict
@@ -1145,6 +1190,7 @@ class Context:
 @tool
 def get_user_memory(runtime: ToolRuntime[Context]) -> str:
     """获取长期记忆中的用户信息"""
+    assert runtime.store is not None
     memory = runtime.store.get(
         ("users", runtime.context.user_id),
         "memory"
@@ -1161,6 +1207,7 @@ def save_user_memory(
     runtime: ToolRuntime[Context]
 ) -> str:
     """保存信息到长期记忆"""
+    assert runtime.store is not None
     # 获取现有记忆
     memory = runtime.store.get(
         ("users", runtime.context.user_id),
@@ -1279,9 +1326,10 @@ vectorstore.add_documents(new_documents)
 
 ```python
 from langchain.agents import create_agent
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.store.postgres import AsyncPostgresStore
-from langchain.tools import tool, ToolRuntime
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from langchain_openai import ChatOpenAI
 from langchain_core.vectorstores import InMemoryVectorStore
 from dataclasses import dataclass
@@ -1295,12 +1343,10 @@ class CustomerContext:
 class CustomerServiceAgent:
     def __init__(self):
         # 1. 初始化存储
-        self.checkpointer = AsyncPostgresSaver.from_conn_string(
-            "postgresql://user:pass@localhost/customer_db"
-        )
-        self.store = AsyncPostgresStore.from_conn_string(
-            "postgresql://user:pass@localhost/customer_db"
-        )
+        # 示例使用内存存储；生产环境可替换为 AsyncPostgresSaver + PostgresStore，
+        # 并在应用启动时调用 setup()，管理好连接生命周期。
+        self.checkpointer = InMemorySaver()
+        self.store = InMemoryStore()
         self.vectorstore = self._init_knowledge_base()
 
         # 2. 创建工具
@@ -1350,6 +1396,7 @@ class CustomerServiceAgent:
         @tool
         def get_customer_info(runtime: ToolRuntime[CustomerContext]) -> str:
             """获取客户信息"""
+            assert runtime.store is not None
             customer_id = runtime.context.customer_id
 
             # 从长期记忆获取
@@ -1377,6 +1424,7 @@ class CustomerServiceAgent:
             runtime: ToolRuntime[CustomerContext]
         ) -> str:
             """保存交互记录"""
+            assert runtime.store is not None
             customer_id = runtime.context.customer_id
             session_id = runtime.context.session_id
 
@@ -1397,6 +1445,7 @@ class CustomerServiceAgent:
             runtime: ToolRuntime[CustomerContext]
         ) -> str:
             """获取购买历史"""
+            assert runtime.store is not None
             customer_id = runtime.context.customer_id
 
             history = runtime.store.get(
@@ -1455,7 +1504,8 @@ asyncio.run(main())
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from langchain_openai import ChatOpenAI
 from dataclasses import dataclass
 from typing_extensions import TypedDict
@@ -1477,6 +1527,7 @@ class LearningAssistant:
         @tool
         def get_learning_profile(runtime: ToolRuntime[LearningContext]) -> str:
             """获取学习档案"""
+            assert runtime.store is not None
             profile = runtime.store.get(
                 ("learners", runtime.context.user_id),
                 "profile"
@@ -1494,6 +1545,7 @@ class LearningAssistant:
             runtime: ToolRuntime[LearningContext]
         ) -> str:
             """更新学习进度"""
+            assert runtime.store is not None
             profile = runtime.store.get(
                 ("learners", runtime.context.user_id),
                 "profile"
@@ -1526,6 +1578,7 @@ class LearningAssistant:
             runtime: ToolRuntime[LearningContext]
         ) -> str:
             """设置学习目标"""
+            assert runtime.store is not None
             profile = runtime.store.get(
                 ("learners", runtime.context.user_id),
                 "profile"
@@ -1562,6 +1615,7 @@ class LearningAssistant:
             runtime: ToolRuntime[LearningContext]
         ) -> str:
             """保存学习笔记"""
+            assert runtime.store is not None
             timestamp = datetime.now().strftime("%Y-%m-%d")
             runtime.store.put(
                 ("learners", runtime.context.user_id, "notes"),
@@ -1578,6 +1632,7 @@ class LearningAssistant:
         @tool
         def get_notes(topic: str, runtime: ToolRuntime[LearningContext]) -> str:
             """获取特定主题的笔记"""
+            assert runtime.store is not None
             notes = runtime.store.search(
                 ("learners", runtime.context.user_id, "notes"),
                 filter={"topic": topic},
@@ -1670,7 +1725,8 @@ from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
-from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from langchain.agents import create_agent
 from dataclasses import dataclass
 from typing_extensions import TypedDict
@@ -1691,6 +1747,7 @@ class MemoryEnhancedRAG:
         self.rag_chain = self._create_rag_chain()
 
         # 3. 创建带记忆的 Agent
+        self.store = InMemoryStore()
         self.memory_agent = self._create_memory_agent()
 
     def _create_rag_chain(self):
@@ -1728,6 +1785,7 @@ class MemoryEnhancedRAG:
         @tool
         def get_user_preferences(runtime: ToolRuntime[UserContext]) -> str:
             """获取用户偏好"""
+            assert runtime.store is not None
             prefs = runtime.store.get(
                 ("users", runtime.context.user_id),
                 "preferences"
@@ -1742,6 +1800,7 @@ class MemoryEnhancedRAG:
             runtime: ToolRuntime[UserContext]
         ) -> str:
             """更新用户偏好"""
+            assert runtime.store is not None
             prefs = runtime.store.get(
                 ("users", runtime.context.user_id),
                 "preferences"
@@ -1771,6 +1830,7 @@ class MemoryEnhancedRAG:
             runtime: ToolRuntime[UserContext]
         ) -> str:
             """记录反馈"""
+            assert runtime.store is not None
             runtime.store.put(
                 ("users", runtime.context.user_id, "feedback"),
                 f"{datetime.now().isoformat()}",
@@ -1807,7 +1867,7 @@ class MemoryEnhancedRAG:
                 record_feedback,
             ],
             checkpointer=InMemorySaver(),
-            store=InMemoryStore(),
+            store=self.store,
             context_schema=UserContext,
         )
 
@@ -1824,9 +1884,7 @@ class MemoryEnhancedRAG:
     ) -> str:
         """带用户偏好的查询"""
         # 1. 获取用户偏好
-        from langgraph.store.memory import InMemoryStore
-        store = InMemoryStore()
-        prefs = store.get(("users", user_id), "preferences")
+        prefs = self.store.get(("users", user_id), "preferences")
 
         user_preferences = str(prefs.value) if prefs else "标准回答风格"
 
@@ -1987,14 +2045,14 @@ compression_retriever = ContextualCompressionRetriever(
 ```python
 # ✅ 好的做法：短期记忆转长期
 async def summarize_and_store(
-    checkpointer,
+    agent,
     store,
     thread_id,
     user_id
 ):
     """将会话摘要存储到长期记忆"""
     # 获取会话历史
-    state = checkpointer.get({"configurable": {"thread_id": thread_id}})
+    state = agent.get_state({"configurable": {"thread_id": thread_id}})
     messages = state.values.get("messages", [])
 
     # 生成摘要
@@ -2020,6 +2078,7 @@ async def summarize_and_store(
 def get_user_memory(runtime: ToolRuntime[Context]) -> str:
     """获取用户记忆（带容错）"""
     try:
+        assert runtime.store is not None
         memory = runtime.store.get(
             ("users", runtime.context.user_id),
             "memory"
