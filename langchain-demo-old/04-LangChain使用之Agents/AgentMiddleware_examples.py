@@ -28,7 +28,7 @@ from langchain.agents.middleware import (
 )
 
 # 从项目根目录加载 .env
-dotenv.load_dotenv(dotenv_path="../.env")
+dotenv.load_dotenv(dotenv_path="../../.env")
 
 
 def _require_env_var(name: str) -> str:

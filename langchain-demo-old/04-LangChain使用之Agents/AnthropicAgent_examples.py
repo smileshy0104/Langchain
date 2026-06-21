@@ -25,7 +25,7 @@ from langchain_core.tools import BaseTool, tool
 from langchain.agents import create_agent
 
 # 从项目根目录加载 .env
-dotenv.load_dotenv(dotenv_path="../.env")
+dotenv.load_dotenv(dotenv_path="../../.env")
 
 
 def _require_env_var(name: str) -> str:

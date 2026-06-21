@@ -16,7 +16,7 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest
 from langchain.agents.middleware.types import ModelResponse
 
 # 从项目根目录加载 .env
-dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+dotenv_path = os.path.join(os.path.dirname(__file__), "../..", ".env")
 if os.path.exists(dotenv_path):
     with open(dotenv_path) as f:
         for line in f:
