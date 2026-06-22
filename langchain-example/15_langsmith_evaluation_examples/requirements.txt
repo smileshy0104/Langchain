@@ -1,0 +1,4 @@
+langsmith>=0.2.0
+langchain
+langchain-openai
+python-dotenv
