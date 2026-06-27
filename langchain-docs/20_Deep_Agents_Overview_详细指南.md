@@ -12,10 +12,11 @@
 6. [Context Management](#context-management)
 7. [Delegation](#delegation)
 8. [Steering](#steering)
-9. [与 LangChain / LangGraph 的关系](#与-langchain--langgraph-的关系)
-10. [适用场景与选型](#适用场景与选型)
-11. [最佳实践](#最佳实践)
-12. [快速参考](#快速参考)
+9. [Harness Profiles](#harness-profiles)
+10. [与 LangChain / LangGraph 的关系](#与-langchain--langgraph-的关系)
+11. [适用场景与选型](#适用场景与选型)
+12. [最佳实践](#最佳实践)
+13. [快速参考](#快速参考)
 
 ---
 
@@ -517,6 +518,157 @@ agent = create_deep_agent(
 - 调用昂贵 API。
 - 部署、发布、生产操作。
 - 交互式调试。
+
+---
+
+## Harness Profiles
+
+Harness Profiles 是 Deep Agents 的“模型适配层”。它允许你把某个 provider 或某个具体 model 需要的 harness 行为打包成可注册、可复用的配置，而不用在每个 `create_deep_agent(...)` 调用点写一堆条件判断。
+
+### 它解决什么问题
+
+不同模型在工具调用、上下文长度、prompt 偏好、middleware 支持和子智能体表现上可能不同。Harness Profile 可以让你针对不同模型声明：
+
+- system prompt 的替换或追加。
+- tool description 覆盖。
+- 隐藏某些工具。
+- 移除或追加 middleware。
+- 禁用、重命名或重新提示默认 general-purpose subagent。
+
+### 基本示例
+
+```python
+from deepagents import (
+    GeneralPurposeSubagentProfile,
+    HarnessProfile,
+    register_harness_profile,
+)
+
+register_harness_profile(
+    "openai:gpt-5.5",
+    HarnessProfile(
+        system_prompt_suffix="Respond in under 100 words.",
+        excluded_tools={"execute"},
+        excluded_middleware={"SummarizationMiddleware"},
+        general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
+    ),
+)
+```
+
+含义：
+
+- 对 `openai:gpt-5.5` 这个模型追加简短回答要求。
+- 不向模型暴露 `execute` 工具。
+- 排除 `SummarizationMiddleware`。
+- 禁用默认 general-purpose subagent。
+
+### HarnessProfile 主要字段
+
+| 字段 | 作用 |
+|------|------|
+| `base_system_prompt` | 替换 Deep Agents 默认基础系统提示词 |
+| `system_prompt_suffix` | 追加到组装后的基础 prompt 末尾 |
+| `tool_description_overrides` | 按工具名覆盖工具描述 |
+| `excluded_tools` | 按工具名移除 harness 层工具，可移除用户工具或 middleware 注入工具 |
+| `excluded_middleware` | 从默认 middleware stack 中移除指定 middleware |
+| `extra_middleware` | 给 profile 适用的 stack 追加 middleware |
+| `general_purpose_subagent` | 禁用、重命名或重写默认 general-purpose subagent prompt |
+
+注意：调用方传给 `create_deep_agent(system_prompt=...)` 的 `system_prompt` 总是位于组装 prompt 的最前面；`system_prompt_suffix` 总是位于最后。Subagents 也会根据自己的 model 重新解析 profile。
+
+### 注册 Key
+
+Harness Profiles 支持两种 key：
+
+| Key 类型 | 示例 | 作用范围 |
+|----------|------|----------|
+| Provider-level | `"openai"` | 适用于该 provider 的所有模型 |
+| Model-level | `"openai:gpt-5.5"` | 只适用于这个具体模型 |
+
+如果 provider-level 和 model-level 同时存在，Deep Agents 会在解析时合并：
+
+- model-level 未设置的字段继承 provider-level。
+- model-level 显式设置的字段覆盖 provider-level。
+- 重复注册同一个 key 时，新 profile 会叠加到旧 profile 上，而不是完全替换。
+
+没有“匹配所有 provider”的 wildcard key。如果想对多个 provider 应用相同配置，需要分别注册。真正全局的配置更适合直接写在 `create_deep_agent(...)` 调用点。
+
+### Merge Semantics
+
+| 字段 | 合并规则 |
+|------|----------|
+| `base_system_prompt`, `system_prompt_suffix` | 新值设置时覆盖，否则继承 |
+| `tool_description_overrides` | 按 key 合并，共同 key 新值胜出 |
+| `excluded_tools`, `excluded_middleware` | 取集合并集 |
+| `extra_middleware` | 按 middleware name 合并，新实例替换旧实例，新项追加 |
+| `general_purpose_subagent` | 按字段合并，未设置字段继承 |
+
+### ProviderProfile 与 HarnessProfile 的区别
+
+官方文档还提到 **Provider profiles**。它和 Harness Profiles 容易混淆，但作用不同：
+
+| 类型 | 影响什么 | 典型用途 |
+|------|----------|----------|
+| `HarnessProfile` | prompt 组装、工具可见性、middleware、默认 subagent | 调整 Agent harness 行为 |
+| `ProviderProfile` | `init_chat_model` 的模型构造参数 | 设置 provider 默认 kwargs、凭证检查、运行时 headers |
+
+ProviderProfile 示例：
+
+```python
+from deepagents import ProviderProfile, register_provider_profile
+
+register_provider_profile(
+    "openai",
+    ProviderProfile(init_kwargs={"temperature": 0}),
+)
+```
+
+它只在你用 `provider:model` 字符串创建 deep agent 时生效；如果你传的是已经构造好的 chat model 实例，则不会用于构造模型。
+
+### 从 YAML / JSON 加载
+
+如果要把 profile 配置放进文件，可以使用 `HarnessProfileConfig`。它支持声明式子集，例如 prompt 文本、工具描述覆盖、排除工具、排除 middleware、general-purpose subagent 配置。
+
+```yaml
+# openai.yaml
+base_system_prompt: You are helpful.
+system_prompt_suffix: Respond briefly.
+excluded_tools:
+  - execute
+  - grep
+excluded_middleware:
+  - SummarizationMiddleware
+general_purpose_subagent:
+  enabled: false
+```
+
+```python
+import yaml
+from deepagents import HarnessProfileConfig, register_harness_profile
+
+with open("openai.yaml") as f:
+    register_harness_profile(
+        "openai",
+        HarnessProfileConfig.from_dict(yaml.safe_load(f)),
+    )
+```
+
+### 作为插件发布
+
+可分发的 profiles 可以通过 Python package entry points 自动注册。加载顺序是：
+
+1. built-ins。
+2. entry-point plugins。
+3. 用户代码里直接 `register_*_profile`。
+
+后注册的配置会叠加到前面的配置上。
+
+### 使用注意
+
+- Deep Agents 内置 OpenAI 和 Anthropic / Claude 的 harness profiles。
+- 不要用 `excluded_middleware` 移除 `FilesystemMiddleware`、`SubAgentMiddleware` 或内部 permission middleware；这些是默认 stack 的必要脚手架，会触发 `ValueError`。
+- 如果只是想隐藏文件工具，用 `excluded_tools`。
+- 如果想不暴露 `task` tool，应禁用默认 general-purpose subagent，并且不要传同步 `subagents=`。
 
 ---
 
