@@ -841,7 +841,13 @@ msg.tool_calls
 
 ## Workflow Pattern：Prompt Chaining
 
-Prompt chaining 指多个 LLM 调用串联，后一步处理前一步输出。
+Prompt chaining 指多个 LLM 调用串联，后一步处理前一步输出。（将上一步输出作为输入）
+
+核心特征：
+
+- **线性、单向**：任务被拆成一串**固定顺序**的子步骤，输出依次向下游流动，走完即结束。
+- **分而治之**：用「拆分」换取每一步更高的准确率——每个 LLM 调用只专注一件小事。
+- **可加 Gate（程序化检查）**：在步骤之间插入代码校验，不通过就提前中断或走修订分支，但**不会回到起点循环**。
 
 适合：
 
@@ -850,6 +856,8 @@ Prompt chaining 指多个 LLM 调用串联，后一步处理前一步输出。
 | 文档翻译 | 翻译、校对、风格润色 |
 | 内容生成 | 初稿、改写、最终润色 |
 | 一步一步验证 | 先生成，再检查，再修订 |
+
+> 前提：任务能被清晰拆成**确定的顺序步骤**。若步骤数不固定、需要反复打磨到满意，应改用 [Evaluator-Optimizer](#workflow-patternevaluator-optimizer)。
 
 示例流程：
 
@@ -892,7 +900,7 @@ def prompt_chaining_workflow(topic: str):
 
 ## Workflow Pattern：Parallelization
 
-Parallelization 指同时运行多个独立 LLM 任务，最后聚合结果。
+Parallelization 指同时运行多个独立 LLM 任务，最后聚合结果。（并行运行多个任务，聚合结果）
 
 适合：
 
@@ -947,7 +955,7 @@ def parallel_workflow(topic: str):
 
 ## Workflow Pattern：Routing
 
-Routing 先分析输入，再把请求分发到不同专用流程。
+Routing 先分析输入，再把请求分发到不同专用流程。（先分析输入，再分派）
 
 适合：
 
@@ -1015,7 +1023,7 @@ def router_workflow(input_: str):
 
 ## Workflow Pattern：Orchestrator-Worker
 
-Orchestrator-worker 模式中，orchestrator 负责：
+Orchestrator-worker 模式中，orchestrator 负责：（拆分任务，分配任务，汇总结果）
 
 1. 把任务拆成子任务。
 2. 把子任务分配给 workers。
@@ -1090,7 +1098,13 @@ class State(TypedDict):
 
 ## Workflow Pattern：Evaluator-Optimizer
 
-Evaluator-optimizer 模式由一个生成器和一个评估器组成。
+Evaluator-optimizer 模式由一个生成器和一个评估器组成。（生成器生成数据，评估器评估数据，生成器生成更好的数据）
+
+核心特征：
+
+- **循环、带反馈回路**：生成器（Generator）产出结果，评估器（Evaluator）打分并给出**具体反馈**，不合格就带着反馈回到生成器重做。
+- **迭代次数不固定**：一直循环到评估通过（或达到最大轮次上限）为止，本质是「做完再改、改到好为止」的打磨过程。
+- **关键前提**：存在**清晰、可判定的验收标准**，且「多次修改能明显提升质量」。
 
 流程：
 
@@ -1098,7 +1112,7 @@ Evaluator-optimizer 模式由一个生成器和一个评估器组成。
 generator
   -> evaluator
       -> accepted: END
-      -> rejected + feedback: generator
+      -> rejected + feedback: generator   # ← 回到生成器，形成循环
 ```
 
 适合：
@@ -1164,6 +1178,20 @@ def optimizer_workflow(topic: str):
 | 循环目标明确 | 循环目标可能开放 |
 | evaluator 决定是否继续 | LLM 自己决定工具和步骤 |
 | 适合有清晰验收标准 | 适合过程不可预知的问题 |
+
+与 Prompt Chaining 的区别（易混点）：
+
+| 维度 | Prompt Chaining | Evaluator-Optimizer |
+|------|-----------------|---------------------|
+| 控制流 | 线性、单向 | 循环、带反馈回路 |
+| 步骤数 | 固定 | 不固定（迭代到满意） |
+| 角色关系 | 流水线接力 | 生成 ↔ 评判 协作/对抗 |
+| 何时结束 | 走完所有步骤 | 评估通过或达轮次上限 |
+| 关键前提 | 任务可拆成有序子任务 | 有清晰的验收标准，且反馈能改进结果 |
+| LangGraph 写法 | `add_edge` 顺序连边（可加一次性 Gate） | `add_conditional_edges` 构成回环 |
+| 一句话 | 把事情**拆开一步步做** | 把事情**做完再改、改到好为止** |
+
+> 简记：Prompt Chaining 是**分而治之**，Evaluator-Optimizer 是**打磨迭代**。前者中间的 Gate 检查只走一次、不回头；后者的 evaluator 会带反馈反复回到生成器。
 
 ---
 
