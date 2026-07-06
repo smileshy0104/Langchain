@@ -1216,7 +1216,7 @@ response3 = agent.run("再见")
 
 ### 📦 完整代码
 
-完整实现见: [exercise_02_new_model_provider.py](../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_02_new_model_provider.py)
+完整实现见: [exercise_02_new_model_provider.py](../../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_02_new_model_provider.py)
 
 运行测试:
 ```bash
@@ -1621,7 +1621,7 @@ print(select_agent(task2))  # PlanAndSolveAgent
 
 ### 📚 完整文档
 
-详细对比见: [exercise_03_agent_comparison.md](../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_03_agent_comparison.md)
+详细对比见: [exercise_03_agent_comparison.md](../../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_03_agent_comparison.md)
 
 ---
 
@@ -1948,7 +1948,7 @@ print(f"结果: {result}\n")
 
 ### 📦 完整代码
 
-完整实现见: [exercise_04_custom_tools.py](../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_04_custom_tools.py)
+完整实现见: [exercise_04_custom_tools.py](../../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_04_custom_tools.py)
 
 运行测试:
 ```bash
@@ -2390,7 +2390,7 @@ manager.cleanup_all()
 
 ### 📦 完整代码
 
-完整实现见: [exercise_05_plugin_system.py](../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_05_plugin_system.py)
+完整实现见: [exercise_05_plugin_system.py](../../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/exercise_05_plugin_system.py)
 
 运行测试:
 ```bash
@@ -2425,8 +2425,8 @@ python exercise_05_plugin_system.py
 ## 📚 相关资源
 
 - **习题代码**: [exercises/](../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/)
-- **运行脚本**: [run_all_exercises.py](../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/run_all_exercises.py)
-- **习题总结**: [EXERCISES_SUMMARY.md](../agent-langchain-code/HelloAgents_Chapter7_Code/EXERCISES_SUMMARY.md)
+- **运行脚本**: [run_all_exercises.py](../../agent-langchain-code/HelloAgents_Chapter7_Code/exercises/run_all_exercises.py)
+- **习题总结**: [EXERCISES_SUMMARY.md](../../agent-langchain-code/HelloAgents_Chapter7_Code/EXERCISES_SUMMARY.md)
 
 ---
 

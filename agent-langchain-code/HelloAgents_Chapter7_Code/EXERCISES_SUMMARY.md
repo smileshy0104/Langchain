@@ -258,7 +258,7 @@ python run_all_exercises.py
 
 ### 本章资源
 - [Hello Agents 第七章文档](../README.md)
-- [章节总结](../../agent-docs/HelloAgents_Chapter7_通俗总结.md)
+- [章节总结](../../study-docs/agent-docs/HelloAgents_Chapter7_通俗总结.md)
 - [核心代码](../)
 
 ### 外部资源

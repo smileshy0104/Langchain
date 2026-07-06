@@ -1,7 +1,7 @@
 # Hello-Agents 第五章习题解答 (续)
 
 > **说明**: 本文档是第五章习题解答的续篇,包含习题4-7的完整解答
-> **前置文档**: [HelloAgents_Chapter5_习题解答.md](./HelloAgents_Chapter5_习题解答.md) (习题1-3)
+> **前置文档**: [HelloAgents_Chapter5_习题解答.md](HelloAgents_Chapter5_习题解答.md) (习题1-3)
 
 ---
 

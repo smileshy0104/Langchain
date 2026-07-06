@@ -594,7 +594,7 @@ from deepagents.backends import FilesystemBackend
 
 agent = create_deep_agent(
     model="openai:gpt-5.5",
-    backend=FilesystemBackend(root_dir=".", virtual_mode=True),
+    backend=FilesystemBackend(root_dir="", virtual_mode=True),
 )
 ```
 
@@ -614,7 +614,7 @@ from deepagents.backends import LocalShellBackend
 agent = create_deep_agent(
     model="openai:gpt-5.5",
     backend=LocalShellBackend(
-        root_dir=".",
+        root_dir="../langchain-docs",
         virtual_mode=True,
         env={"PATH": "/usr/bin:/bin"},
     ),
