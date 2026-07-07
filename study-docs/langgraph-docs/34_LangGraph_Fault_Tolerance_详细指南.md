@@ -757,7 +757,7 @@ graph = (
 
 ## Precedence 与 Applicability
 
-### Precedence
+### Precedence（优先级）
 
 节点级配置覆盖 graph defaults：
 
@@ -776,11 +776,11 @@ graph = (
 | 节点 | 使用 handler |
 |------|--------------|
 | `step_a` | `default_error_handler` |
-| `step_b` | `custom_error_handler` |
+| `step_b` | `custom_error_handler（进行覆盖）` |
 
 Defaults 在 `compile()` 时解析，所以 `set_node_defaults()` 可以在 `add_node()` 前或后调用。
 
-### Applicability matrix
+### Applicability matrix（适用范围）
 
 | `set_node_defaults` parameter | Regular nodes | Error-handler nodes | 原因 |
 |-------------------------------|---------------|---------------------|------|
