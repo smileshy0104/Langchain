@@ -151,6 +151,63 @@ state history 通常按倒序返回，也就是最新 checkpoint 在前。
 | `state.values` | checkpoint 中保存的 state |
 | `state.tasks` | task/subgraph 相关信息 |
 
+理解 `state.next` 很关键：
+
+```text
+state.next 不是“刚刚执行过的节点”，
+而是“从这个 checkpoint 继续时，下一步要执行的节点”。
+```
+
+例如：
+
+```text
+ask_name -> ask_age -> final
+```
+
+如果某个 checkpoint 的：
+
+```python
+state.next == ("ask_age",)
+```
+
+它表示：
+
+```text
+ask_name 已经执行完成；
+ask_age 还没有开始执行；
+从这个 checkpoint replay/fork，会从 ask_age 继续。
+```
+
+因此，选择 checkpoint 时常见写法是：
+
+```python
+before_age = next(
+    s for s in history
+    if s.next == ("ask_age",)
+)
+```
+
+这类变量名通常可以理解为：
+
+```text
+before_age = “ask_age 之前的 checkpoint”
+```
+
+注意 `get_state_history(config)` 通常按倒序返回：
+
+```text
+history[0] 是最新 checkpoint；
+history[-1] 是最早 checkpoint。
+```
+
+如果同一个节点在循环或多轮调用中出现多次，`[0]` 和 `[-1]` 的语义不同：
+
+| 写法 | 含义 |
+|------|------|
+| `matches[0]` | 最近一次 next 为目标节点的 checkpoint |
+| `matches[-1]` | 最早一次 next 为目标节点的 checkpoint |
+| `next(...)` | 等价于取第一个匹配，通常是最近一次 |
+
 ---
 
 ## Replay
@@ -550,6 +607,76 @@ between = [
 ][-1]
 ```
 
+这段代码的作用是：
+
+```text
+从历史 checkpoint 中找出“下一步要执行 ask_age”的状态。
+```
+
+也就是：
+
+```text
+ask_name 已经完成；
+ask_age 尚未执行；
+这个 checkpoint 位于两个 interrupt 中间。
+```
+
+变量名 `between` 的含义可以理解为：
+
+```text
+between = ask_name 和 ask_age 之间的 checkpoint
+```
+
+为什么过滤 `s.next == ("ask_age",)`：
+
+| 条件 | 表示 |
+|------|------|
+| `s.next == ("ask_name",)` | 还没问名字 |
+| `s.next == ("ask_age",)` | 已经问完名字，下一步要问年龄 |
+| `s.next == ("final",)` | 已经问完年龄，下一步要进入 final |
+| `s.next == ()` | graph 已完成，没有后续节点 |
+
+为什么这里用了 `[-1]`：
+
+```text
+get_state_history(config) 通常按倒序返回。
+如果 ask_age 这个节点在历史中出现多次，[-1] 会取最早一次匹配。
+```
+
+在简单的一次性表单里通常只有一个 `ask_age` checkpoint，`[0]`、`[-1]`、`next(...)` 得到的效果相同。
+
+如果是循环、多轮表单或同一个节点可能多次出现，需要明确你想要哪一个：
+
+```python
+matches = [
+    s for s in history
+    if s.next == ("ask_age",)
+]
+
+latest_between = matches[0]   # 最近一次到达 ask_age 前
+earliest_between = matches[-1]  # 最早一次到达 ask_age 前
+```
+
+更推荐在业务代码里写得更明确：
+
+```python
+ask_age_checkpoints = [
+    s for s in history
+    if s.next == ("ask_age",)
+]
+
+between = ask_age_checkpoints[0]  # 最近一次
+```
+
+或者：
+
+```python
+between = next(
+    s for s in history
+    if s.next == ("ask_age",)
+)
+```
+
 从中间 fork：
 
 ```python
@@ -808,6 +935,24 @@ history = list(graph.get_state_history(config))
 before_node = next(s for s in history if s.next == ("target_node",))
 ```
 
+这里的 `before_node` 表示：
+
+```text
+target_node 还没执行，但从该 checkpoint 继续时将执行 target_node。
+```
+
+如果同一个 `target_node` 可能出现多次，不要随手使用 `[-1]`，先明确你需要最近一次还是最早一次：
+
+```python
+matches = [
+    s for s in history
+    if s.next == ("target_node",)
+]
+
+latest_before_node = matches[0]
+earliest_before_node = matches[-1]
+```
+
 5. Replay 前确认后续节点可以安全重跑。
 
 ```text
@@ -885,6 +1030,29 @@ checkpoint = next(
 
 result = graph.invoke(None, checkpoint.config)
 ```
+
+### 选择目标节点前的 checkpoint
+
+```python
+# get_state_history 通常倒序：最新 checkpoint 在前
+history = list(graph.get_state_history(config))
+
+matches = [
+    s for s in history
+    if s.next == ("ask_age",)
+]
+
+latest_before_ask_age = matches[0]
+earliest_before_ask_age = matches[-1]
+```
+
+语义：
+
+| 选择 | 含义 |
+|------|------|
+| `s.next == ("ask_age",)` | 从该 checkpoint 继续会执行 `ask_age` |
+| `matches[0]` | 最近一次到达 `ask_age` 前 |
+| `matches[-1]` | 最早一次到达 `ask_age` 前 |
 
 ### Fork
 
