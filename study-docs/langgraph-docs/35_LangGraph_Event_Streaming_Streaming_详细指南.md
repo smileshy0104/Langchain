@@ -8,34 +8,35 @@
 2. [两套 Streaming API](#两套-streaming-api)
 3. [Event Streaming Quickstart](#event-streaming-quickstart)
 4. [Event Streaming 架构](#event-streaming-架构)
-5. [Typed Projections](#typed-projections)
-6. [Stream Messages](#stream-messages)
-7. [Stream Subgraphs](#stream-subgraphs)
-8. [Stream State 与 Output](#stream-state-与-output)
-9. [Multiple Projections](#multiple-projections)
-10. [Interrupt Resume](#interrupt-resume)
-11. [Raw Protocol Events](#raw-protocol-events)
-12. [Channels 与 Event Lifecycle](#channels-与-event-lifecycle)
-13. [Build Your Own Projection](#build-your-own-projection)
-14. [StreamTransformer](#streamtransformer)
-15. [StreamChannel](#streamchannel)
-16. [ToolCallTransformer](#toolcalltransformer)
-17. [Streaming Quickstart](#streaming-quickstart)
-18. [Stream Output Format v2](#stream-output-format-v2)
-19. [Stream Modes](#stream-modes)
-20. [Graph State：values 与 updates](#graph-statevalues-与-updates)
-21. [LLM Tokens：messages](#llm-tokensmessages)
-22. [Custom Data](#custom-data)
-23. [Subgraph Outputs](#subgraph-outputs)
-24. [Checkpoints、Tasks 与 Debug](#checkpointstasks-与-debug)
-25. [Multiple Modes](#multiple-modes)
-26. [Advanced Streaming](#advanced-streaming)
-27. [Migrate to v2](#migrate-to-v2)
-28. [Async with Python < 3.11](#async-with-python--311)
-29. [最佳实践](#最佳实践)
-30. [故障排查](#故障排查)
-31. [快速参考](#快速参考)
-32. [资料来源](#资料来源)
+5. [Typed Projection 层是什么](#typed-projection-层是什么)
+6. [Typed Projections](#typed-projections)
+7. [Stream Messages](#stream-messages)
+8. [Stream Subgraphs](#stream-subgraphs)
+9. [Stream State 与 Output](#stream-state-与-output)
+10. [Multiple Projections](#multiple-projections)
+11. [Interrupt Resume](#interrupt-resume)
+12. [Raw Protocol Events](#raw-protocol-events)
+13. [Channels 与 Event Lifecycle](#channels-与-event-lifecycle)
+14. [Build Your Own Projection](#build-your-own-projection)
+15. [StreamTransformer](#streamtransformer)
+16. [StreamChannel](#streamchannel)
+17. [ToolCallTransformer](#toolcalltransformer)
+18. [Streaming Quickstart](#streaming-quickstart)
+19. [Stream Output Format v2](#stream-output-format-v2)
+20. [Stream Modes](#stream-modes)
+21. [Graph State：values 与 updates](#graph-statevalues-与-updates)
+22. [LLM Tokens：messages](#llm-tokensmessages)
+23. [Custom Data](#custom-data)
+24. [Subgraph Outputs](#subgraph-outputs)
+25. [Checkpoints、Tasks 与 Debug](#checkpointstasks-与-debug)
+26. [Multiple Modes](#multiple-modes)
+27. [Advanced Streaming](#advanced-streaming)
+28. [Migrate to v2](#migrate-to-v2)
+29. [Async with Python < 3.11](#async-with-python--311)
+30. [最佳实践](#最佳实践)
+31. [故障排查](#故障排查)
+32. [快速参考](#快速参考)
+33. [资料来源](#资料来源)
 
 ---
 
@@ -171,6 +172,85 @@ Event router 的职责：
 | 调用 transformer pipeline | 每个 transformer 观察/处理事件 |
 | 生成 built-in projections | `messages`、`values`、`subgraphs`、`output` |
 | 挂载 custom projections | 放到 `stream.extensions` |
+
+---
+
+## Typed Projection 层是什么
+
+`typed projection 层` 可以理解成：
+
+```text
+把底层杂乱的流式事件，整理成有明确类型、明确用途、方便应用代码消费的视图层。
+```
+
+底层 Streaming 更接近运行时事件，需要自己判断事件类型：
+
+```python
+for event in stream:
+    if event["method"] == "messages":
+        ...
+    elif event["method"] == "updates":
+        ...
+    elif event["method"] == "custom":
+        ...
+```
+
+Event Streaming 在这些 raw/protocol events 之上提供 typed projections：
+
+```python
+stream = graph.stream_events(input_data, version="v3")
+
+for message in stream.messages:
+    for token in message.text:
+        print(token, end="", flush=True)
+
+if stream.interrupted:
+    print(stream.interrupts)
+
+final_state = stream.output
+```
+
+这里的 `stream.messages`、`stream.values`、`stream.output`、`stream.subgraphs`、`stream.interrupts` 就是 projection。
+
+`typed` 的含义：
+
+| 含义 | 说明 |
+|------|------|
+| 明确语义 | `messages` 就是消息流，`values` 就是 state snapshots |
+| 明确结构 | 不需要自己解析 `event["method"]` 和 `event["params"]` |
+| 明确消费方式 | 每个 projection 有自己的迭代/读取方式 |
+| 更适合 UI / 应用层 | 前端可以按区域消费 token、state、interrupt、subgraph |
+
+`projection` 的含义：
+
+```text
+不是把所有 raw events 原样暴露给你，
+而是从底层事件流中“投影”出某一类应用关心的视图。
+```
+
+可以把它类比为：
+
+```text
+raw events = 一堆物流扫描记录
+typed projections = “只看当前位置”“只看签收状态”“只看异常件”
+```
+
+在 LangGraph 中：
+
+```text
+Streaming = 底层运行时事件流；
+Event Streaming typed projection 层 = 面向应用代码的结构化消费层。
+```
+
+这层的价值：
+
+| 价值 | 说明 |
+|------|------|
+| 少写分支判断 | 不需要手动 `if event["method"] == ...` |
+| 降低协议耦合 | 应用代码不直接依赖 raw event envelope |
+| 支持并发消费 | `messages`、`values`、`subgraphs` 可独立读取 |
+| 更容易做 UI | token、state、interrupt、subgraph 可以分区展示 |
+| 可扩展 | 自定义 `StreamTransformer` 可以挂到 `stream.extensions` |
 
 ---
 
@@ -1299,6 +1379,8 @@ async def generate_joke(state: State, writer: StreamWriter):
 
 ### Event Streaming projections
 
+这些 projections 是 typed projection 层暴露给应用代码的结构化视图：
+
 | Projection | 说明 |
 |------------|------|
 | `stream.messages` | chat model messages |
@@ -1308,6 +1390,17 @@ async def generate_joke(state: State, writer: StreamWriter):
 | `stream.interrupts` | HITL interrupt payloads |
 | `stream.interrupted` | 是否暂停 |
 | `stream.extensions` | custom projections |
+
+### Raw events 到 projection 的关系
+
+| 底层事件/信息 | Projection 视图 | 应用层用途 |
+|---------------|-----------------|------------|
+| message chunks | `stream.messages` | 展示 LLM token / 消息输出 |
+| state values | `stream.values` | 展示 graph state 快照 |
+| final graph output | `stream.output` | 获取最终结果 |
+| nested graph events | `stream.subgraphs` | 展示子图/子 agent 执行 |
+| interrupt payloads | `stream.interrupts` | 处理 HITL 审批/输入 |
+| custom transformer data | `stream.extensions` | 承载自定义应用流 |
 
 ### Streaming modes
 
