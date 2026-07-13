@@ -1,0 +1,97 @@
+"""
+案例 2：Custom Retry Logic
+
+目标：
+- 使用 retry_on callable 自定义哪些异常可以重试。
+- TransientServiceError 可以重试。
+- BusinessRuleError 不应该重试。
+
+对应文档概念：
+- Custom Retry Logic
+- default_retry_on
+- 不要重试确定性业务错误
+"""
+
+from __future__ import annotations
+
+from typing import Literal, TypedDict
+
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
+from langgraph.types import RetryPolicy, default_retry_on
+
+
+class TransientServiceError(Exception):
+    """临时服务错误，适合 retry。"""
+
+
+class BusinessRuleError(Exception):
+    """确定性业务错误，不应该 retry。"""
+
+
+class ServiceState(TypedDict):
+    mode: Literal["transient", "business"]
+    result: str
+
+
+def custom_retry_on(exc: BaseException) -> bool:
+    if isinstance(exc, BusinessRuleError):
+        return False
+    if isinstance(exc, TransientServiceError):
+        return True
+    return default_retry_on(exc)
+
+
+def service_node(state: ServiceState, runtime: Runtime) -> dict:
+    attempt = runtime.execution_info.node_attempt
+    print(f"mode={state['mode']}, attempt={attempt}")
+
+    if state["mode"] == "business":
+        raise BusinessRuleError("invalid order amount")
+
+    if attempt == 1:
+        raise TransientServiceError("temporary 503")
+
+    return {"result": "transient failure recovered"}
+
+
+def build_graph():
+    builder = StateGraph(ServiceState)
+    builder.add_node(
+        "service",
+        service_node,
+        retry_policy=RetryPolicy(
+            max_attempts=3,
+            initial_interval=0.1,
+            retry_on=custom_retry_on,
+            jitter=False,
+        ),
+    )
+    builder.add_edge(START, "service")
+    builder.add_edge("service", END)
+    return builder.compile(checkpointer=InMemorySaver())
+
+
+def main() -> None:
+    graph = build_graph()
+
+    print("Transient error: should retry and succeed")
+    ok = graph.invoke(
+        {"mode": "transient", "result": ""},
+        {"configurable": {"thread_id": "custom-retry-ok"}},
+    )
+    print(ok)
+
+    print("\nBusiness error: should not retry")
+    try:
+        graph.invoke(
+            {"mode": "business", "result": ""},
+            {"configurable": {"thread_id": "custom-retry-fail"}},
+        )
+    except BusinessRuleError as exc:
+        print(f"caught expected business error: {exc}")
+
+
+if __name__ == "__main__":
+    main()
