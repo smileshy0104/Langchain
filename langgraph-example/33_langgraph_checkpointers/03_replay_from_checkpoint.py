@@ -25,12 +25,14 @@ RUN_COUNTER = {"prepare": 0, "write": 0}
 
 
 class DraftState(TypedDict):
+    # 使用追加 reducer 可以直观看到 replay 后哪些节点重新执行过。
     log: Annotated[list[str], operator.add]
     topic: str
     draft: str
 
 
 def prepare_topic(state: DraftState) -> dict:
+    # 全局计数器只用于演示 replay 行为：如果节点重跑，计数会增加。
     RUN_COUNTER["prepare"] += 1
     topic = state.get("topic") or "checkpointers"
     return {
@@ -66,12 +68,16 @@ def main() -> None:
     print("运行计数:", RUN_COUNTER)
 
     history = list(graph.get_state_history(config))
+    # state.next 表示“从这个 checkpoint 继续时下一个要执行的节点”。
+    # 这里筛出 write_draft 执行前的 checkpoint。
     before_write = next(
         snapshot
         for snapshot in history
         if snapshot.next == ("write_draft",)
     )
 
+    # invoke(None, checkpoint.config) 表示从历史 checkpoint replay；
+    # checkpoint 之前的节点不重跑，checkpoint 之后的节点会重新执行。
     replay = graph.invoke(None, before_write.config)
     print("\nReplay from checkpoint before write_draft:", replay)
     print("运行计数:", RUN_COUNTER)

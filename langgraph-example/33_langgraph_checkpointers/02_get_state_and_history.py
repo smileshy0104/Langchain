@@ -22,6 +22,7 @@ from langgraph.graph import END, START, StateGraph
 
 
 class WorkflowState(TypedDict):
+    # log 使用追加 reducer，方便在 history 中观察每个节点的写入轨迹。
     log: Annotated[list[str], operator.add]
     topic: str
     draft: str
@@ -44,6 +45,7 @@ def build_graph():
     builder.add_edge(START, "prepare_topic")
     builder.add_edge("prepare_topic", "write_draft")
     builder.add_edge("write_draft", END)
+    # InMemorySaver 只适合本地示例；进程退出后 checkpoint 会丢失。
     return builder.compile(checkpointer=InMemorySaver())
 
 
@@ -51,17 +53,21 @@ def main() -> None:
     graph = build_graph()
     config = {"configurable": {"thread_id": "history-thread"}}
 
+    # invoke 完整跑完 graph 后，checkpointer 中会保存从输入到结束的多个 checkpoint。
     graph.invoke({"log": [], "topic": "LangGraph", "draft": ""}, config)
 
+    # get_state 不带 checkpoint_id 时读取该 thread 的最新 StateSnapshot。
     latest = graph.get_state(config)
     print("最新 StateSnapshot:")
     print("values:", latest.values)
+    # next 为空元组表示当前 checkpoint 已经到达 END，没有待执行节点。
     print("next:", latest.next)
     print("config:", latest.config)
     print("metadata:", latest.metadata)
     print("parent_config:", latest.parent_config)
 
     print("\nHistory newest first:")
+    # get_state_history 通常按 newest first 返回，适合从近到远排查状态变化。
     for index, snapshot in enumerate(graph.get_state_history(config), start=1):
         checkpoint_id = snapshot.config["configurable"]["checkpoint_id"]
         print(

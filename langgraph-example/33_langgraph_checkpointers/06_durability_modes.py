@@ -23,6 +23,7 @@ from langgraph.graph import END, START, StateGraph
 
 
 class JobState(TypedDict):
+    # log 追加写入，方便观察节点执行记录；result 则保持普通覆盖语义。
     log: Annotated[list[str], operator.add]
     result: str
 
@@ -39,6 +40,7 @@ def build_graph():
     builder.add_node("work", work_node)
     builder.add_edge(START, "work")
     builder.add_edge("work", END)
+    # durability 参数只有在 graph 配置了 checkpointer 时才有意义。
     return builder.compile(checkpointer=InMemorySaver())
 
 
@@ -46,12 +48,15 @@ def run_with_durability(mode: Literal["sync", "async", "exit"]) -> None:
     graph = build_graph()
     config = {"configurable": {"thread_id": f"durability-{mode}"}}
 
+    # durability 控制 checkpoint 写入时机：
+    # sync 更稳，async 更快，exit 写入最少但中途崩溃恢复能力最弱。
     result = graph.invoke(
         {"log": [], "result": ""},
         config,
         durability=mode,
     )
 
+    # InMemorySaver 能展示 API 调用形式，但不能体现数据库落盘时机的差异。
     snapshot = graph.get_state(config)
     print(f"\nmode={mode}")
     print("result:", result)
