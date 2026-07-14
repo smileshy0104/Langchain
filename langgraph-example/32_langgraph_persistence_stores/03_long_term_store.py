@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from ftplib import print_line
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -81,6 +82,7 @@ def main() -> None:
     config_2 = {"configurable": {"thread_id": "thread-2"}}
     context = Context(user_id="user-1")
 
+    print_line("长期记忆 Store")
     print("第一条 thread：写入长期记忆")
     result = graph.invoke(
         {"message": "remember: 用户喜欢深色模式"},
