@@ -23,11 +23,15 @@ from langgraph.types import Command, interrupt
 
 
 class ApprovalState(TypedDict):
+    # action 是等待人工审批的动作。
     action: str
+    # approved 在中断前为 None，恢复时由 Command(resume=...) 的值填入。
     approved: bool | None
+    # result 保存最终执行或取消的结果。
     result: str
 
 
+# 审批节点：调用 interrupt 暂停 graph，并把 HITL payload 暴露给调用方。
 def approval_node(state: ApprovalState) -> dict:
     approved = interrupt(
         {
@@ -35,15 +39,18 @@ def approval_node(state: ApprovalState) -> dict:
             "action": state["action"],
         }
     )
+    # graph resume 后，interrupt(...) 的返回值就是 Command(resume=...) 传入的数据。
     return {"approved": approved}
 
 
+# 执行节点：根据人工审批结果决定是否执行动作。
 def execute_node(state: ApprovalState) -> dict:
     if state["approved"]:
         return {"result": f"executed: {state['action']}"}
     return {"result": f"cancelled: {state['action']}"}
 
 
+# 构建带 checkpointer 的 graph；interrupt/resume 必须依赖 checkpoint 保存暂停点。
 def build_graph():
     builder = StateGraph(ApprovalState)
     builder.add_node("approval", approval_node)
@@ -54,8 +61,11 @@ def build_graph():
     return builder.compile(checkpointer=InMemorySaver())
 
 
+# 主函数演示：通过 Event Streaming 获取 interrupt 信息，再恢复执行。
 def main() -> None:
     graph = build_graph()
+
+    # thread_id 用于在恢复时找到同一个暂停的 graph run。
     config = {"configurable": {"thread_id": "approval-stream"}}
 
     stream = graph.stream_events(
@@ -64,11 +74,15 @@ def main() -> None:
         version="v3",
     )
 
+    # 消费 output 会驱动 graph 执行到中断点；中断时 output 通常不是最终业务结果。
     _ = stream.output
 
+    # stream.interrupted 是 typed projection 提供的布尔标志。
+    # stream.interrupts 包含 interrupt(...) 中传出的 payload，供 UI 展示给用户。
     if stream.interrupted:
         print("interrupt payloads:", stream.interrupts)
 
+    # 使用同一个 config + Command(resume=True) 从 checkpoint 中恢复运行。
     resumed = graph.stream_events(
         Command(resume=True),
         config=config,
