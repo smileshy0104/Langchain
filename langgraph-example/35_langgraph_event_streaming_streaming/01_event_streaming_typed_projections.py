@@ -17,10 +17,17 @@
 
 from __future__ import annotations
 
+import warnings
 import operator
 from typing import Annotated, TypedDict
 
+from langchain_core._api.beta_decorator import LangChainBetaWarning
+
 from langgraph.graph import END, START, StateGraph
+
+
+# 当前 LangGraph 版本中 v3 streaming protocol 仍标记为 beta；示例隐藏该警告，避免干扰教学输出。
+warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 
 
 class ReportState(TypedDict):

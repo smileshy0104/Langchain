@@ -15,11 +15,18 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TypedDict
+
+from langchain_core._api.beta_decorator import LangChainBetaWarning
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
+
+
+# 当前 LangGraph 版本中 v3 streaming protocol 仍标记为 beta；示例隐藏该警告，避免干扰教学输出。
+warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 
 
 class ApprovalState(TypedDict):
