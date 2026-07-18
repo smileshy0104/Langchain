@@ -33,12 +33,12 @@ def export_node(state: ExportState) -> dict:
     # 写入的数据会以 stream_mode="custom" 的 chunk 形式发给调用方。
     writer = get_stream_writer()
 
-    # 这些 writer(...) 调用不会改变 graph state，只是向外部发送进度事件。
+    # 这些 writer(...) 调用不会改变 graph state（不会改变），只是向外部发送进度事件。
     writer({"phase": "validate", "message": f"checking {state['filename']}"})
     writer({"phase": "render", "message": "rendering report"})
     writer({"phase": "upload", "message": "upload complete"})
 
-    # return 的内容才会作为 state update 合并回 graph state。
+    # return 的内容才会作为 state update 合并回 graph state。（update时返回）
     return {"status": "exported"}
 
 
