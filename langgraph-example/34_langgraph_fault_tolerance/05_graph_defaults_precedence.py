@@ -83,7 +83,7 @@ def finalize(state: WorkflowState) -> dict:
 def build_graph():
     builder = (
         StateGraph(WorkflowState)
-        .set_node_defaults(
+        .set_node_defaults( # 多个节点共享同样的容错配置
             # 默认 retry_policy 适用于后续未单独覆盖 retry_policy 的节点。
             retry_policy=RetryPolicy(
                 max_attempts=1,  # 不重试，只执行一次；失败后直接进入 error_handler。
