@@ -33,7 +33,7 @@ class ApiState(TypedDict):
 def flaky_api_node(state: ApiState, runtime: Runtime) -> dict:
     # LangGraph 会在 Runtime.execution_info 中提供当前节点的执行上下文。
     # node_attempt 表示当前节点第几次尝试执行：首次为 1，重试时递增。
-    attempt = runtime.execution_info.node_attempt
+    attempt = runtime.execution_info.node_attempt # 默认首次指为1
     print(f"flaky_api_node attempt={attempt}")
 
     # 第一次 attempt 抛出临时网络错误；RetryPolicy 会判断该异常是否可重试。
