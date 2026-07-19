@@ -79,6 +79,7 @@ def main() -> None:
     # s.next == ("ask_age",) 表示 ask_name 已完成，下一步将进入 ask_age。
     matches = [s for s in history if s.next == ("ask_age",)]
     between = matches[0]
+    print("matches:",matches)
 
     print("\nbetween means: ask_name completed, ask_age not started")
     print("between values:", between.values)

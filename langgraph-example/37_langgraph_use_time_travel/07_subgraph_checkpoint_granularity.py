@@ -71,6 +71,8 @@ def run_default_subgraph() -> None:
     """演示默认子图 checkpoint 粒度：只能从父图看到 subgraph_node。"""
 
     print("Default subgraph: inherited parent checkpointer")
+    # 父图默认继承子图 checkpointer，子图 checkpoint 只能被父图访问。
+    # subgraph_own_checkpointer 是为了测试子图 checkpoint 粒度，可显式设置子图 checkpointer。
     graph = build_parent_graph(subgraph_own_checkpointer=False)
     config = {"configurable": {"thread_id": "subgraph-default"}}
 
