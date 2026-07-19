@@ -21,8 +21,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 
 
 def _text(message) -> str:
-    """兼容 LangChain Message 对象和普通字符串，统一取出文本内容。"""
-
+    """getattr 兼容 LangChain Message 对象和普通字符串，统一取出文本内容。"""
     return str(getattr(message, "content", message))
 
 
