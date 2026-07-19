@@ -844,7 +844,7 @@ print(final.output["age"])
 
 ---
 
-## Rules of Interrupts
+## Rules of Interrupts（重要记住）
 
 Interrupts 有几条非常重要的规则。
 

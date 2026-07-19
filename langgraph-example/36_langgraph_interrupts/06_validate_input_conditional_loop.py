@@ -30,6 +30,7 @@ class FormState(TypedDict):
 # 收集年龄：每次节点执行只 interrupt 一次，避免在 while True 中反复 interrupt。
 def collect_age(state: FormState) -> dict:
     question = state.get("pending_question") or "What is your age?"
+    # interrupt() 返回用户输入。
     answer = interrupt(question)
 
     # 输入有效时写入 age，并清空 pending_question。
