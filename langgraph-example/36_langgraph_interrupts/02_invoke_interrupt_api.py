@@ -63,7 +63,7 @@ def main() -> None:
         print("interrupt payload:", result["__interrupt__"])
 
     # 使用 Command(resume="Alice") 恢复，"Alice" 成为 ask_name 中 interrupt() 的返回值。
-    resumed = graph.invoke(Command(resume="Alice"), config)
+    resumed = graph.invoke(Command(resume="Alice"), config) # 从 checkpoint 中恢复
     print("resumed result:", resumed)
 
 
